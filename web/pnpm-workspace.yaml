@@ -1,10 +1,14 @@
 # pnpm 11 起，项目级设置从 package.json#pnpm 与 .npmrc 迁移到本文件（camelCase 键名）
 # 参考：https://pnpm.io/migration
 
-# 放行依赖的安装脚本：Vite 依赖 esbuild，它需要执行安装脚本下载平台二进制，
-# 否则启动时会报 "You installed esbuild for another platform"。
+# 放行依赖的安装脚本。默认全部禁止；不授权时安装会以
+# ERR_PNPM_IGNORED_BUILDS 结束，且对应功能不可用。
 allowBuilds:
+  # Vite 依赖 esbuild，安装脚本负责下载平台二进制。
+  # 不授权时报 "You installed esbuild for another platform"。
   esbuild: true
+  # Pinia 依赖的 Vue 版本兼容层，安装脚本会切换对应的 Vue 入口。
+  vue-demi: true
 
 # 扁平化 node_modules（对应旧版 .npmrc 的 node-linker=hoisted）
 nodeLinker: hoisted

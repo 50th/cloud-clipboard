@@ -1,42 +1,38 @@
-/** 用户状态（第 4 步接入真实登录后完善）。 */
+/** 用户状态（Pinia setup store）。第 4 步接入真实登录后完善。 */
 
-import { create } from 'zustand'
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
 
-import { authApi, setToken } from '@/api/client'
-import type { User } from '@/api/client'
+import { authApi, setToken } from '#src/api/client.ts'
+import type { User } from '#src/api/client.ts'
 
-interface UserState {
-  user: User | null
-  loading: boolean
-  /** 拉取当前用户：后端第 1 步固定返回演示用户 */
-  loadCurrentUser: () => Promise<void>
-  login: (username: string, password: string) => Promise<User>
-  logout: () => void
-}
+export const useUserStore = defineStore('user', () => {
+  const user = ref<User | null>(null)
+  const loading = ref(false)
 
-export const useUserStore = create<UserState>((set) => ({
-  user: null,
-  loading: false,
-
-  loadCurrentUser: async () => {
-    set({ loading: true })
+  /** 拉取当前用户：后端第 3 步仍固定返回演示用户 */
+  async function loadCurrentUser() {
+    loading.value = true
     try {
-      const user = await authApi.me()
-      set({ user, loading: false })
+      user.value = await authApi.me()
     } catch {
-      set({ user: null, loading: false })
+      user.value = null
+    } finally {
+      loading.value = false
     }
-  },
+  }
 
-  login: async (username, password) => {
+  async function login(username: string, password: string): Promise<User> {
     const result = await authApi.login(username, password)
     setToken(result.token.access_token)
-    set({ user: result })
+    user.value = result
     return result
-  },
+  }
 
-  logout: () => {
+  function logout() {
     setToken(null)
-    set({ user: null })
-  },
-}))
+    user.value = null
+  }
+
+  return { user, loading, loadCurrentUser, login, logout }
+})

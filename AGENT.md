@@ -13,7 +13,7 @@
 
 | 项 | 内容 |
 |----|------|
-| 客户端 | 鸿蒙 App（ArkTS + ArkUI）、Web 端（React + TS + Vite） |
+| 客户端 | 鸿蒙 App（ArkTS + ArkUI）、Web 端（Vue 3 + TS + Vite） |
 | 后端 | FastAPI + PostgreSQL + Redis + WebSocket |
 | 当前阶段 | 阶段一 —— 文字剪贴板 MVP |
 
@@ -38,10 +38,13 @@
 | 迁移 | Alembic | 最新稳定版 | 1.20.0 |
 | 缓存/广播 | Redis | 6+ | ⬜ 第 5 步 |
 | 认证 | ⚠️ **待定**：`pwdlib` 或 pin `bcrypt==4.0.1` | - | ⬜ 第 4 步 |
-| Web 前端 | React + TypeScript + Vite | React 18+ | 18.3.1 / 5.9.3 / 5.4.21 |
-| Web 状态 | Zustand | 最新稳定版 | 4.5.7 |
+| Web 前端 | **Vue 3 + TypeScript + Vite** | HTML/CSS/JS | 见下 |
+| Web 状态 | **Pinia** | - | 见下 |
 | HTTP 客户端 | Axios | 最新稳定版 | 1.20.0 |
 | 鸿蒙 | ArkTS + ArkUI | API 12+ | ⬜ 第 7 步 |
+
+**Web 端锁定版本**（完整清单见 `web/package.json`）：
+Vue 3.5 · Vite 5.4.21 · TypeScript 5.9.3 · Pinia 2.2 · vue-tsc 2.1
 
 **⚠️ 认证依赖待定**：原先指定的 `passlib[bcrypt]` 已停止维护，且与 `bcrypt 4.x` 存在兼容问题。
 第 4 步开工前必须在 `pwdlib` 与 pin `bcrypt==4.0.1` 之间二选一，并在上表登记结果。
@@ -97,18 +100,18 @@ cloud-clipboard/
 │   ├── .env.example
 │   └── README.md             # 后端启动、迁移与排错
 │
-├── web/                      # Web 端 React + TS + Vite
+├── web/                      # Web 端 Vue 3 + TS + Vite
 │   ├── src/
 │   │   ├── api/client.ts     # ✅ axios 封装 + token 拦截器 + 错误归一化
 │   │   ├── types/api.d.ts    # ✅ 由 OpenAPI 生成，勿手改
 │   │   ├── utils/            # ✅ clipboard.ts（含自身写入标志）、format.ts
-│   │   ├── stores/           # ✅ Zustand：clipboardStore、userStore
-│   │   ├── hooks/            # ✅ useClipboard / useCopy / useAutoSave；⬜ useWebSocket 待实现
+│   │   ├── stores/           # ✅ Pinia：clipboardStore、userStore
+│   │   ├── composables/      # ✅ useClipboard / useCopy / useAutoSave；⬜ useWebSocket 待实现
 │   │   ├── components/       # ✅ ClipboardHistory / ClipboardItemCard / InputPanel
-│   │   ├── pages/            # ⬜ 第 4 步加登录页时创建
-│   │   ├── App.tsx           # ✅ 两栏布局（左历史 / 右输入）
-│   │   └── main.tsx
-│   ├── tests/e2e.test.ts     # ✅ 端到端闭环测试
+│   │   ├── views/            # ⬜ 第 4 步加登录页时创建
+│   │   ├── App.vue           # ✅ 两栏布局（左历史 / 右输入）
+│   │   └── main.ts          # ✅ 挂载 + 安装 Pinia
+│   ├── tests/e2e.test.ts     # ✅ 端到端闭环测试（驱动 store + client，与框架无关）
 │   ├── scripts/generate-api-types.mjs  # ✅ pnpm run gen:api
 │   ├── vite.config.ts        # ✅ 端口 5273（见 §12）、@ 别名
 │   ├── pnpm-workspace.yaml   # ✅ pnpm 11 项目设置（allowBuilds 放行 esbuild）
@@ -192,11 +195,15 @@ cloud-clipboard/
 - 路由层只做参数校验与调用，业务逻辑放 `services/` 或 `crud/`
 - 数据库操作统一走 `crud/`，**路由不直接写 SQL**
 
-**Web 端（TypeScript）**
-- 函数式组件 + Hooks；状态管理用 Zustand，避免 prop drilling
+**Web 端（Vue 3 + TypeScript）**
+- 组件一律用 `<script setup lang="ts">` 单文件组件（SFC）
+- 状态管理用 Pinia，**setup store 写法**；避免 prop drilling
+- 可复用逻辑放 `src/composables/`，命名 `useXxx`；只在组件内一次性使用的逻辑不必抽 composable
 - 剪贴板 API 封装在 `utils/clipboard.ts`，**组件不直接调 `navigator.clipboard`**
 - **组件不直接调 axios**，统一经 `api/client.ts`
 - 类型从 `types/api.d.ts` 导入，不手写重复类型
+- 响应式优先用 `ref`（对象/数组也统一 `ref`，避免 `reactive` 解构丢响应性）
+- 不要用 `v-html` 渲染剪贴板内容；模板里用 `{{ }}` 自动转义
 
 **鸿蒙端（ArkTS）**
 - 剪贴板监听隔离在 `services/clipboardMonitor.ets`，网络请求统一在 `services/api.ets`
@@ -268,6 +275,15 @@ cloud-clipboard/
 ### 添加接口
 
 改 Schema → 改路由 → 确认 `/docs` → `pnpm run gen:api` → 刷新 `docs/api.md`（详见 §4）
+
+### 修改会被端到端测试引入的模块
+
+`tests/e2e.test.ts` **直接跑源码**（Node 类型擦除），不经过打包。因此：
+
+- `stores/`、`composables/`、`api/`、`utils/` 里的导入必须用 **`#src/*` 且带 `.ts` 扩展名**——
+  Node 不读 tsconfig 的 `paths`，`@/xxx` 会被当裸包名报 `ERR_MODULE_NOT_FOUND`
+- 只有 `.vue` 组件与 `main.ts` 用 `@/*`
+- 改完跑 `pnpm test` 验证，别只跑 `typecheck`（`vue-tsc` 会通过但 Node 跑不起来）
 
 ### 添加/修改数据库模型
 

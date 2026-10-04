@@ -11,7 +11,8 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react-jsx",
+    "jsx": "preserve",
+    "jsxImportSource": "vue",
 
     "strict": true,
     "noUnusedLocals": true,
@@ -23,7 +24,8 @@
     "paths": {
       "@/*": ["src/*"],
       "#src/*": ["src/*"]
-    }
+    },
+    "types": ["vite/client"]
   },
-  "include": ["src", "tests", "vite.config.ts"]
+  "include": ["src/**/*.ts", "src/**/*.vue", "tests", "vite.config.ts"]
 }

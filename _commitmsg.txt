@@ -1,0 +1,28 @@
+refactor(web): Web 端框架由 React 18 迁移为 Vue 3
+
+属框架层调整，不改接口契约，后端与数据库未动。
+
+- 框架：React 18.3.1 改为 Vue 3.5.43
+- 状态：Zustand 4.5.7 改为 Pinia 2.3.1（setup store 写法）
+- 构建：@vitejs/plugin-react 改为 @vitejs/plugin-vue
+- 类型检查：tsc 改为 vue-tsc（可检查 .vue 模板）
+- 组件：.tsx 函数组件 + Hooks 改为 .vue SFC（script setup lang=ts）
+- 复用逻辑：hooks/ 改为 composables/
+
+原样复用约 60%：api/client.ts、utils/clipboard.ts、utils/format.ts、
+types/api.d.ts（851 行生成代码）、styles.css、tests 断言逻辑。
+
+别名策略：.vue 与 main.ts 用 @/*；stores/composables/api/utils 必须用
+#src/*.ts —— Node 不读 tsconfig paths，端到端测试直接跑源码，靠
+package.json imports 解析。该约束已写入 AGENT.md 第 11 节，
+避免后人误换别名导致 pnpm test 失败。
+
+pnpm-workspace.yaml 的 allowBuilds 增加放行 vue-demi
+（Pinia 的 Vue 版本兼容层）。
+
+验收：vue-tsc 0 错误；pnpm test 12/12（Pinia store + 真实 PostgreSQL）；
+pnpm build 成功，JS 产物 212 KB 减至 137.7 KB（gzip 72.4 减至 53.6 KB，减少 26%）；
+浏览器侧 .vue 均编译为渲染函数、依赖预构建完成、旧 #root 挂载点已移除。
+
+同步更新 AGENT.md 第 1/2/3/8/11 节、根 README.md、web/README.md、
+docs/roadmap.md（新增「Web 端框架迁移」一节）。

@@ -1,7 +1,7 @@
 /**
- * 端到端闭环测试（第 2 步验收用）。
+ * 端到端闭环测试（第 2 步验收资产，第 3 步起打真实 PostgreSQL）。
  *
- * 直接驱动真实的 Zustand store + axios 客户端打到真实后端，
+ * 直接驱动真实的 Pinia store + axios 客户端打到真实后端，
  * 覆盖「上传 → 标题 → 列表展示 → 去重 → 搜索 → 排序 → 删除 → 清空」这条链路。
  * 剪贴板读写本身依赖浏览器 API，由浏览器手工验证（见 web/README.md）。
  *
@@ -11,6 +11,8 @@
 
 import assert from 'node:assert/strict'
 import { after, describe, it } from 'node:test'
+
+import { createPinia, setActivePinia } from 'pinia'
 
 // api/client.ts 在模块加载时会读 localStorage，Node 下先补一个最小实现
 const memory = new Map<string, string>()
@@ -25,11 +27,14 @@ const memory = new Map<string, string>()
   },
 } as Storage
 
+// Pinia 需要一个激活实例，才能在组件外使用 store
+setActivePinia(createPinia())
+
 const { API_BASE_URL, clipboardApi, devApi } = await import('#src/api/client.ts')
 const { useClipboardStore, PAGE_SIZE } = await import('#src/stores/clipboardStore.ts')
 
-const store = useClipboardStore.getState()
-const state = () => useClipboardStore.getState()
+const store = useClipboardStore()
+const state = () => useClipboardStore()
 
 /** 本次测试创建的内容前缀，便于收尾时清理 */
 const TAG = `[e2e-${Date.now()}]`
@@ -134,11 +139,7 @@ describe('Web 端单端闭环（真实后端）', () => {
 
   it('不传标题：服务端自动生成 `<用户名> · <月-日 时:分>`', async () => {
     const { item } = await upload(`${TAG} 自动标题`)
-    assert.match(
-      item.title,
-      /^demo · \d{2}-\d{2} \d{2}:\d{2}$/,
-      `自动标题格式不符：${item.title}`,
-    )
+    assert.match(item.title, /^demo · \d{2}-\d{2} \d{2}:\d{2}$/, `自动标题格式不符：${item.title}`)
   })
 
   it('传标题：原样保存并展示', async () => {

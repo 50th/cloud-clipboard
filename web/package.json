@@ -3,31 +3,29 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "云剪贴板 Web 端（React + TypeScript + Vite）",
+  "description": "云剪贴板 Web 端（Vue 3 + TypeScript + Vite）",
   "imports": {
     "#src/*": "./src/*"
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "vue-tsc --noEmit",
     "gen:api": "node scripts/generate-api-types.mjs",
     "test": "node --experimental-strip-types --test tests/e2e.test.ts"
   },
   "dependencies": {
     "axios": "^1.7.9",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "zustand": "^4.5.5"
+    "pinia": "^2.2.6",
+    "vue": "^3.5.13"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-vue": "^5.2.1",
     "openapi-typescript": "^7.4.4",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "vue-tsc": "^2.1.10"
   }
 }

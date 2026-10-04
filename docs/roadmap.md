@@ -34,13 +34,14 @@
 
 ### ✅ 第 2 步：Web 端骨架 + 单端闭环（已完成）
 
-- [x] Vite 5.4.21 + React 18.3.1 + TypeScript 5.9.3，端口固定 5273
+- [x] Vite 5.4.21 + TypeScript 5.9.3，端口固定 5273（框架见下）
 - [x] 从 OpenAPI 生成类型：`pnpm run gen:api` → `web/src/types/api.d.ts`
 - [x] axios 客户端封装：`web/src/api/client.ts`
 - [x] 剪贴板读写工具：`web/src/utils/clipboard.ts`
 - [x] 两栏布局：左栏历史记录（搜索/刷新/排序/清空）、右栏标题 + 加高输入区
 - [x] 标题字段（留空服务端自动生成）、清空输入、防抖自动保存
-- [x] 端到端测试：`pnpm test`（12 用例，驱动真实后端）
+- [x] 端到端测试：pnpm test（12 用例，驱动真实后端与 PostgreSQL）
+- [x] **Web 端框架由 React 18 迁移为 Vue 3**（第 2 步完成后调整，见下方「Web 端框架迁移」）
 
 **验收记录**：`pnpm run typecheck` 0 错误；`pnpm run build` 110 模块 / gzip 72 KB；`pnpm test` 12/12 通过。
 **待人工确认**：浏览器侧「读取剪贴板 → 上传 → 列表展示 → 点击复制」（剪贴板 API 依赖用户手势，无法自动化）。
@@ -203,6 +204,39 @@ AGENT.md 第 2 节指定 `python-jose + passlib[bcrypt]`：
 
 ---
 
+## Web 端框架迁移（React 18 → Vue 3）
+
+**背景**：第 2 步按原计划用 React 18 完成，之后按需求改为 Vue 3。属**框架层调整**，不改接口契约，
+后端与数据库一行未动。
+
+| 项 | 迁移前 | 迁移后 |
+|----|--------|--------|
+| 框架 | React 18.3.1 + react-dom | **Vue 3.5.43** |
+| 状态管理 | Zustand 4.5.7 | **Pinia 2.3.1**（setup store） |
+| 构建插件 | @vitejs/plugin-react | **@vitejs/plugin-vue** |
+| 类型检查 | tsc | **vue-tsc**（能检查 .vue 模板） |
+| 组件形态 | .tsx 函数组件 + Hooks | .vue SFC（`<script setup lang="ts">`） |
+| 复用逻辑 | `hooks/` | `composables/` |
+| 产物（JS / gzip） | 212 KB / 72.4 KB | **137.7 KB / 53.6 KB（-26%）** |
+
+**原样复用（占原实现约 60%）**：`api/client.ts`、`utils/clipboard.ts`、`utils/format.ts`、
+`types/api.d.ts`（851 行生成代码）、`styles.css`、`tests/e2e.test.ts` 的断言逻辑。
+
+**重写部分**：`App.vue`、3 个组件（`ClipboardHistory` / `ClipboardItemCard` / `InputPanel`）、
+4 个 composables、2 个 store。
+
+**验收**：`vue-tsc --noEmit` 0 错误；`pnpm test` **12/12 通过**（Pinia store + 真实 PostgreSQL）；
+`pnpm build` 成功；浏览器侧 `.vue` 均编译为渲染函数、依赖预构建完成、旧 `#root` 挂载点已移除。
+
+**新增注意事项**：
+
+- 导入别名**两套并存**：`.vue` 与 `main.ts` 用 `@/*`（Vite + tsconfig paths）；
+  **store / composables / api / utils 必须用 `#src/*.ts`**——Node 不读 tsconfig `paths`，
+  而端到端测试直接跑源码，靠 `package.json` 的 `imports` 才能解析。改动时误换别名会让 `pnpm test` 报模块找不到。
+- `pnpm-workspace.yaml` 的 `allowBuilds` 除 esbuild 外还要放行 **vue-demi**（Pinia 的 Vue 版本兼容层）
+- 待人工确认项不变：浏览器侧「读取剪贴板 → 上传 → 列表展示 → 点击复制」仍需手工验证
+
+---
 ## 本地基础设施（实测通过）
 
 **决策：本地开发与生产统一使用 Docker 容器跑 `postgres:16`**，

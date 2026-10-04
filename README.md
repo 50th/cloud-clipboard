@@ -20,7 +20,7 @@
 ```
 ┌──────────────┐        ┌──────────────┐
 │  鸿蒙 App    │        │   Web 端     │
-│  (ArkTS)     │        │ (React + TS) │
+│  (ArkTS)     │        │ (Vue 3 + TS) │
 └──────┬───────┘        └──────┬───────┘
        │                       │
        │   HTTPS / WSS         │
@@ -46,7 +46,7 @@
 ```
 cloud-clipboard/
 ├── server/          # 后端 FastAPI
-├── web/             # Web 端 (React + TS + Vite)
+├── web/             # Web 端 (Vue 3 + TS + Vite)
 ├── harmony/         # 鸿蒙 App (ArkTS)
 ├── infra/           # 部署与运维
 ├── docs/            # 项目文档
