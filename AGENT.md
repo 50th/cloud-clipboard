@@ -75,30 +75,33 @@ cloud-clipboard/
 │   │   ├── core/
 │   │   │   ├── config.py     # ✅ 环境变量（pydantic-settings）
 │   │   │   └── security.py   # ⬜ 第 4 步：JWT、密码哈希
-│   │   ├── db/
-│   │   │   ├── base.py       # ⬜ 第 3 步
-│   │   │   ├── session.py    # ⬜ 第 3 步
+│   │   ├── db/               # ✅ 第 3 步：数据库层
+│   │   │   ├── base.py       # ✅ 声明式 Base + 约束命名约定
+│   │   │   ├── session.py    # ✅ 异步引擎 / 会话 / get_db / ping
 │   │   │   └── models/
-│   │   │       ├── user.py       # ⬜ 第 3 步
-│   │   │       └── clipboard.py  # ⬜ 第 3 步
+│   │   │       ├── user.py       # ✅ User
+│   │   │       └── clipboard.py  # ✅ ClipboardItem（UNIQUE(user_id, content_hash)）
 │   │   ├── schemas/          # ✅ Pydantic 模型（数据契约）
 │   │   │   ├── common.py     #   ContentType / SortOrder / SortBy / PageMeta
 │   │   │   ├── user.py
 │   │   │   └── clipboard.py
-│   │   ├── crud/             # ✅ 数据访问层（当前为内存假数据）
-│   │   │   ├── store.py      #   内存存储 + 种子数据
+│   │   ├── crud/             # ✅ 数据访问层（异步查询，路由不写 SQL）
 │   │   │   ├── user.py
 │   │   │   └── clipboard.py
 │   │   ├── routers/          # API 路由
-│   │   │   ├── auth.py       # ✅ 注册 / 登录 / 当前用户（假数据）
-│   │   │   ├── clipboard.py  # ✅ 剪贴板 CRUD（假数据）
+│   │   │   ├── auth.py       # ✅ 注册 / 登录 / 当前用户（第 4 步接真实 JWT）
+│   │   │   ├── clipboard.py  # ✅ 剪贴板 CRUD（PostgreSQL 持久化）
+│   │   │   ├── dev.py        # ✅ 仅 ENABLE_DEV_ROUTES=true 时注册
 │   │   │   └── ws.py         # ⬜ 第 5 步
 │   │   └── services/
 │   │       └── ws_manager.py # ⬜ 第 5 步：WebSocket 连接管理
 │   ├── tests/
-│   ├── alembic/              # ⬜ 第 3 步
+│   │   └── conftest.py       # ✅ 夹具（默认打 clipboard_test 库）
+│   ├── alembic/              # ✅ 迁移（env.py 异步 + 0001_initial）
+│   ├── scripts/
+│   │   └── init_db.py        # ✅ 建表 + 演示用户 + 种子数据
 │   ├── venv/                 # 虚拟环境（已创建，已加入 .gitignore）
-│   ├── requirements.txt      # ✅ fastapi / uvicorn[standard] / pydantic-settings
+│   ├── requirements.txt      # ✅ fastapi / uvicorn / pydantic-settings / sqlalchemy / asyncpg / alembic
 │   ├── .env.example          # ✅
 │   └── README.md             # ✅ 后端启动与目录说明
 │
@@ -233,7 +236,7 @@ class ClipboardItemResponse(BaseModel):
 > 本文件只维护稳定约定；凡是每完成一步就要改一遍的内容（勾选框、实测记录、版本号），
 > 一律写进 roadmap，避免两处不同步。
 
-**当前**：第 1 步（后端骨架 + 数据契约）✅、第 2 步（Web 骨架 + 单端闭环）✅ → **下一步：第 3 步（接入数据库）**。
+**当前**：第 1 步（后端骨架 + 数据契约）✅、第 2 步（Web 骨架 + 单端闭环）✅、第 3 步（接入数据库）✅ → **下一步：第 4 步（JWT 认证）**。
 
 开工前请先看 `docs/roadmap.md` 的「已知问题」与「环境前置条件」：
 那里记录了必须先修的高危项（`DEBUG` 默认值、测试清库风险）和本机实测状态
@@ -466,25 +469,24 @@ npx wscat -c "ws://localhost:8000/api/v1/clipboard/ws?token=<JWT>"
 
 ## 13. 下一步任务（现在就开始）
 
-**当前应该做：第 3 步 —— 接入数据库**
+**当前应该做：第 4 步 —— JWT 认证**
 
 具体操作：
 
-1. 决定数据库方案：复用本机 PostgreSQL 18（5432 已被占用），或启动 Docker Desktop 后用容器
-2. 安装 `sqlalchemy[asyncio]`、`asyncpg`、`alembic`
-3. 配置 `app/db/session.py`、`app/db/base.py`
-4. 定义 SQLAlchemy 模型（`db/models/user.py`、`db/models/clipboard.py`）
-5. 初始化 Alembic，生成并执行迁移
-6. 实现 `crud/` 层，替换路由中的内存假数据
-7. 验证重启后数据不丢失
+1. 在 `core/security.py` 实现密码哈希与 JWT 签发/校验
+   - ⚠️ 先决定依赖：AGENT.md 第 2 节写的 `passlib[bcrypt]` 已停止维护且与 `bcrypt 4.x` 冲突，
+     建议改用 `pwdlib`，否则需 pin `bcrypt==4.0.1`（见 `docs/roadmap.md` 的 P5）
+2. 实现真实的注册、登录接口（替换 `routers/auth.py` 里的假 token）
+3. 编写认证依赖 `get_current_user`（当前固定返回配置里的演示用户，需改为解析 Bearer token）
+4. 给剪贴板路由加认证保护
+5. Web 端加登录页，token 存 localStorage（`api/client.ts` 的拦截器已就绪）
 
 **开工前必须先处理**（详见 `docs/roadmap.md`）：
 
-- **P1**：`DEBUG` 默认值已改为 `false`，开发路由改用 `ENABLE_DEV_ROUTES`；
-  接库时需把 `dev/reset` 从"重置内存"改为"清空测试库"，并确认生产环境不会注册
-- **P2**：`web/tests/e2e.test.ts` 会清库，必须先隔离到独立的测试数据库
+- **P5**：确认 `pwdlib` 还是 pin `bcrypt`，若偏离 AGENT.md 第 2 节需同步该表
+- **P2 剩余项**：Web e2e 目前仍打开发库，需加指向 `clipboard_test` 的测试后端实例
 
-**完成标准**：数据持久化，`/docs` 接口全部正常，重启服务后数据不丢失。
+**完成标准**：未带 token 请求返回 401，带 token 正常。
 
 ---
 
@@ -501,7 +503,9 @@ npx wscat -c "ws://localhost:8000/api/v1/clipboard/ws?token=<JWT>"
 **维护者**：云剪贴板项目组  
 **给 AI 助手的提示**：
 - **进度看 `docs/roadmap.md`**，不要往本文件里加勾选框；本文件只维护稳定约定。
-- 已完成：第 1 步（后端骨架 + 契约）、第 2 步（Web 骨架 + 单端闭环）。下一步：第 3 步（接入数据库）。
+- 已完成：第 1 步（后端骨架 + 契约）、第 2 步（Web 骨架 + 单端闭环）、第 3 步（接入数据库）。下一步：第 4 步（JWT 认证）。
+- 数据库已就绪：容器 `cloud-clipboard-postgres`（postgres:16，宿主 5433），开发库 `clipboard`、
+  测试库 `clipboard_test`；表结构由 Alembic 迁移管理（`alembic/versions/`）。
 - 第 3 步开工前先处理 `docs/roadmap.md` 里的 P1、P2 两个高危项。
 - 请严格按照第 10 节的开发顺序推进，不要跳步。
 - 每次修改代码前，先确认改动是否影响接口契约。如影响，按第 5 节流程同步三端。

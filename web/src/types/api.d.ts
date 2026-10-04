@@ -48,7 +48,7 @@ export interface paths {
         };
         /**
          * 获取当前用户
-         * @description 默认返回演示用户；通过 `Authorization` 头传入 token 后应返回该 token 对应用户。
+         * @description 当前返回演示用户；第 4 步接入 JWT 后返回该 token 对应的用户。
          */
         get: operations["me_api_v1_auth_me_get"];
         put?: never;
@@ -117,14 +117,34 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 重置数据为种子数据（仅开发环境）
-         * @description 清空当前数据并重新灌入 4 条种子数据，用于自动化测试收尾和反复手工验证。
+         * 重置为种子数据（⚠️ 会删除数据）
+         * @description 删除演示用户的全部剪贴板项，并重新写入 4 条种子数据。
          *
-         *     **⚠️ 第 3 步接入数据库后本接口会变成清库操作**，因此：
+         *     **仅用于本地开发与自动化测试收尾**：
          *     - 生产环境必须保持 `ENABLE_DEV_ROUTES=false`（此时本路由不注册，返回 404）
-         *     - 只应指向测试数据库使用
+         *     - 只应指向开发库或测试库，绝不要指向生产库
          */
         post: operations["reset_store_api_v1_dev_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dev/db": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 数据库连通性探测
+         * @description 返回当前连接的数据库名与 PostgreSQL 版本，用于确认后端连的是哪个库。
+         */
+        get: operations["db_info_api_v1_dev_db_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -419,22 +439,6 @@ export interface components {
             user: components["schemas"]["UserResponse"];
         };
         /**
-         * UserLoginRequest
-         * @description 登录请求。
-         */
-        UserLoginRequest: {
-            /**
-             * Username
-             * @description 用户名或邮箱
-             */
-            username: string;
-            /**
-             * Password
-             * @description 密码
-             */
-            password: string;
-        };
-        /**
          * UserRegisterRequest
          * @description 注册请求。
          */
@@ -554,11 +558,7 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UserLoginRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -567,15 +567,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -787,6 +778,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+        };
+    };
+    db_info_api_v1_dev_db_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
                 };
             };
         };

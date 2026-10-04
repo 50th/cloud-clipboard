@@ -192,7 +192,8 @@ npm run dev
 | `GET` | `/api/v1/clipboard/items/{id}` | 获取详情 |
 | `DELETE` | `/api/v1/clipboard/items/{id}` | 删除单条 |
 | `DELETE` | `/api/v1/clipboard/items` | 清空 |
-| `POST` | `/api/v1/dev/reset` | 重置种子数据（仅 `ENABLE_DEV_ROUTES=true` 时注册） |
+| `POST` | `/api/v1/dev/reset` | ⚠️ 删数据并重建种子（仅 `ENABLE_DEV_ROUTES=true` 时注册） |
+| `GET` | `/api/v1/dev/db` | 探测当前连接的数据库（仅 dev 路由开启时） |
 | `GET` | `/health` | 健康检查 |
 | `WS` | `/api/v1/clipboard/ws` | 实时同步（第 5 步） |
 | `POST` | `/api/v1/clipboard/upload` | 上传图片/文件（**阶段二**，当前未实现） |
