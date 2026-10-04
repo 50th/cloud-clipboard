@@ -67,7 +67,7 @@ ws://localhost:8000/api/v1/clipboard/ws?token=<JWT>
 1. **第 5 步强制单 worker**（`--workers 1`），并在 Redis Pub/Sub 落地前禁止扩容；或
 2. **第 5 步同时引入 Redis Pub/Sub**，让广播跨进程
 
-AGENT.md 第 12 节把 Redis 列为"后期多副本"风险，**实际的约束比它写的更早**。
+**该约束已写入 AGENT.md 第 6 节**：不能拖到"多副本部署"阶段再处理。
 
 ## 调试
 

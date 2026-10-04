@@ -1,6 +1,7 @@
 # AGENT.md
 
-> 本文件为 AI 编码助手（Claude Code / Cursor / Copilot 等）提供项目上下文、开发规范与任务指引。**每次开始工作前先读本文件**，确保代码风格、目录结构、接口契约保持一致。
+> 本文件为 AI 编码助手（Claude Code / Cursor / Copilot 等）提供**稳定约定**：项目上下文、技术栈、目录职责、开发规范、关键约束与开发顺序。
+> **每次开始工作前先读本文件。** 进度、验收记录、已知问题见 [`docs/roadmap.md`](docs/roadmap.md)——凡是每完成一步就要改一遍的内容都放那里，本文件不放。
 
 ---
 
@@ -10,237 +11,175 @@
 
 **目标**：跨平台云剪贴板服务，实现多设备间剪贴板内容实时同步。
 
-**客户端**：
-- 鸿蒙 App（ArkTS + ArkUI）
-- Web 端（React + TypeScript + Vite）
+| 项 | 内容 |
+|----|------|
+| 客户端 | 鸿蒙 App（ArkTS + ArkUI）、Web 端（React + TS + Vite） |
+| 后端 | FastAPI + PostgreSQL + Redis + WebSocket |
+| 当前阶段 | 阶段一 —— 文字剪贴板 MVP |
 
-**后端**：FastAPI + PostgreSQL + Redis + WebSocket
+**MVP 范围**：文字内容的上传 / 查询 / 删除、多端实时同步（WebSocket）、JWT 认证、内容去重。
 
-**当前阶段**：阶段一 —— 文字剪贴板 MVP
-
-**MVP 范围**：
-- 文字内容的上传、查询、删除
-- 多端实时同步（WebSocket）
-- JWT 认证
-- 内容去重
-
-**明确不做（本期）**：
-- 图片、文件剪贴板
-- 端到端加密
-- 团队协作
+**明确不做（本期）**：图片与文件剪贴板、端到端加密、团队协作。
 
 ---
 
 ## 2. 技术栈与版本
 
-| 层级 | 技术 | 版本要求 |
-|------|------|----------|
-| 后端框架 | FastAPI | 最新稳定版 |
-| ASGI 服务器 | uvicorn[standard] | 最新稳定版 |
-| 数据库 | PostgreSQL | 14+ |
-| ORM | SQLAlchemy（async） | 2.0+ |
-| 迁移 | Alembic | 最新稳定版 |
-| 缓存/广播 | Redis | 6+ |
-| 认证 | python-jose + passlib[bcrypt] | - |
-| Web 前端 | React + TypeScript + Vite | React 18+ |
-| Web 状态 | Zustand | 最新稳定版 |
-| HTTP 客户端 | Axios | 最新稳定版 |
-| 鸿蒙 | ArkTS + ArkUI | API 12+ |
+技术要求与实际锁定版本并列——**新增依赖请写进 `server/requirements.txt` 与 `web/package.json`**。
+
+| 层级 | 技术 | 要求 | 实际锁定 |
+|------|------|------|----------|
+| 后端框架 | FastAPI | 最新稳定版 | 0.142.2 |
+| ASGI 服务器 | uvicorn[standard] | 最新稳定版 | 0.54.0 |
+| 配置 | pydantic-settings | - | 2.15.0 |
+| 数据库 | PostgreSQL | 14+，**本地与生产统一 16** | 16.15（容器） |
+| ORM | SQLAlchemy（async） | 2.0+ | 2.1.3 |
+| 数据库驱动 | asyncpg | - | 0.31.0 |
+| 迁移 | Alembic | 最新稳定版 | 1.20.0 |
+| 缓存/广播 | Redis | 6+ | ⬜ 第 5 步 |
+| 认证 | ⚠️ **待定**：`pwdlib` 或 pin `bcrypt==4.0.1` | - | ⬜ 第 4 步 |
+| Web 前端 | React + TypeScript + Vite | React 18+ | 18.3.1 / 5.9.3 / 5.4.21 |
+| Web 状态 | Zustand | 最新稳定版 | 4.5.7 |
+| HTTP 客户端 | Axios | 最新稳定版 | 1.20.0 |
+| 鸿蒙 | ArkTS + ArkUI | API 12+ | ⬜ 第 7 步 |
+
+**⚠️ 认证依赖待定**：原先指定的 `passlib[bcrypt]` 已停止维护，且与 `bcrypt 4.x` 存在兼容问题。
+第 4 步开工前必须在 `pwdlib` 与 pin `bcrypt==4.0.1` 之间二选一，并在上表登记结果。
+详见 [`docs/roadmap.md`](docs/roadmap.md) 的 P5。
 
 ---
 
-## 3. 目标目录结构
+## 3. 目录结构
 
-> 目标结构。`server/` 已在第 1 步落地（见下方 ✅ 标注），`web/` 与 `harmony/` 仍为待创建。
+> ✅ = 已落地；⬜ = 待创建。**只描述职责，不记录进度状态。**
 
 ```
 cloud-clipboard/
-├── AGENT.md                  # 本文件
-├── README.md                 # 已存在
+├── AGENT.md                  # 本文件：稳定约定
+├── README.md                 # 项目说明与快速开始
 ├── docs/
-│   ├── api.md                # API 契约存档 + 导出脚本（契约来源是 schemas/）
+│   ├── api.md                # API 契约存档 + 导出脚本
 │   ├── ws-protocol.md        # WebSocket 协议
 │   └── roadmap.md            # 进度、验收记录、已知问题
 │
-├── infra/                    # ✅ 本地基础设施（第 3 步已落地）
+├── infra/
 │   ├── docker-compose.yml    # ✅ PostgreSQL 16（宿主 5433 → 容器 5432）
 │   └── .env.example          # ✅ 容器账号与端口（第 5 步在此加 Redis）
 │
-├── scripts/                  # ✅ 运维/验证脚本
+├── scripts/
 │   └── verify_postgres.py    # ✅ 数据库连通性与数据往返验证
 │
-├── server/                   # ✅ 后端 FastAPI（第 1 步已落地）
+├── server/                   # 后端 FastAPI
 │   ├── app/
-│   │   ├── main.py           # ✅ 应用入口：注册路由、CORS、OpenAPI 元信息
+│   │   ├── main.py           # ✅ 入口：路由注册、CORS、lifespan（启动探测数据库）
 │   │   ├── core/
 │   │   │   ├── config.py     # ✅ 环境变量（pydantic-settings）
-│   │   │   └── security.py   # ⬜ 第 4 步：JWT、密码哈希
-│   │   ├── db/               # ✅ 第 3 步：数据库层
-│   │   │   ├── base.py       # ✅ 声明式 Base + 约束命名约定
-│   │   │   ├── session.py    # ✅ 异步引擎 / 会话 / get_db / ping
-│   │   │   └── models/
-│   │   │       ├── user.py       # ✅ User
-│   │   │       └── clipboard.py  # ✅ ClipboardItem（UNIQUE(user_id, content_hash)）
-│   │   ├── schemas/          # ✅ Pydantic 模型（数据契约）
+│   │   │   └── security.py   # ⬜ 第 4 步：密码哈希、JWT
+│   │   ├── db/               # ✅ 数据库层
+│   │   │   ├── base.py       #   声明式 Base + 约束命名约定
+│   │   │   ├── session.py    #   异步引擎 / 会话 / get_db / ping
+│   │   │   └── models/       #   user.py、clipboard.py
+│   │   ├── schemas/          # ✅ 数据契约（唯一事实来源）
 │   │   │   ├── common.py     #   ContentType / SortOrder / SortBy / PageMeta
 │   │   │   ├── user.py
 │   │   │   └── clipboard.py
-│   │   ├── crud/             # ✅ 数据访问层（异步查询，路由不写 SQL）
-│   │   │   ├── user.py
-│   │   │   └── clipboard.py
-│   │   ├── routers/          # API 路由
-│   │   │   ├── auth.py       # ✅ 注册 / 登录 / 当前用户（第 4 步接真实 JWT）
-│   │   │   ├── clipboard.py  # ✅ 剪贴板 CRUD（PostgreSQL 持久化）
-│   │   │   ├── dev.py        # ✅ 仅 ENABLE_DEV_ROUTES=true 时注册
+│   │   ├── crud/             # ✅ 数据访问层（异步；路由不写 SQL）
+│   │   ├── routers/          # auth.py / clipboard.py / dev.py ✅
 │   │   │   └── ws.py         # ⬜ 第 5 步
 │   │   └── services/
 │   │       └── ws_manager.py # ⬜ 第 5 步：WebSocket 连接管理
-│   ├── tests/
-│   │   └── conftest.py       # ✅ 夹具（默认打 clipboard_test 库）
-│   ├── alembic/              # ✅ 迁移（env.py 异步 + 0001_initial）
-│   ├── scripts/
-│   │   └── init_db.py        # ✅ 建表 + 演示用户 + 种子数据
-│   ├── venv/                 # 虚拟环境（已创建，已加入 .gitignore）
-│   ├── requirements.txt      # ✅ fastapi / uvicorn / pydantic-settings / sqlalchemy / asyncpg / alembic
-│   ├── .env.example          # ✅
-│   └── README.md             # ✅ 后端启动与目录说明
+│   ├── alembic/              # ✅ 迁移（env.py 异步 + versions/）
+│   ├── scripts/init_db.py    # ✅ 建表 + 演示用户 + 种子数据
+│   ├── tests/                # ✅ conftest.py（默认打 clipboard_test 库）
+│   ├── venv/                 # 虚拟环境（已忽略）
+│   ├── requirements.txt
+│   ├── alembic.ini           # ⚠️ 必须保持纯 ASCII（见 §11）
+│   ├── .env.example
+│   └── README.md             # 后端启动、迁移与排错
 │
-├── web/                      # ✅ Web 端（第 2 步：骨架 + 单端闭环）
-│   ├── index.html            # ✅
-│   ├── vite.config.ts        # ✅ @ 别名、固定端口 5273
-│   ├── tsconfig.json         # ✅
-│   ├── package.json          # ✅ imports: #src/* → ./src/*
-│   ├── pnpm-workspace.yaml   # ✅ pnpm 11 项目设置（allowBuilds 放行 esbuild）
-│   ├── scripts/
-│   │   └── generate-api-types.mjs  # ✅ pnpm run gen:api
-│   ├── tests/
-│   │   └── e2e.test.ts       # ✅ 端到端闭环测试（真实后端，9 用例）
+├── web/                      # Web 端 React + TS + Vite
 │   ├── src/
-│   │   ├── main.tsx          # ✅
-│   │   ├── App.tsx           # ✅ 同步按钮 + 搜索/排序 + 手动输入 + 列表
-│   │   ├── api/
-│   │   │   └── client.ts     # ✅ axios 封装 + token + 错误归一化
-│   │   ├── components/       # ✅ ClipboardList / ClipboardItemCard / ManualInput
-│   │   ├── hooks/
-│   │   │   ├── useClipboard.ts   # ✅ 读剪贴板 → 上传
-│   │   │   ├── useCopy.ts        # ✅ 复制回剪贴板
-│   │   │   └── useWebSocket.ts   # ⬜ 第 5 步：实时同步（占位）
-│   │   ├── pages/            # ⬜ 第 4 步加入登录页时创建
-│   │   ├── stores/           # ✅ Zustand：clipboardStore / userStore
-│   │   ├── types/
-│   │   │   └── api.d.ts      # ✅ 由 OpenAPI 生成，勿手改
-│   │   └── utils/
-│   │       ├── clipboard.ts  # ✅ 剪贴板读写（自身写入标志 + execCommand 降级）
-│   │       └── format.ts     # ✅ 时间/大小/截断
-│   └── README.md             # ✅ 启动、验证步骤与规范对照
+│   │   ├── api/client.ts     # ✅ axios 封装 + token 拦截器 + 错误归一化
+│   │   ├── types/api.d.ts    # ✅ 由 OpenAPI 生成，勿手改
+│   │   ├── utils/            # ✅ clipboard.ts（含自身写入标志）、format.ts
+│   │   ├── stores/           # ✅ Zustand：clipboardStore、userStore
+│   │   ├── hooks/            # ✅ useClipboard / useCopy / useAutoSave；⬜ useWebSocket 待实现
+│   │   ├── components/       # ✅ ClipboardHistory / ClipboardItemCard / InputPanel
+│   │   ├── pages/            # ⬜ 第 4 步加登录页时创建
+│   │   ├── App.tsx           # ✅ 两栏布局（左历史 / 右输入）
+│   │   └── main.tsx
+│   ├── tests/e2e.test.ts     # ✅ 端到端闭环测试
+│   ├── scripts/generate-api-types.mjs  # ✅ pnpm run gen:api
+│   ├── vite.config.ts        # ✅ 端口 5273（见 §12）、@ 别名
+│   ├── pnpm-workspace.yaml   # ✅ pnpm 11 项目设置（allowBuilds 放行 esbuild）
+│   └── README.md             # 启动、界面结构、验证步骤
 │
-└── harmony/                  # 鸿蒙 App（待创建）
-    └── entry/src/main/ets/
-        ├── pages/
-        ├── components/
-        ├── services/
-        │   ├── api.ets
-        │   ├── websocket.ets
-        │   └── clipboardMonitor.ets
-        └── models/
-            └── ClipboardItem.ets
+└── harmony/                  # ⬜ 第 7 步：鸿蒙 App
+    └── entry/src/main/ets/{pages,components,services,models}/
 ```
 
 ---
 
-## 4. 核心数据契约（目标设计）
+## 4. 数据契约
 
-**契约是唯一事实来源**。任何字段变更必须先改 `server/app/schemas/`，再同步到 Web 类型和鸿蒙模型。
+**契约唯一事实来源**：`server/app/schemas/`（Pydantic Schema）。
+**字段清单不在本文件重复**——存档见 [`docs/api.md`](docs/api.md)，在线见 `/docs`。
 
-### ClipboardItem
+### 关键约定（这些容易踩错，必须遵守）
 
-```python
-class ClipboardItemResponse(BaseModel):
-    id: str                    # uuid
-    user_id: str               # uuid
-    title: str                 # 标题；用户未填时服务端生成 "demo · 10-03 12:55"
-    content_type: ContentType  # text | image | file
-    content: str               # 文字内容或文件 URL
-    preview: Optional[str]     # 预览文本
-    metadata: Optional[dict]   # {"mime": "text/plain", "size": 1024, ...}
-    created_at: datetime
-    updated_at: datetime
-```
+- **时间**统一 ISO 8601 UTC，形如 `2026-09-27T10:00:00Z`；数据库列用 `timestamptz`
+- **`content_hash` 不对外暴露**，仅服务端用于去重；响应模型里不得出现该字段
+- **`title`**：用户可填；留空时服务端生成 `<用户名> · <月-日 时:分>`（如 `demo · 10-04 14:30`）
+- **去重**：同一用户提交相同 `content` → 刷新 `updated_at`、**不新建记录**；
+  **不覆盖已有标题**（除非本次请求显式传了 `title`）。去重分支也必须广播 `clipboard.updated`（易漏）
+- **搜索**同时匹配 `title` 与 `content`
+- **分页**：`page` 从 1 开始，`size` 默认 20、最大 100
 
-### 关键约定
+### 改接口必须做的事
 
-- 时间统一用 ISO 8601 UTC，格式 `2026-09-27T10:00:00Z`
-- `content_hash` **不对外暴露**，仅服务端用于去重
-- `title` 由用户填写；**留空时服务端生成** `<用户名> · <月-日 时:分>`（如 `demo · 10-03 12:55`）
-- 去重规则：同一用户提交相同 `content`，更新时间戳并广播 `clipboard.updated`，不创建新记录；
-  **去重时不覆盖已有标题**（除非本次请求显式传了 `title`）
-- 搜索同时匹配 `title` 与 `content`
-- 分页参数：`page` 从 1 开始，`size` 默认 20，最大 100
+1. 改 `server/app/schemas/`（先改契约，再改实现）
+2. 若涉及表结构 → 生成并检查迁移（见 §11）
+3. 重启 FastAPI，确认 `/openapi.json` 已更新
+4. `cd web && pnpm run gen:api` 重新生成前端类型
+5. 同步 `harmony/.../models/ClipboardItem.ets`（第 7 步落地后）
+6. 刷新 `docs/api.md` 的契约存档
 
 ---
 
-## 5. API 契约（目标设计）
+## 5. API 概览
 
-完整定义的事实来源是 `server/app/schemas/`（Pydantic Schema）；
-在线文档 <http://localhost:8000/docs>，契约存档 [`docs/api.md`](docs/api.md)（含导出脚本）。摘要：
+模块级摘要；**完整路径、参数与响应以 `/docs` 为准**，存档见 [`docs/api.md`](docs/api.md)。
 
-| 方法 | 路径 | 说明 |
+| 模块 | 前缀 | 内容 |
 |------|------|------|
-| POST | `/api/v1/auth/register` | 注册 |
-| POST | `/api/v1/auth/login` | 登录 |
-| GET | `/api/v1/auth/me` | 当前用户 |
-| POST | `/api/v1/clipboard/items` | 创建（可按 `title` 命名，留空自动生成） |
-| GET | `/api/v1/clipboard/items` | 列表（分页/筛选/按标题或内容搜索） |
-| GET | `/api/v1/clipboard/items/{id}` | 详情 |
-| DELETE | `/api/v1/clipboard/items/{id}` | 删除 |
-| DELETE | `/api/v1/clipboard/items` | 清空 |
-| POST | `/api/v1/dev/reset` | 重置种子数据（**仅 `ENABLE_DEV_ROUTES=true` 时注册**） |
-| WS | `/api/v1/clipboard/ws?token=xxx` | 实时同步 |
-| GET | `/health` | 健康检查 |
-
-**改接口时必须做的事**：
-1. 更新 Pydantic Schema
-2. 重启 FastAPI，确认 `/openapi.json` 更新
-3. 重新生成 Web 类型：`npx openapi-typescript http://localhost:8000/openapi.json -o web/src/types/api.d.ts`
-4. 同步更新鸿蒙端 `models/ClipboardItem.ets`
-5. 刷新 `docs/api.md` 的契约存档（导出脚本见该文件开头）
+| 健康检查 | `/health`、`/` | 存活探针、服务信息 |
+| 认证 | `/api/v1/auth` | `register` / `login` / `me`（当前为假数据，第 4 步接真实 JWT） |
+| 剪贴板 | `/api/v1/clipboard` | `items` 的创建 / 列表 / 详情 / 删除 / 清空；第 5 步加 `ws` |
+| 开发辅助 | `/api/v1/dev` | `reset`（⚠️ 删数据）、`db`（探测当前库）；**仅 `ENABLE_DEV_ROUTES=true` 时注册** |
 
 ---
 
-## 6. WebSocket 协议（目标设计）
+## 6. WebSocket 协议
 
-**连接**：`ws://localhost:8000/api/v1/clipboard/ws?token=<JWT>`
+**协议细节以 [`docs/ws-protocol.md`](docs/ws-protocol.md) 为准**（事件表、消息格式、调试方法）。
 
-**服务端推送事件**：
+连接：`ws://localhost:8000/api/v1/clipboard/ws?token=<JWT>`
 
-| event | data |
-|-------|------|
-| `clipboard.created` | ClipboardItem |
-| `clipboard.updated` | ClipboardItem |
-| `clipboard.deleted` | `{ "id": "uuid" }` |
-| `clipboard.cleared` | `{}` |
-| `pong` | `{}` |
+**本文件只记两条容易漏的硬约束**：
 
-**客户端发送**：`{ "action": "ping" }`
-
-**约定**：
-- 心跳间隔 30 秒
-- 重连策略：指数退避，首次 1 秒，最大 30 秒
-- 重连成功后必须调用 `GET /clipboard/items` 拉取最新列表
+- ⚠️ **token 走 query string 会被 uvicorn 访问日志明文记录**，实现时必须对 `token` 参数脱敏
+- ⚠️ **多 worker 会打破广播**：`ConnectionManager` 是进程内结构，`--workers > 1` 时
+  A 连 worker 1、B 连 worker 2 → 事件送不到。第 5 步必须二选一：
+  **强制 `--workers 1`** 或**同时引入 Redis Pub/Sub**
 
 ---
 
 ## 7. 当前进度
 
-> **详细进度、验收记录、已知问题与技术债见 [`docs/roadmap.md`](docs/roadmap.md)。**
-> 本文件只维护稳定约定；凡是每完成一步就要改一遍的内容（勾选框、实测记录、版本号），
-> 一律写进 roadmap，避免两处不同步。
+> **全部进度、验收记录、已知问题与环境前置条件见 [`docs/roadmap.md`](docs/roadmap.md)。**
+> 本文件不再维护任何勾选框或状态标记。
 
-**当前**：第 1 步（后端骨架 + 数据契约）✅、第 2 步（Web 骨架 + 单端闭环）✅、第 3 步（接入数据库）✅ → **下一步：第 4 步（JWT 认证）**。
-
-开工前请先看 `docs/roadmap.md` 的「已知问题」与「环境前置条件」：
-那里记录了必须先修的高危项（`DEBUG` 默认值、测试清库风险）和本机实测状态
-（Docker 守护进程未运行、5432 端口已被本机 PostgreSQL 18 占用、Redis 未启动）。
+**开始工作前**：先读 `docs/roadmap.md` 的「已知问题」与「环境前置条件」，确认没有必须先修的高危项。
 
 ---
 
@@ -248,42 +187,28 @@ class ClipboardItemResponse(BaseModel):
 
 ### 代码风格
 
-**后端（Python）**：
-- 遵循 PEP 8
-- 类型注解必须完整
-- 使用 `async def` 处理 I/O
-- 路由层只做参数校验和调用，业务逻辑放 `services/` 或 `crud/`
-- 数据库操作统一走 `crud/`，路由不直接写 SQL
+**后端（Python）**
+- 遵循 PEP 8；类型注解必须完整；I/O 一律 `async def`
+- 路由层只做参数校验与调用，业务逻辑放 `services/` 或 `crud/`
+- 数据库操作统一走 `crud/`，**路由不直接写 SQL**
 
-**Web 端（TypeScript）**：
-- 使用函数式组件 + Hooks
-- 状态管理用 Zustand，避免 prop drilling
-- 剪贴板 API 封装在 `utils/clipboard.ts`，组件不直接调 `navigator.clipboard`
+**Web 端（TypeScript）**
+- 函数式组件 + Hooks；状态管理用 Zustand，避免 prop drilling
+- 剪贴板 API 封装在 `utils/clipboard.ts`，**组件不直接调 `navigator.clipboard`**
+- **组件不直接调 axios**，统一经 `api/client.ts`
 - 类型从 `types/api.d.ts` 导入，不手写重复类型
 
-**鸿蒙端（ArkTS）**：
-- 剪贴板监听逻辑隔离在 `services/clipboardMonitor.ets`
-- 网络请求统一封装在 `services/api.ets`
+**鸿蒙端（ArkTS）**
+- 剪贴板监听隔离在 `services/clipboardMonitor.ets`，网络请求统一在 `services/api.ets`
 - 模型字段与后端 Schema 严格对齐
 
 ### 提交规范
 
-遵循 Conventional Commits：
-
-```
-feat: 新增 WebSocket 广播
-fix: 修复去重时未广播的问题
-docs: 更新 API 文档
-refactor: 抽取 crud 层
-test: 补充剪贴板 CRUD 测试
-chore: 更新依赖
-```
+遵循 Conventional Commits：`feat:` / `fix:` / `docs:` / `refactor:` / `test:` / `chore:`
 
 ### 分支策略
 
-- `main`：稳定分支
-- `feature/*`：功能分支
-- `hotfix/*`：紧急修复
+`main` 稳定分支；`feature/*` 功能分支；`hotfix/*` 紧急修复
 
 ---
 
@@ -291,166 +216,80 @@ chore: 更新依赖
 
 ### 安全
 
-- **绝不**在代码中硬编码密钥，使用 `.env`
-- `.env` 必须加入 `.gitignore`
-- 生产环境必须用 HTTPS / WSS
-- JWT 密钥生产环境必须更换
+- **绝不**在代码中硬编码密钥，一律走 `.env`
+- `.env` 必须被 `.gitignore` 忽略；迁移配置里也不要写连接串
+- 生产环境必须 HTTPS / WSS；JWT 密钥生产必须更换
+- 会删数据的开发辅助接口必须由**独立开关**控制，不要复用 `DEBUG`
 
 ### 剪贴板 API
 
-- 浏览器剪贴板 API **仅在 HTTPS 或 localhost 可用**
+- 浏览器剪贴板 API **仅在 HTTPS 或 localhost 可用**（用 `127.0.0.1`/`localhost` 访问）
 - 读取剪贴板**必须由用户手势触发**（点击、Ctrl+V），不能后台自动读
-- 写入剪贴板时需设置标志位，避免触发自身监听导致死循环
-- 鸿蒙 API 12+ 读取剪贴板需 `READ_PASTEBOARD` 权限；监听用 `on('update')` 无需权限
+- 写回剪贴板要设标志位，避免触发自身监听造成死循环
+- 鸿蒙 API 12+：读剪贴板需 `READ_PASTEBOARD` 权限，监听用 `on('update')` 无需权限
 
 ### 数据一致性
 
-- 任何接口字段变更，必须同步更新三端
-- 去重分支也必须广播 WebSocket 消息（易漏）
-- 分页默认值：`page=1`，`size=20`
+- 任何接口字段变更必须同步三端（Schema → Web 类型 → 鸿蒙模型）
+- 去重分支也必须广播 WebSocket 消息
+- 分页默认 `page=1`、`size=20`
 
-### 性能
+### 性能与隔离
 
 - 图片、文件不要 base64 存数据库（阶段二）
 - 列表查询必须带分页
-- WebSocket 广播按用户隔离，不群发
+- WebSocket 广播**按用户隔离，不群发**；同时注意 §6 的 worker 约束
 
 ---
 
-## 10. 开发顺序（严格按此推进）
+## 10. 开发顺序
 
-**原则：契约优先，后端先行，Web 验证，鸿蒙接入。**
+**原则：契约优先，后端先行，Web 验证，鸿蒙接入。严格按顺序推进，不要跳步。**
+每一步的细化任务、完成标准与当前状态见 [`docs/roadmap.md`](docs/roadmap.md)。
 
-### 第 1 步：FastAPI 骨架 + 数据契约
-
-1. 创建 `server/` 目录结构和虚拟环境
-2. 安装 `fastapi`、`uvicorn[standard]`
-3. 编写 Pydantic Schema（`schemas/clipboard.py`、`schemas/user.py`）
-4. 编写假数据路由（`routers/clipboard.py`、`routers/auth.py`）
-5. 编写入口 `main.py`，注册路由和 CORS
-6. 启动服务，验证 `/docs` 可用
-7. 用 Swagger UI 测试假数据 CRUD
-
-**完成标准**：`/docs` 可访问，所有接口返回假数据正常。
-
-### 第 2 步：Web 端骨架 + 单端闭环
-
-1. `web/` 初始化 Vite + React + TS
-2. 用 `openapi-typescript` 生成类型
-3. 封装 API 客户端（axios）
-4. 封装剪贴板读写工具
-5. 实现列表页 + 同步按钮
-6. 用假数据后端跑通「读取剪贴板 → 上传 → 列表展示 → 点击复制」
-
-**完成标准**：Web 端单端闭环可用（数据存内存即可）。
-
-### 第 3 步：接入数据库
-
-1. 创建 `docker-compose.yml`（PostgreSQL + Redis）
-2. 安装 `sqlalchemy[asyncio]`、`asyncpg`、`alembic`
-3. 配置 `db/session.py`、`db/base.py`
-4. 定义 SQLAlchemy 模型
-5. 初始化 Alembic，生成并执行迁移
-6. 实现 `crud/` 层
-7. 替换路由中的假数据为真实 CRUD
-8. 验证重启后数据不丢失
-
-**完成标准**：数据持久化，`/docs` 接口全部正常。
-
-### 第 4 步：JWT 认证
-
-1. `core/security.py` 实现密码哈希、JWT 签发/校验
-2. 实现真实的注册、登录接口
-3. 编写认证依赖 `get_current_user`
-4. 给剪贴板路由加认证保护
-5. Web 端加登录页，token 存 localStorage
-
-**完成标准**：未带 token 请求返回 401，带 token 正常。
-
-### 第 5 步：WebSocket 实时同步
-
-1. `services/ws_manager.py` 实现连接管理
-2. `routers/ws.py` 实现端点（token 校验）
-3. 创建剪贴板项时广播
-4. Web 端接入 WebSocket，实时更新列表
-5. 验证多标签页同步
-
-**完成标准**：标签 A 上传，标签 B 秒级收到。
-
-### 第 6 步：内容去重
-
-1. 创建时计算 `content_hash`
-2. 相同内容更新时间戳，不创建新记录
-3. 去重分支也广播 `clipboard.updated`
-4. Web 端处理 `updated` 事件
-
-**完成标准**：连续复制相同内容只产生一条记录。
-
-### 第 7 步：鸿蒙 App
-
-1. DevEco 创建项目
-2. 配置网络权限
-3. 封装 HTTP 客户端和 WebSocket
-4. 实现剪贴板读写
-5. 实现剪贴板变化监听
-6. 列表页展示 + 手动同步
-7. 接入 WebSocket
-
-**完成标准**：鸿蒙与 Web 双向实时同步。
-
-### 第 8 步：联调与测试
-
-1. 三端同时运行，验证双向同步
-2. 补充后端单元测试
-3. 修复边界问题
+| 步骤 | 内容 | 状态 |
+|------|------|------|
+| 1 | FastAPI 骨架 + 数据契约 | ✅ |
+| 2 | Web 端骨架 + 单端闭环 | ✅ |
+| 3 | 接入数据库（PostgreSQL + SQLAlchemy + Alembic） | ✅ |
+| 4 | JWT 认证 | ⬅ 下一步 |
+| 5 | WebSocket 实时同步（含 worker / Redis 决策） | ⬜ |
+| 6 | 内容去重（去重逻辑与广播） | ⬜ |
+| 7 | 鸿蒙 App | ⬜ |
+| 8 | 联调与测试（含后端 pytest） | ⬜ |
 
 ---
 
 ## 11. 常见任务操作指引
 
-### 启动后端（待创建后）
+> 启动、迁移、排错等完整命令见 [`server/README.md`](server/README.md) 与 [`web/README.md`](web/README.md)，
+> 此处只列**跨端协作时容易漏的流程**。
 
-```bash
-cd server
-source venv/bin/activate
-uvicorn app.main:app --reload --port 8000
-```
+### 添加接口
 
-访问 `http://localhost:8000/docs` 验证。
+改 Schema → 改路由 → 确认 `/docs` → `pnpm run gen:api` → 刷新 `docs/api.md`（详见 §4）
 
-### 添加新接口
+### 添加/修改数据库模型
 
-1. 在 `app/schemas/` 定义请求/响应模型
-2. 在 `app/routers/` 添加路由函数
-3. 在 `app/main.py` 注册路由（如新模块）
-4. 启动服务，确认 `/docs` 出现新接口
-5. 刷新 `docs/api.md` 的契约存档（导出脚本见该文件开头）
-6. 通知前端重新生成类型
+1. 在 `app/db/models/` 定义或修改模型
+2. 在 `app/db/models/__init__.py` 导入，确保注册进 `Base.metadata`
+3. `alembic revision --autogenerate -m "描述"`
+4. **逐行检查生成的迁移**——见下方两条坑
+5. `alembic upgrade head`，并确认 `alembic current` 与模型一致（再 autogenerate 应无变更）
 
-### 添加数据库模型
-
-1. 在 `app/db/models/` 定义 SQLAlchemy 模型
-2. 在 `app/db/base.py` 的 metadata 中导入（确保 Alembic 能发现）
-3. 生成迁移：`alembic revision --autogenerate -m "描述"`
-4. 检查生成的迁移文件，确认无误
-5. 执行：`alembic upgrade head`
+> ⚠️ **坑 1：autogenerate 会记录"多余的表"**
+> 若开发库里存在手工建的临时表，迁移会包含 `op.drop_table('xxx')`，
+> 在干净库（CI、测试库）上执行必然失败。生成后必须删掉这类噪声语句。
+>
+> ⚠️ **坑 2：`alembic.ini` 必须保持纯 ASCII**
+> Windows 上 configparser 按 locale（GBK）读取该文件，中文注释会让 Alembic 直接崩溃。
+> 运行迁移前建议设 `$env:PYTHONUTF8='1'`。
 
 ### 生成 Web 端类型
 
 ```bash
-cd web
-npx openapi-typescript http://localhost:8000/openapi.json -o src/types/api.d.ts
+cd web && pnpm run gen:api
 ```
-
-### 调试 WebSocket
-
-用 `wscat` 或浏览器控制台：
-
-```bash
-npx wscat -c "ws://localhost:8000/api/v1/clipboard/ws?token=<JWT>"
-```
-
-发送 `{"action":"ping"}`，应收到 `{"event":"pong"}`。
 
 ---
 
@@ -458,55 +297,33 @@ npx wscat -c "ws://localhost:8000/api/v1/clipboard/ws?token=<JWT>"
 
 | 风险 | 说明 | 应对 |
 |------|------|------|
-| 浏览器剪贴板 API 兼容性 | 部分浏览器不支持 `read()` | 封装降级逻辑，优先 `paste` 事件 |
-| 鸿蒙剪贴板 API 12+ 权限管控 | 读取需 `READ_PASTEBOARD` | 监听用 `on('update')` 无需权限，读取需申请 |
-| 浏览器剪贴板需 HTTPS | 生产必须配置 | 部署时处理 |
-| WebSocket 循环同步 | 写回剪贴板触发监听 | 设标志位区分本地/远端写入 |
-| 多实例广播不一致 | 后期多副本部署 | 引入 Redis Pub/Sub |
-| 端到端加密与搜索冲突 | 服务端无法搜明文 | 搜索仅在客户端本地做 |
+| 浏览器剪贴板兼容性 | 部分浏览器不支持 `read()` | 已封装降级 + 手动粘贴入口 |
+| 剪贴板需安全上下文 | 非 HTTPS 或 localhost 时读取被拒 | 本地固定用 `127.0.0.1` |
+| WebSocket 循环同步 | 写回剪贴板触发监听 | `isSelfWrite()` 标志位 |
+| 广播多实例不一致 | 多 worker 时事件送不到 | §6：单 worker 或 Redis Pub/Sub |
+| **Windows 保留端口段** | `5141-5240` 吃掉 5173、`8903-9002` 吃掉 9000 | Web 端已改 **5273**；MinIO 阶段二需换端口。排查：`netsh int ipv4 show excludedportrange protocol=tcp` |
+| 端到端加密与搜索冲突 | 服务端无法搜明文 | 搜索仅在客户端本地做（阶段四） |
 
 ---
 
-## 13. 下一步任务（现在就开始）
+## 13. 参考文档
 
-**当前应该做：第 4 步 —— JWT 认证**
-
-具体操作：
-
-1. 在 `core/security.py` 实现密码哈希与 JWT 签发/校验
-   - ⚠️ 先决定依赖：AGENT.md 第 2 节写的 `passlib[bcrypt]` 已停止维护且与 `bcrypt 4.x` 冲突，
-     建议改用 `pwdlib`，否则需 pin `bcrypt==4.0.1`（见 `docs/roadmap.md` 的 P5）
-2. 实现真实的注册、登录接口（替换 `routers/auth.py` 里的假 token）
-3. 编写认证依赖 `get_current_user`（当前固定返回配置里的演示用户，需改为解析 Bearer token）
-4. 给剪贴板路由加认证保护
-5. Web 端加登录页，token 存 localStorage（`api/client.ts` 的拦截器已就绪）
-
-**开工前必须先处理**（详见 `docs/roadmap.md`）：
-
-- **P5**：确认 `pwdlib` 还是 pin `bcrypt`，若偏离 AGENT.md 第 2 节需同步该表
-- **P2 剩余项**：Web e2e 目前仍打开发库，需加指向 `clipboard_test` 的测试后端实例
-
-**完成标准**：未带 token 请求返回 401，带 token 正常。
+| 文档 | 内容 |
+|------|------|
+| [`README.md`](README.md) | 项目介绍与快速开始 |
+| [`docs/roadmap.md`](docs/roadmap.md) | **进度、验收记录、已知问题与技术债、环境前置条件** |
+| [`docs/api.md`](docs/api.md) | API 契约存档（含导出脚本） |
+| [`docs/ws-protocol.md`](docs/ws-protocol.md) | WebSocket 协议全量说明 |
+| [`server/README.md`](server/README.md) | 后端启动、迁移、数据库结构、排错 |
+| [`web/README.md`](web/README.md) | Web 端启动、界面结构、验证步骤 |
 
 ---
 
-## 14. 参考文档
+**最后更新**：2026-10-04（精简：删除与 docs/ 重复的枚举，补齐锁定版本与缺失约束）
+**维护者**：云剪贴板项目组
 
-- `README.md` —— 项目说明与快速开始
-- `docs/api.md` —— API 契约存档（含导出脚本，契约来源是 `server/app/schemas/`）
-- `docs/ws-protocol.md` —— WebSocket 协议
-- `docs/roadmap.md` —— **项目进度、验收记录、已知问题与技术债**
-
----
-
-**最后更新**：2026-10-03（文档整理：进度迁至 `docs/roadmap.md`）  
-**维护者**：云剪贴板项目组  
 **给 AI 助手的提示**：
-- **进度看 `docs/roadmap.md`**，不要往本文件里加勾选框；本文件只维护稳定约定。
-- 已完成：第 1 步（后端骨架 + 契约）、第 2 步（Web 骨架 + 单端闭环）、第 3 步（接入数据库）。下一步：第 4 步（JWT 认证）。
-- 数据库已就绪：容器 `cloud-clipboard-postgres`（postgres:16，宿主 5433），开发库 `clipboard`、
-  测试库 `clipboard_test`；表结构由 Alembic 迁移管理（`alembic/versions/`）。
-- 第 3 步开工前先处理 `docs/roadmap.md` 里的 P1、P2 两个高危项。
-- 请严格按照第 10 节的开发顺序推进，不要跳步。
-- 每次修改代码前，先确认改动是否影响接口契约。如影响，按第 5 节流程同步三端。
-- 每完成一个步骤，主动更新第 7 节「当前进度」的勾选状态。
+- 本文件只维护**稳定约定**。不要往这里加勾选框、实测记录或版本号流水——那些写进 `docs/roadmap.md`。
+- 进度、已知问题、开工前置条件：**看 `docs/roadmap.md`**。
+- 字段与路径的**枚举**不要在 AGENT.md 里展开，指向 `docs/api.md` 与 `/docs`。
+- 严格按 §10 的顺序推进；改代码前先确认是否影响契约（影响则走 §4 流程）。

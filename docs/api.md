@@ -17,7 +17,7 @@ cd server
 .\venv\Scripts\python.exe -c "import json,sys; from app.main import app; json.dump(app.openapi(), sys.stdout, ensure_ascii=False, indent=2)" > ..\docs\api.yaml
 ```
 
-## 接口契约修改流程（AGENT.md 第 5 节）
+## 接口契约修改流程（AGENT.md 第 4 节）
 
 1. 改 `server/app/schemas/`（**契约唯一事实来源**）
 2. 重启 FastAPI，确认 `/openapi.json` 已更新

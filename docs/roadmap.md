@@ -173,7 +173,7 @@
 
 - uvicorn `--workers > 1` 时：数据一致（都在数据库），但**推送送不到另一个 worker**
 - 处理：第 5 步要么强制 `--workers 1` 并禁止扩容，要么同时引入 Redis Pub/Sub
-- **AGENT.md 第 12 节把 Redis 列为"后期"风险，实际约束比它写的更早**（已补注到 `ws-protocol.md`）
+- **第 3 步后 AGENT.md 第 6 节已明确记录该约束（不再藏在"后期风险"里）**（已补注到 `ws-protocol.md`）
 
 ### 🟡 P4 · 文档文件名矛盾（已解决）
 
@@ -276,6 +276,8 @@ server\venv\Scripts\python.exe scripts\verify_postgres.py     # 连通性验证
 | `72c15c1` | `docs: 补充项目文档并加固 gitignore` |
 | `12c72c3` | `fix(web): 开发端口 5173 改为 5273` |
 | `9e39b5e` | `feat(infra): 本地 PostgreSQL 16 容器与验证脚本` |
+| `747b482` | `docs: 补齐版本保护点并修正 roadmap 末尾重复段落` |
+| （本次） | `docs: 精简 AGENT.md，删除与 docs/ 重复的枚举` |
 | `7f055ed` | `feat(server): 接入 PostgreSQL + SQLAlchemy 异步 + Alembic 迁移` |
 | `b5cc62d` | `docs: 同步第 3 步完成情况` |
 
