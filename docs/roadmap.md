@@ -3,7 +3,7 @@
 > **本文件记录动态进度。** AGENT.md 只保存稳定约定（技术栈、契约、规范、开发顺序），
 > 凡是"每完成一步就要改一遍"的内容都放这里。
 
-**最后更新**：2026-10-03
+**最后更新**：2026-10-04
 **当前进度**：第 1、2 步已完成 → **下一步：第 3 步（接入 PostgreSQL）**
 
 ---
@@ -26,7 +26,7 @@
 - [x] `server/` 目录结构与虚拟环境
 - [x] `fastapi 0.142.2`、`uvicorn[standard] 0.54.0`、`pydantic-settings 2.15.0`
 - [x] Pydantic Schema：`app/schemas/`（common / user / clipboard）
-- [x] 假数据路由：`app/routers/`（auth / clipboard）+ `app/crud/`（内存存储 + 4 条种子数据）
+- [x] 假数据路由：`app/routers/`（auth / clipboard / dev）+ `app/crud/`（内存存储 + 4 条种子数据）
 - [x] 入口 `app/main.py`：注册路由、CORS、OpenAPI 元信息、`/health`
 - [x] `/docs`、`/redoc`、`/openapi.json` 均可用
 
@@ -38,16 +38,16 @@
 - [x] 从 OpenAPI 生成类型：`pnpm run gen:api` → `web/src/types/api.d.ts`
 - [x] axios 客户端封装：`web/src/api/client.ts`
 - [x] 剪贴板读写工具：`web/src/utils/clipboard.ts`
-- [x] 列表页 + 同步按钮 + 两栏布局（左历史 / 右输入）
-- [x] 标题字段（留空服务端自动生成）、加高输入区、清空输入、防抖自动保存
-- [x] 端到端测试：`pnpm test`（11 用例，驱动真实后端）
+- [x] 两栏布局：左栏历史记录（搜索/刷新/排序/清空）、右栏标题 + 加高输入区
+- [x] 标题字段（留空服务端自动生成）、清空输入、防抖自动保存
+- [x] 端到端测试：`pnpm test`（12 用例，驱动真实后端）
 
-**验收记录**：`pnpm run typecheck` 0 错误；`pnpm run build` 110 模块 / gzip 72 KB；`pnpm test` 11/11 通过。
+**验收记录**：`pnpm run typecheck` 0 错误；`pnpm run build` 110 模块 / gzip 72 KB；`pnpm test` 12/12 通过。
 **待人工确认**：浏览器侧「读取剪贴板 → 上传 → 列表展示 → 点击复制」（剪贴板 API 依赖用户手势，无法自动化）。
 
 ### ⬜ 第 3 步：接入数据库（下一步）
 
-- [ ] `docker-compose.yml`（PostgreSQL + Redis）或复用本机 PostgreSQL 18
+- [ ] 决定数据库方案：复用本机 PostgreSQL 18 或启动 Docker Desktop 用容器
 - [ ] 安装 `sqlalchemy[asyncio]`、`asyncpg`、`alembic`
 - [ ] `db/session.py`、`db/base.py`
 - [ ] SQLAlchemy 模型（`user.py`、`clipboard.py`）
@@ -57,6 +57,7 @@
 - [ ] 验证重启后数据不丢失
 
 **完成标准**：数据持久化，`/docs` 接口全部正常。
+**开工前置**：完成下方 P2 剩余项（测试库隔离）。
 
 ### ⬜ 第 4 步：JWT 认证
 
@@ -67,6 +68,7 @@
 - [ ] Web 端登录页，token 存 localStorage
 
 **完成标准**：未带 token 请求返回 401，带 token 正常。
+**开工前置**：见 P5（passlib/bcrypt 兼容性）。
 
 ### ⬜ 第 5 步：WebSocket 实时同步
 
@@ -77,7 +79,7 @@
 - [ ] 验证多标签页同步
 
 **完成标准**：标签 A 上传，标签 B 秒级收到。
-**⚠️ 前置约束**：见下方「已知问题 P3」——必须同时决定单 worker 还是引入 Redis Pub/Sub。
+**开工前置**：必须先决定单 worker 还是引入 Redis Pub/Sub，见 P3；token 日志脱敏见 P6。
 
 ### ⬜ 第 6 步：内容去重
 
@@ -108,25 +110,33 @@
 
 ## 已知问题与技术债
 
-按严重程度排序，**建议在对应步骤开工前解决**。
+### ✅ P1 · `DEBUG` 默认值与开发路由（已解决）
 
-### 🔴 P1 · `DEBUG` 默认 true + 开发重置路由
+原先 `DEBUG` 默认 `true`、`.env.example` 也是 `true`，而 `dev/reset` 按 `DEBUG` 注册。
+接库后该路由会变成"清库"，一旦以 `DEBUG=true` 部署即可能丢数据。
 
-`server/app/core/config.py` 的 `DEBUG` 默认 `True`，`.env.example` 也是 `true`，
-而 `POST /api/v1/dev/reset` 目前按 `DEBUG` 注册。
+**已处理**：
 
-- 现状：重置的是内存种子数据，无害
-- **第 3 步之后**：它将变成"清空数据库"，一旦以 `DEBUG=true` 部署并接库 → 用户数据丢失
-- 处理：默认改 `False`；开发路由改用独立的 `ENABLE_DEV_ROUTES` 开关（不复用 `DEBUG`）
+- `config.py`：`DEBUG` 默认改为 `False`
+- 新增独立开关 `ENABLE_DEV_ROUTES`（默认 `False`），**故意与 `DEBUG` 解耦**
+- `main.py`：dev 路由改为 `if settings.ENABLE_DEV_ROUTES`
+- `.env.example`：两者均为 `false`，并写明启用条件与风险
+- 本地 `server/.env`：`DEBUG=false` + `ENABLE_DEV_ROUTES=true`（跑 e2e 需要）
 
-### 🔴 P2 · `pnpm test` 会清空真实库
+### 🟡 P2 · 测试清库风险（部分解决，接库前必须收尾）
 
-`web/tests/e2e.test.ts` 收尾调用 `clearAll()` + `dev/reset`。
+`web/tests/e2e.test.ts` 的破坏性用例（清空全部、`dev/reset`）会清空数据。
 
-- 现状：数据在内存，无所谓
-- **第 3 步之后**：跑一次测试清空真实数据库
-- 处理：测试指向独立测试库（通过 `VITE_API_BASE_URL` 或专用环境变量注入），
-  或用例加环境守卫，非测试环境直接跳过破坏性用例
+**已处理**：
+
+- 新增 `E2E_ALLOW_DESTRUCTIVE=1` 显式开关：**不设置就跳过清空用例**（默认安全）
+- 收尾自动恢复：优先调 `dev/reset`，该路由不可用时自动补回 4 条种子数据
+- 两种模式均已实测：不设开关时跳过并通过，设开关时执行并通过，结束后数据恢复为 4 条
+
+**接库前仍需做**：
+
+- 让测试指向**独立测试数据库**（当前 `API_BASE_URL` 指向的库就是被清空的库）
+- 建议再加一层保护：若 `APP_ENV=production` 则拒绝执行破坏性用例
 
 ### 🟠 P3 · 多 worker 会打破 WebSocket 广播
 
@@ -134,12 +144,12 @@
 
 - uvicorn `--workers > 1` 时：数据一致（都在数据库），但**推送送不到另一个 worker**
 - 处理：第 5 步要么强制 `--workers 1` 并禁止扩容，要么同时引入 Redis Pub/Sub
-- **AGENT.md 第 12 节把 Redis 列为"后期"风险，实际约束比它写的更早**
+- **AGENT.md 第 12 节把 Redis 列为"后期"风险，实际约束比它写的更早**（已补注到 `ws-protocol.md`）
 
-### 🟡 P4 · 文档文件名曾三处矛盾（已解决）
+### 🟡 P4 · 文档文件名矛盾（已解决）
 
 原先 AGENT.md 说 `docs/api.yaml`、README 说 `docs/api.md` 与 `docs/architecture.md`。
-**现已统一为**：`api.md`（契约 + 导出脚本）、`ws-protocol.md`、`roadmap.md`。
+**已统一为**：`api.md`（契约存档 + 导出脚本）、`ws-protocol.md`、`roadmap.md`。
 
 ### 🟡 P5 · 第 4 步依赖有已知兼容问题
 
@@ -152,14 +162,15 @@ AGENT.md 第 2 节指定 `python-jose + passlib[bcrypt]`：
 
 `ws?token=<JWT>` 会被 uvicorn 访问日志明文记录。第 5 步需对 `token` 脱敏。
 
-### 🟡 P7 · 根 `.gitignore` 缺 `dist/`
+### ✅ P7 · 根 `.gitignore` 缺 `dist/`（已解决）
 
-`web/.gitignore` 有，但根目录没有兜底。构建产物位于 `web/dist/`。
+已补齐 `dist/`、`build/`、`coverage/`、`__pycache__/`、`*.py[cod]`、`*.tsbuildinfo` 等兜底规则。
 
-### 🟡 P8 · README 路由表口径不一致
+### ✅ P8 · README 路由表口径不一致（已解决）
 
-README API 表里的 `POST /api/v1/clipboard/upload`（图片/文件）在 AGENT.md 第 5 节不存在，
-且第 1 节明确"本期不做图片、文件"。**已标注为阶段二。**
+- `POST /api/v1/clipboard/upload` 已标注为**阶段二、当前未实现**
+- 补齐 `GET /auth/me`、`DELETE /clipboard/items`、`POST /dev/reset`、`GET /health`
+- 路径参数统一为 `{id}`（后端路由、`docs/api.md`、Web 类型生成结果已一致）
 
 ---
 
@@ -181,8 +192,18 @@ README API 表里的 `POST /api/v1/clipboard/upload`（图片/文件）在 AGENT
 
 ---
 
+## 版本保护点
+
+| commit | 内容 |
+|--------|------|
+| `89a03e9` | `feat(server): FastAPI 骨架 + 数据契约` |
+| `2aa5e49` | `feat(web): Web 端骨架与单端闭环` |
+| `72c15c1` | `docs: 补充项目文档并加固 gitignore` |
+
+---
+
 ## 下一步行动
 
 1. 决定第 3 步的数据库方案（复用本机实例 / 启动 Docker）
-2. 先修 P1、P2（趁数据还在内存里改，成本最低）
-3. 提交第 1、2 步的代码作为版本保护点
+2. 完成 P2 剩余项：把测试隔离到独立测试库
+3. 开始第 3 步：SQLAlchemy 模型 + Alembic 迁移 + crud 层替换
