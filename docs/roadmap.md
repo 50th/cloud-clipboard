@@ -34,7 +34,7 @@
 
 ### ✅ 第 2 步：Web 端骨架 + 单端闭环（已完成）
 
-- [x] Vite 5.4.21 + React 18.3.1 + TypeScript 5.9.3，端口固定 5173
+- [x] Vite 5.4.21 + React 18.3.1 + TypeScript 5.9.3，端口固定 5273
 - [x] 从 OpenAPI 生成类型：`pnpm run gen:api` → `web/src/types/api.d.ts`
 - [x] axios 客户端封装：`web/src/api/client.ts`
 - [x] 剪贴板读写工具：`web/src/utils/clipboard.ts`

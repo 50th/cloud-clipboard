@@ -97,7 +97,7 @@ cloud-clipboard/
 │
 ├── web/                      # ✅ Web 端（第 2 步：骨架 + 单端闭环）
 │   ├── index.html            # ✅
-│   ├── vite.config.ts        # ✅ @ 别名、固定端口 5173
+│   ├── vite.config.ts        # ✅ @ 别名、固定端口 5273
 │   ├── tsconfig.json         # ✅
 │   ├── package.json          # ✅ imports: #src/* → ./src/*
 │   ├── pnpm-workspace.yaml   # ✅ pnpm 11 项目设置（allowBuilds 放行 esbuild）

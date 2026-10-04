@@ -69,7 +69,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # 跨域：Web 端（Vite 5173）与鸿蒙调试端需要
+    # 跨域：Web 端开发服务器（Vite，端口见 web/vite.config.ts）与鸿蒙调试端需要
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,

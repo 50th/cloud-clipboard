@@ -119,7 +119,7 @@ npm install
 npm run dev
 ```
 
-访问 <http://localhost:5173> 打开 Web 端。
+访问 <http://localhost:5273> 打开 Web 端。
 
 ### 4. 启动鸿蒙 App
 
@@ -139,7 +139,7 @@ npm run dev
 | `APP_ENV` | 运行环境标识 | `development` |
 | `DEBUG` | 是否暴露错误详情（**生产必须 false**） | `false` |
 | `ENABLE_DEV_ROUTES` | 开发/测试辅助路由（`/api/v1/dev/*`）开关。与 `DEBUG` 解耦：**接库后该路由会清库**，生产必须 false | `false` |
-| `CORS_ORIGINS` | 允许跨域的来源（JSON 数组或逗号分隔） | `["http://localhost:5173", ...]` |
+| `CORS_ORIGINS` | 允许跨域的来源（JSON 数组或逗号分隔） | `["http://localhost:5273", ...]` |
 | `DATABASE_URL` | PostgreSQL 连接串（第 3 步启用） | - |
 | `REDIS_URL` | Redis 连接串（第 5 步启用） | - |
 | `JWT_SECRET` | JWT 密钥（第 4 步启用，生产必须修改） | - |

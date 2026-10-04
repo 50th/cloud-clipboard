@@ -22,10 +22,10 @@ pnpm run gen:api
 pnpm run dev
 ```
 
-打开 <http://127.0.0.1:5173>。
+打开 <http://127.0.0.1:5273>。
 
 > ⚠️ 必须用 `127.0.0.1` / `localhost` 访问。浏览器剪贴板 API **只在 HTTPS 或 localhost 下可用**，
-> 用局域网 IP（如 `http://192.168.x.x:5173`）打开时读取会被浏览器拒绝。
+> 用局域网 IP（如 `http://192.168.x.x:5273`）打开时读取会被浏览器拒绝。
 
 ## 界面结构
 
@@ -83,7 +83,7 @@ pnpm run build       # tsc --noEmit && vite build
 ```
 web/
 ├── index.html
-├── vite.config.ts               # 插件、@ 别名、固定端口 5173
+├── vite.config.ts               # 插件、@ 别名、固定端口 5273
 ├── tsconfig.json                # @/* 与 #src/* 两套别名
 ├── package.json                 # imports: #src/* → ./src/*
 ├── pnpm-workspace.yaml          # pnpm 11 项目设置（allowBuilds 放行 esbuild）

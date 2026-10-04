@@ -41,8 +41,8 @@ class Settings(BaseSettings):
     # --- CORS ---
     # Web 端开发服务器（Vite）与鸿蒙调试端
     CORS_ORIGINS: list[str] = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
+        "http://localhost:5273",
+        "http://127.0.0.1:5273",
         "http://localhost:3000",
     ]
 
