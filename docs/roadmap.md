@@ -45,10 +45,11 @@
 **验收记录**：`pnpm run typecheck` 0 错误；`pnpm run build` 110 模块 / gzip 72 KB；`pnpm test` 12/12 通过。
 **待人工确认**：浏览器侧「读取剪贴板 → 上传 → 列表展示 → 点击复制」（剪贴板 API 依赖用户手势，无法自动化）。
 
-### ⬜ 第 3 步：接入数据库（下一步）
+### 🚧 第 3 步：接入数据库（进行中）
 
-- [ ] 决定数据库方案：复用本机 PostgreSQL 18 或启动 Docker Desktop 用容器
-- [ ] 安装 `sqlalchemy[asyncio]`、`asyncpg`、`alembic`
+- [x] 决定数据库方案：**本地也用 Docker 容器跑 `postgres:16`**（见下方「本地基础设施」）
+- [x] 容器创建并验证通过（编码/时区/中文往返/卷持久化）
+- [ ] 安装 `sqlalchemy[asyncio]`、`asyncpg`（已装 0.31.0）、`alembic`
 - [ ] `db/session.py`、`db/base.py`
 - [ ] SQLAlchemy 模型（`user.py`、`clipboard.py`）
 - [ ] Alembic 初始化 + 生成并执行迁移
@@ -174,21 +175,67 @@ AGENT.md 第 2 节指定 `python-jose + passlib[bcrypt]`：
 
 ---
 
+## 本地基础设施（实测通过）
+
+**决策：本地开发与生产统一使用 Docker 容器跑 `postgres:16`**，
+本机原生的 PostgreSQL 18 保留不动（避免影响其他项目），容器走宿主 **5433** 端口错开。
+
+| 项目 | 值 |
+|------|-----|
+| 配置文件 | `infra/docker-compose.yml` |
+| 镜像 | `postgres:16`（**本地已有**；`16-alpine` 需联网拉取，当前 Docker Hub 不可达） |
+| 容器名 | `cloud-clipboard-postgres` |
+| 端口 | 宿主 `5433` → 容器 `5432` |
+| 数据卷 | `cloud-clipboard-postgres-data`（命名卷，`down` 不丢，`down -v` 才删） |
+| 连接串 | `postgresql+asyncpg://clipboard:clipboard@127.0.0.1:5433/clipboard` |
+| 验证脚本 | `scripts/verify_postgres.py`（宿主侧运行） |
+
+**实测结果**：PostgreSQL 16.15、`server_encoding=UTF8`、`TimeZone=Etc/UTC`、
+healthcheck 变 `healthy`、中文/emoji/多行/5000 字符往返**全部一致**、
+`timestamptz` 带时区、容器 `restart` 后数据保留、宿主 5433 可连。
+
+**常用命令**（仓库根目录）：
+
+```powershell
+docker compose -f infra/docker-compose.yml up -d              # 启动
+docker compose -f infra/docker-compose.yml ps                 # 状态
+docker compose -f infra/docker-compose.yml logs -f postgres   # 日志
+docker compose -f infra/docker-compose.yml down               # 停止（保留数据）
+server\venv\Scripts\python.exe scripts\verify_postgres.py     # 连通性验证
+```
+
+**注意事项**：
+
+- Docker Hub 当前**不可达**（TLS handshake timeout），因此 compose 里用本地已有的
+  `postgres:16` 而非 `16-alpine`。启动时若需强制离线：`up -d --pull never`
+- Docker CLI 需访问命名管道 `//./pipe/docker_engine`，**在受限沙箱下会被拒绝**
+  （`Access is denied`），因此所有 docker 命令都需要完全权限
+- 版本漂移对策：本地与规划中的生产**均为 16**，避免跨大版本 `pg_dump/pg_restore` 不兼容
+
+---
+
 ## 环境前置条件（实测）
 
 | 组件 | 状态 | 说明 |
 |------|------|------|
-| Python 3.13.7 | ✅ | `server/venv` 已建 |
+| Python 3.13.7 | ✅ | `server/venv` 已建，含 asyncpg 0.31.0 |
 | Node 24.11.1 + pnpm 11.7.0 | ✅ | `web/node_modules` 已装 |
-| **Docker Desktop** | ❌ **守护进程未运行** | `com.docker.service` 为 Stopped；第 3 步若走容器需先启动 |
-| **本机 PostgreSQL 18** | ✅ 服务 Running，`port = 5432`、`listen_addresses = '*'` | 5432 已被占用，Docker 映射会冲突；也可直接复用它 |
-| Redis | ⬜ 6379 空闲 | 未安装/未启动 |
-| MinIO | ⬜ 9000 空闲 | 阶段二才需要 |
+| Docker Desktop | ✅ 守护进程 29.8.1 运行中 | 但 CLI 需完全权限才能访问命名管道 |
+| Docker Hub 拉取 | ❌ 网络不可达 | TLS handshake timeout，只能用本地已有镜像 |
+| 本机 PostgreSQL 18 | ✅ Running，`5432` | **保留不动**，与容器（5433）并存 |
+| 容器 PostgreSQL 16 | ✅ `cloud-clipboard-postgres` healthy | 本地开发主用 |
+| Redis | ⬜ 6379 空闲 | 未安装，第 5 步启用 |
+| MinIO | ⚠️ 9000 被 Windows 保留段占用 | 阶段二需另选端口（如 9010） |
 
-**第 3 步的两条路**（待定）：
+### Windows 保留端口段（重要）
 
-1. **复用本机 PostgreSQL 18**：省掉容器一层，避开 5432 冲突；Redis 需另想办法
-2. **启动 Docker Desktop 用容器**：PostgreSQL 映射 `5433:5432`、Redis `6379:6379`
+```
+1034-1133, 4881-4980, 5141-5240, 8903-9002, 50000-50059
+```
+
+- **5141-5240** 覆盖了原定的 Vite 5173 → 已改用 **5273**
+- **8903-9002** 覆盖了 MinIO 常用的 9000 → 阶段二需换端口
+- 排查命令：`netsh int ipv4 show excludedportrange protocol=tcp`
 
 ---
 
@@ -199,11 +246,14 @@ AGENT.md 第 2 节指定 `python-jose + passlib[bcrypt]`：
 | `89a03e9` | `feat(server): FastAPI 骨架 + 数据契约` |
 | `2aa5e49` | `feat(web): Web 端骨架与单端闭环` |
 | `72c15c1` | `docs: 补充项目文档并加固 gitignore` |
+| `12c72c3` | `fix(web): 开发端口 5173 改为 5273` |
 
 ---
 
 ## 下一步行动
 
-1. 决定第 3 步的数据库方案（复用本机实例 / 启动 Docker）
+1. 开始第 3 步主体：SQLAlchemy 异步模型 + Alembic 迁移 + `crud/` 层替换
+2. 同时完成 P2 剩余项：把测试隔离到独立测试库
+   （建议 `clipboard_test` 库，与 `clipboard` 分开）
 2. 完成 P2 剩余项：把测试隔离到独立测试库
 3. 开始第 3 步：SQLAlchemy 模型 + Alembic 迁移 + crud 层替换

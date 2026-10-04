@@ -62,6 +62,13 @@ cloud-clipboard/
 │   ├── ws-protocol.md        # WebSocket 协议
 │   └── roadmap.md            # 进度、验收记录、已知问题
 │
+├── infra/                    # ✅ 本地基础设施（第 3 步已落地）
+│   ├── docker-compose.yml    # ✅ PostgreSQL 16（宿主 5433 → 容器 5432）
+│   └── .env.example          # ✅ 容器账号与端口（第 5 步在此加 Redis）
+│
+├── scripts/                  # ✅ 运维/验证脚本
+│   └── verify_postgres.py    # ✅ 数据库连通性与数据往返验证
+│
 ├── server/                   # ✅ 后端 FastAPI（第 1 步已落地）
 │   ├── app/
 │   │   ├── main.py           # ✅ 应用入口：注册路由、CORS、OpenAPI 元信息
