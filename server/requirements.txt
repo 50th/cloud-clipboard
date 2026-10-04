@@ -1,0 +1,36 @@
+# ============================================================
+# 云剪贴板后端依赖
+# 阶段一（第 1 步）：FastAPI 骨架 + 数据契约
+# Windows 安装：
+#   cd server
+#   python -m venv venv
+#   .\venv\Scripts\python.exe -m pip install -r requirements.txt
+# ============================================================
+
+# --- Web 框架 / ASGI 服务器 ---
+fastapi
+uvicorn[standard]
+
+# --- 配置管理 ---
+pydantic-settings
+
+# ============================================================
+# 以下为后续步骤依赖，按第 10 节开发顺序逐步启用
+# ============================================================
+
+# 第 3 步：数据库（PostgreSQL + SQLAlchemy + Alembic）
+# sqlalchemy[asyncio]
+# asyncpg
+# alembic
+
+# 第 4 步：认证（JWT + 密码哈希）
+# python-jose[cryptography]
+# passlib[bcrypt]
+
+# 第 5 步：Redis 广播（多实例）
+# redis
+
+# 第 8 步：测试
+# pytest
+# pytest-asyncio
+# httpx

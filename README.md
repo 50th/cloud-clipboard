@@ -136,13 +136,17 @@ npm run dev
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `DATABASE_URL` | PostgreSQL 连接串 | `postgresql+asyncpg://user:pass@localhost:5432/clipboard` |
-| `REDIS_URL` | Redis 连接串 | `redis://localhost:6379/0` |
-| `JWT_SECRET` | JWT 密钥（生产必须修改） | - |
-| `JWT_EXPIRE_MINUTES` | Token 有效期（分钟） | `10080`（7 天） |
-| `STORAGE_TYPE` | 存储类型：`local` / `s3` / `minio` | `minio` |
-| `STORAGE_ENDPOINT` | 对象存储端点 | `http://localhost:9000` |
-| `MAX_FILE_SIZE` | 单文件大小上限（字节） | `10485760`（10MB） |
+| `APP_ENV` | 运行环境标识 | `development` |
+| `DEBUG` | 是否暴露错误详情（**生产必须 false**） | `false` |
+| `ENABLE_DEV_ROUTES` | 开发/测试辅助路由（`/api/v1/dev/*`）开关。与 `DEBUG` 解耦：**接库后该路由会清库**，生产必须 false | `false` |
+| `CORS_ORIGINS` | 允许跨域的来源（JSON 数组或逗号分隔） | `["http://localhost:5173", ...]` |
+| `DATABASE_URL` | PostgreSQL 连接串（第 3 步启用） | - |
+| `REDIS_URL` | Redis 连接串（第 5 步启用） | - |
+| `JWT_SECRET` | JWT 密钥（第 4 步启用，生产必须修改） | - |
+| `JWT_EXPIRE_MINUTES` | Token 有效期（分钟，第 4 步启用） | `10080`（7 天） |
+
+> ⚠️ 本地要跑 `web` 的端到端测试（会调用 `dev/reset` 恢复种子数据）时，
+> 需在 `server/.env` 里设 `ENABLE_DEV_ROUTES=true`。**该接口接入数据库后会变成清库操作，生产环境永远不要开。**
 
 ### Web 端环境变量（`web/.env`）
 
@@ -182,14 +186,18 @@ npm run dev
 |------|------|------|
 | `POST` | `/api/v1/auth/register` | 用户注册 |
 | `POST` | `/api/v1/auth/login` | 用户登录 |
-| `POST` | `/api/v1/clipboard/items` | 创建剪贴板项 |
-| `GET` | `/api/v1/clipboard/items` | 获取列表（分页/筛选/搜索） |
+| `GET` | `/api/v1/auth/me` | 当前用户 |
+| `POST` | `/api/v1/clipboard/items` | 创建剪贴板项（`title` 留空时服务端自动生成） |
+| `GET` | `/api/v1/clipboard/items` | 获取列表（分页/筛选/按标题或内容搜索/排序） |
 | `GET` | `/api/v1/clipboard/items/{id}` | 获取详情 |
-| `DELETE` | `/api/v1/clipboard/items/{id}` | 删除 |
-| `POST` | `/api/v1/clipboard/upload` | 上传图片/文件（阶段二） |
-| `WS` | `/api/v1/clipboard/ws` | 实时同步 |
+| `DELETE` | `/api/v1/clipboard/items/{id}` | 删除单条 |
+| `DELETE` | `/api/v1/clipboard/items` | 清空 |
+| `POST` | `/api/v1/dev/reset` | 重置种子数据（仅 `ENABLE_DEV_ROUTES=true` 时注册） |
+| `GET` | `/health` | 健康检查 |
+| `WS` | `/api/v1/clipboard/ws` | 实时同步（第 5 步） |
+| `POST` | `/api/v1/clipboard/upload` | 上传图片/文件（**阶段二**，当前未实现） |
 
-完整 API 文档见 <http://localhost:8000/docs> 或 `docs/api.md`。
+交互式文档见 <http://localhost:8000/docs>；契约存档见 [`docs/api.md`](docs/api.md)，WebSocket 协议见 [`docs/ws-protocol.md`](docs/ws-protocol.md)。
 
 ---
 
@@ -278,10 +286,12 @@ docker-compose -f docker-compose.prod.yml up -d
 
 ## 📚 相关文档
 
-- [架构设计](docs/architecture.md)
-- [API 文档](docs/api.md)
-- [项目路线图](docs/roadmap.md)
-- [技术决策记录](docs/decisions/)
+- [`AGENT.md`](AGENT.md) —— 项目约定：技术栈、目录结构、数据契约、开发规范与顺序
+- [`docs/roadmap.md`](docs/roadmap.md) —— **当前进度、验收记录、已知问题与技术债**
+- [`docs/api.md`](docs/api.md) —— API 契约存档（含导出脚本）
+- [`docs/ws-protocol.md`](docs/ws-protocol.md) —— WebSocket 协议
+- [`server/README.md`](server/README.md) —— 后端启动与目录说明
+- [`web/README.md`](web/README.md) —— Web 端启动、界面结构与验证步骤
 
 ---
 
