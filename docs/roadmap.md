@@ -275,13 +275,15 @@ server\venv\Scripts\python.exe scripts\verify_postgres.py     # 连通性验证
 | `2aa5e49` | `feat(web): Web 端骨架与单端闭环` |
 | `72c15c1` | `docs: 补充项目文档并加固 gitignore` |
 | `12c72c3` | `fix(web): 开发端口 5173 改为 5273` |
+| `9e39b5e` | `feat(infra): 本地 PostgreSQL 16 容器与验证脚本` |
+| `7f055ed` | `feat(server): 接入 PostgreSQL + SQLAlchemy 异步 + Alembic 迁移` |
+| `b5cc62d` | `docs: 同步第 3 步完成情况` |
 
 ---
 
 ## 下一步行动
 
-1. 开始第 3 步主体：SQLAlchemy 异步模型 + Alembic 迁移 + `crud/` 层替换
-2. 同时完成 P2 剩余项：把测试隔离到独立测试库
-   （建议 `clipboard_test` 库，与 `clipboard` 分开）
-2. 完成 P2 剩余项：把测试隔离到独立测试库
-3. 开始第 3 步：SQLAlchemy 模型 + Alembic 迁移 + crud 层替换
+1. **第 4 步（JWT 认证）**：先定 `pwdlib` 还是 pin `bcrypt`（P5），再动 `core/security.py`
+2. **P2 剩余项**：给 Web e2e 加一个指向 `clipboard_test` 的测试后端实例，
+   让测试不再重置开发库
+3. **第 8 步预留**：安装 `pytest pytest-asyncio httpx`，为 `tests/conftest.py` 补测试用例
