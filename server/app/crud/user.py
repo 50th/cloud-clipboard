@@ -1,38 +1,74 @@
-"""用户数据访问层（当前为内存假数据）。
-
-第 3 步接入数据库、第 4 步接入 JWT 后，本模块将改为真实查询。
-"""
+"""用户数据访问层（异步）。"""
 
 from __future__ import annotations
 
-from datetime import datetime
+import uuid
 
-from app.schemas.common import utc_now
-from app.schemas.user import UserResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-DEMO_USER_ID = "3f1a9c62-7d4b-4e18-9f2a-6b0c5d8e1a34"
-
-_DEMO_CREATED_AT = datetime(2026, 9, 27, 10, 0, 0, tzinfo=utc_now().tzinfo)
-
-_DEMO_USER = UserResponse(
-    id=DEMO_USER_ID,
-    username="demo",
-    email="demo@cloud-clipboard.dev",
-    nickname="演示用户",
-    avatar_url=None,
-    created_at=_DEMO_CREATED_AT,
-)
+from app.core.config import settings
+from app.db.models.user import User
 
 
-def get_demo_user() -> UserResponse:
-    """返回演示用户。
+async def get_by_id(session: AsyncSession, user_id: str | uuid.UUID) -> User | None:
+    """按主键查询用户。"""
+    try:
+        key = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
+    except (ValueError, AttributeError, TypeError):
+        return None
+    return await session.get(User, key)
 
-    第 1/2 步未接入认证，所有请求都视为该演示用户发起；
-    这样剪贴板数据能正确归属到 `user_id`，Web 端可先行跑通闭环。
+
+async def get_by_username(session: AsyncSession, username: str) -> User | None:
+    """按用户名查询用户。"""
+    result = await session.execute(select(User).where(User.username == username))
+    return result.scalar_one_or_none()
+
+
+async def get_by_email(session: AsyncSession, email: str) -> User | None:
+    """按邮箱查询用户。"""
+    result = await session.execute(select(User).where(User.email == email))
+    return result.scalar_one_or_none()
+
+
+async def create(
+    session: AsyncSession,
+    *,
+    username: str,
+    email: str,
+    password_hash: str | None = None,
+    nickname: str | None = None,
+    user_id: uuid.UUID | None = None,
+) -> User:
+    """创建用户并提交。"""
+    user = User(
+        id=user_id or uuid.uuid4(),
+        username=username,
+        email=email,
+        password_hash=password_hash,
+        nickname=nickname,
+    )
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+async def ensure_demo_user(session: AsyncSession) -> User:
+    """确保演示用户存在（按配置的用户名与固定 id）。
+
+    第 1/2 步未接入认证，所有请求都视为演示用户发起；
+    第 4 步接入真实登录后，本函数仅用于开发/测试数据准备。
     """
-    return _DEMO_USER.model_copy()
+    user = await get_by_id(session, settings.DEMO_USER_ID)
+    if user is not None:
+        return user
 
-
-def get_user_by_id(user_id: str) -> UserResponse | None:
-    """按 ID 查询用户；非演示用户返回 None。"""
-    return _DEMO_USER.model_copy() if user_id == _DEMO_USER.id else None
+    return await create(
+        session,
+        user_id=uuid.UUID(settings.DEMO_USER_ID),
+        username=settings.DEMO_USERNAME,
+        email=settings.DEMO_EMAIL,
+        nickname="演示用户",
+    )

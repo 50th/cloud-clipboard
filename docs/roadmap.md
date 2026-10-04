@@ -1,10 +1,10 @@
-# 项目路线图与进度
+  ✓ P3 说明   ✓ P2 段落   ✓ 第 3 步段落   ✓ 顶部进度 # 项目路线图与进度
 
 > **本文件记录动态进度。** AGENT.md 只保存稳定约定（技术栈、契约、规范、开发顺序），
 > 凡是"每完成一步就要改一遍"的内容都放这里。
 
 **最后更新**：2026-10-04
-**当前进度**：第 1、2 步已完成 → **下一步：第 3 步（接入 PostgreSQL）**
+**当前进度**：第 1、2、3 步已完成 → **下一步：第 4 步（JWT 认证）**
 
 ---
 
@@ -45,21 +45,44 @@
 **验收记录**：`pnpm run typecheck` 0 错误；`pnpm run build` 110 模块 / gzip 72 KB；`pnpm test` 12/12 通过。
 **待人工确认**：浏览器侧「读取剪贴板 → 上传 → 列表展示 → 点击复制」（剪贴板 API 依赖用户手势，无法自动化）。
 
-### 🚧 第 3 步：接入数据库（进行中）
+### ✅ 第 3 步：接入数据库（已完成）
 
 - [x] 决定数据库方案：**本地也用 Docker 容器跑 `postgres:16`**（见下方「本地基础设施」）
 - [x] 容器创建并验证通过（编码/时区/中文往返/卷持久化）
-- [ ] 安装 `sqlalchemy[asyncio]`、`asyncpg`（已装 0.31.0）、`alembic`
-- [ ] `db/session.py`、`db/base.py`
-- [ ] SQLAlchemy 模型（`user.py`、`clipboard.py`）
-- [ ] Alembic 初始化 + 生成并执行迁移
-- [ ] 实现 `crud/` 层
-- [ ] 替换路由中的假数据为真实 CRUD
-- [ ] 验证重启后数据不丢失
+- [x] 安装 `sqlalchemy[asyncio] 2.1.3`、`asyncpg 0.31.0`、`alembic 1.20.0`、`greenlet 3.5.6`
+- [x] `db/base.py`（声明式 Base + 约束命名约定）、`db/session.py`（异步引擎/会话/`get_db`/`ping`）
+- [x] SQLAlchemy 模型：`db/models/user.py`、`db/models/clipboard.py`
+- [x] Alembic 初始化（异步 env.py，连接串从 settings 读取）+ 首个迁移 `0001_initial`
+- [x] `crud/` 改为真实异步查询（`user.py`、`clipboard.py`），内存存储 `crud/store.py` 已删除
+- [x] 路由接入数据库 session，去重改由 `UNIQUE(user_id, content_hash)` 保证
+- [x] `scripts/init_db.py`：建表 + 演示用户 + 种子数据
+- [x] 验证重启后数据不丢失
 
-**完成标准**：数据持久化，`/docs` 接口全部正常。
-**开工前置**：完成下方 P2 剩余项（测试库隔离）。
+**验收记录**：
 
+- `GET /api/v1/dev/db` 返回 `clipboard` / PostgreSQL 16.15，确认连的是容器库
+- 契约字段完整（`id, user_id, title, content_type, content, preview, metadata, created_at, updated_at`），
+  **`content_hash` 未外泄**
+- 创建 / 自定义标题 / 自动标题（`demo · 10-04 14:49`）/ 去重（同 id、total 不增）/
+  搜索（标题+内容）/ 排序 / 分页 / 详情 / 404 / 422 / 删除 全部通过
+- **重启持久化**：写入标记 → 重启 uvicorn → 按 id 查到、内容一致、总数不变；
+  并直连数据库交叉验证记录数一致
+- Web 端端到端 **12/12 通过**（现在打的是真实 PostgreSQL，不再是内存假数据）
+- 迁移**幂等**（重复 `upgrade head` 无动作）、**无 schema 漂移**（再 autogenerate 无 Detected）
+- 同一份迁移在空库 `clipboard_test` 上执行成功
+
+**踩坑记录**：
+
+1. Windows 上 `alembic.ini` 若含非 ASCII 字符会被 configparser 按 GBK 读取而崩，
+   故该文件**保持纯 ASCII**；运行 Alembic 建议带 `$env:PYTHONUTF8='1'`
+2. autogenerate 会把开发库里**手工建过的测试表**当成"已删除的表"写进迁移
+   （生成了 `op.drop_table('rt')` / `op.drop_table('probe')`），在干净库上必然失败，已手工剔除。
+   **流程要求：生成迁移后必须逐行检查内容**
+
+### 🚧 第 3 步遗留（并入第 8 步）
+
+- [ ] `tests/conftest.py` 已写好，但 **pytest / pytest-asyncio / httpx 未安装**，尚无后端测试用例
+- [ ] 迁移的 `upgrade`/`downgrade` 往返验证（downgrade 后重新 upgrade）
 ### ⬜ 第 4 步：JWT 认证
 
 - [ ] `core/security.py`：密码哈希、JWT 签发/校验
@@ -124,24 +147,29 @@
 - `.env.example`：两者均为 `false`，并写明启用条件与风险
 - 本地 `server/.env`：`DEBUG=false` + `ENABLE_DEV_ROUTES=true`（跑 e2e 需要）
 
-### 🟡 P2 · 测试清库风险（部分解决，接库前必须收尾）
+### 🟡 P2 · 测试清库风险（守卫已就位，隔离待做）
 
 `web/tests/e2e.test.ts` 的破坏性用例（清空全部、`dev/reset`）会清空数据。
+**第 3 步接入数据库后，这已经是真实的删库操作。**
 
 **已处理**：
 
 - 新增 `E2E_ALLOW_DESTRUCTIVE=1` 显式开关：**不设置就跳过清空用例**（默认安全）
 - 收尾自动恢复：优先调 `dev/reset`，该路由不可用时自动补回 4 条种子数据
-- 两种模式均已实测：不设开关时跳过并通过，设开关时执行并通过，结束后数据恢复为 4 条
+- `dev/reset` 已明确标注"**会删除数据**"，且仅 `ENABLE_DEV_ROUTES=true` 时注册
+- 新增 `GET /api/v1/dev/db`，可随时确认后端连的是哪个库
+- 测试库 `clipboard_test` 已建好并跑通迁移
 
-**接库前仍需做**：
+**仍需做**（第 8 步）：
 
-- 让测试指向**独立测试数据库**（当前 `API_BASE_URL` 指向的库就是被清空的库）
-- 建议再加一层保护：若 `APP_ENV=production` 则拒绝执行破坏性用例
-
+- **Web e2e 目前打的仍是开发库**（后端 `DATABASE_URL` 指向 `clipboard`），
+  跑测试会重置开发库数据。需加一个指向测试库的测试后端实例，
+  或把 e2e 也纳入 pytest 夹具统一管理
+- 后端 `tests/conftest.py` 已按"默认打 `clipboard_test`"写好（通过 `TEST_DATABASE_URL`），
+  安装 pytest 后即可用
 ### 🟠 P3 · 多 worker 会打破 WebSocket 广播
 
-`_STORE` 是模块级内存；第 5 步的 `ConnectionManager` 同样是进程内结构。
+**第 3 步没有改变这个约束**：数据现在共享（同一数据库），但第 5 步的 `ConnectionManager` 仍是**进程内结构**。
 
 - uvicorn `--workers > 1` 时：数据一致（都在数据库），但**推送送不到另一个 worker**
 - 处理：第 5 步要么强制 `--workers 1` 并禁止扩容，要么同时引入 Redis Pub/Sub

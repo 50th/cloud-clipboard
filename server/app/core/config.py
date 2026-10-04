@@ -27,19 +27,31 @@ class Settings(BaseSettings):
     APP_VERSION: str = "0.1.0"
     APP_DESCRIPTION: str = (
         "跨平台云剪贴板服务 —— 多设备剪贴板内容实时同步。"
-        "当前为阶段一（文字剪贴板 MVP）第 1 步：骨架 + 数据契约。"
+        "当前为阶段一（文字剪贴板 MVP），数据已持久化到 PostgreSQL。"
     )
     APP_ENV: str = "development"
-    # ⚠️ 默认关闭。DEBUG 会影响错误详情暴露与开发路由的行为，
-    # 生产环境务必保持 False（见 docs/roadmap.md 的 P1）。
+    # ⚠️ 默认关闭。DEBUG 会影响错误详情暴露，生产务必保持 False（见 docs/roadmap.md 的 P1）。
     DEBUG: bool = False
     # 开发/测试辅助路由（如 /api/v1/dev/reset）的总开关。
-    # 故意与 DEBUG 解耦：DEBUG 可能因调试临时打开，而清库类接口绝不该跟着被打开。
+    # 故意与 DEBUG 解耦：DEBUG 可能因调试临时打开，而该路由会清库，绝不该跟着被打开。
     ENABLE_DEV_ROUTES: bool = False
     API_V1_PREFIX: str = "/api/v1"
 
+    # --- 数据库 ---
+    # 本地容器：宿主 5433（5432 被本机原生 PostgreSQL 18 占用）
+    DATABASE_URL: str = (
+        "postgresql+asyncpg://clipboard:clipboard@127.0.0.1:5433/clipboard"
+    )
+    # 打开后会把每条 SQL 打到日志，排查问题时用
+    DB_ECHO: bool = False
+
+    # --- 演示用户（第 4 步接入真实登录前，所有请求都归属该用户）---
+    DEMO_USER_ID: str = "3f1a9c62-7d4b-4e18-9f2a-6b0c5d8e1a34"
+    DEMO_USERNAME: str = "demo"
+    DEMO_EMAIL: str = "demo@cloud-clipboard.dev"
+
     # --- CORS ---
-    # Web 端开发服务器（Vite）与鸿蒙调试端
+    # Web 端开发服务器（Vite）+ 鸿蒙调试端
     CORS_ORIGINS: list[str] = [
         "http://localhost:5273",
         "http://127.0.0.1:5273",

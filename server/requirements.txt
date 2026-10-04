@@ -1,7 +1,6 @@
 # ============================================================
 # 云剪贴板后端依赖
-# 阶段一（第 1 步）：FastAPI 骨架 + 数据契约
-# Windows 安装：
+# 安装（Windows）：
 #   cd server
 #   python -m venv venv
 #   .\venv\Scripts\python.exe -m pip install -r requirements.txt
@@ -14,23 +13,26 @@ uvicorn[standard]
 # --- 配置管理 ---
 pydantic-settings
 
+# --- 数据库（第 1 步完成）---
+sqlalchemy[asyncio]
+asyncpg
+alembic
+# Alembic 迁移走异步引擎（alembic/env.py），因此不需要同步驱动 psycopg2
+
 # ============================================================
 # 以下为后续步骤依赖，按第 10 节开发顺序逐步启用
 # ============================================================
 
-# 第 3 步：数据库（PostgreSQL + SQLAlchemy + Alembic）
-# sqlalchemy[asyncio]
-# asyncpg
-# alembic
-
 # 第 4 步：认证（JWT + 密码哈希）
+# ⚠️ 注意 passlib 1.7.4 已停止维护，与 bcrypt 4.x 存在兼容问题（见 docs/roadmap.md 的 P5）
+#    优先考虑 pwdlib，或显式 pin bcrypt==4.0.1
 # python-jose[cryptography]
 # passlib[bcrypt]
 
 # 第 5 步：Redis 广播（多实例）
 # redis
 
-# 第 8 步：测试
+# 第 8 步：后端测试
 # pytest
 # pytest-asyncio
 # httpx

@@ -1,7 +1,6 @@
-"""剪贴板路由 —— 假数据实现。
+"""剪贴板路由。
 
-路由层只做参数校验与调用，业务逻辑在 `app/crud/`；
-第 3 步把 crud 换成数据库实现，路由无需改动。
+路由层只做参数校验与调用，业务/数据逻辑在 `app/crud/`（AGENT.md 第 8 节）。
 """
 
 from __future__ import annotations
@@ -9,8 +8,11 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud import clipboard as clipboard_crud
+from app.db.models.clipboard import ClipboardItem
+from app.db.session import get_db
 from app.routers.auth import CurrentUser
 from app.schemas.clipboard import (
     ClipboardDeleteResponse,
@@ -23,10 +25,29 @@ from app.schemas.common import MessageResponse
 
 router = APIRouter(prefix="/clipboard", tags=["剪贴板"])
 
+DbSession = Annotated[AsyncSession, Depends(get_db)]
 
-def _get_owned_item(user_id: str, item_id: str) -> ClipboardItemResponse:
+
+def to_item_response(item: ClipboardItem) -> ClipboardItemResponse:
+    """把 ORM 对象转换为对外响应模型。**content_hash 不外露**。"""
+    return ClipboardItemResponse(
+        id=str(item.id),
+        user_id=str(item.user_id),
+        title=item.title,
+        content_type=item.content_type,
+        content=item.content,
+        preview=item.preview,
+        metadata=item.meta,
+        created_at=item.created_at,
+        updated_at=item.updated_at,
+    )
+
+
+async def _get_owned_item(
+    session: AsyncSession, user_id: object, item_id: str
+) -> ClipboardItem:
     """取出属于当前用户的剪贴板项，否则 404。"""
-    item = clipboard_crud.get_item(user_id, item_id)
+    item = await clipboard_crud.get_item(session, user_id, item_id)  # type: ignore[arg-type]
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -49,14 +70,16 @@ def _get_owned_item(user_id: str, item_id: str) -> ClipboardItemResponse:
 )
 async def create_item(
     payload: ClipboardItemCreate,
+    session: DbSession,
     current_user: CurrentUser,
 ) -> ClipboardItemResponse:
-    item, _created = clipboard_crud.create_item(
+    item, _created = await clipboard_crud.create_item(
+        session,
         current_user.id,
         payload,
         username=current_user.username,
     )
-    return clipboard_crud.to_response(item)
+    return to_item_response(item)
 
 
 @router.get(
@@ -66,10 +89,12 @@ async def create_item(
     description="支持分页、按 `content_type` 筛选、按**标题或内容**关键字搜索与排序。",
 )
 async def list_items(
+    session: DbSession,
     current_user: CurrentUser,
     params: Annotated[ClipboardListParams, Depends()],
 ) -> ClipboardItemList:
-    rows, total = clipboard_crud.list_items(
+    rows, total = await clipboard_crud.list_items(
+        session,
         current_user.id,
         page=params.page,
         size=params.size,
@@ -79,7 +104,7 @@ async def list_items(
         order=params.order,
     )
     return ClipboardItemList.build(
-        [clipboard_crud.to_response(item) for item in rows],
+        [to_item_response(item) for item in rows],
         page=params.page,
         size=params.size,
         total=total,
@@ -92,8 +117,11 @@ async def list_items(
     summary="获取剪贴板详情",
     responses={404: {"description": "剪贴板项不存在或不属于当前用户"}},
 )
-async def get_item(id: str, current_user: CurrentUser) -> ClipboardItemResponse:
-    return clipboard_crud.to_response(_get_owned_item(current_user.id, id))
+async def get_item(
+    id: str, session: DbSession, current_user: CurrentUser
+) -> ClipboardItemResponse:
+    item = await _get_owned_item(session, current_user.id, id)
+    return to_item_response(item)
 
 
 @router.delete(
@@ -102,9 +130,11 @@ async def get_item(id: str, current_user: CurrentUser) -> ClipboardItemResponse:
     summary="删除单条剪贴板项",
     responses={404: {"description": "剪贴板项不存在或不属于当前用户"}},
 )
-async def delete_item(id: str, current_user: CurrentUser) -> ClipboardDeleteResponse:
-    _get_owned_item(current_user.id, id)
-    clipboard_crud.delete_item(current_user.id, id)
+async def delete_item(
+    id: str, session: DbSession, current_user: CurrentUser
+) -> ClipboardDeleteResponse:
+    await _get_owned_item(session, current_user.id, id)
+    await clipboard_crud.delete_item(session, current_user.id, id)
     return ClipboardDeleteResponse(success=True, message="删除成功", id=id)
 
 
@@ -114,6 +144,6 @@ async def delete_item(id: str, current_user: CurrentUser) -> ClipboardDeleteResp
     summary="清空剪贴板",
     description="删除当前用户的全部剪贴板项（第 5 步对应广播 `clipboard.cleared`）。",
 )
-async def clear_items(current_user: CurrentUser) -> MessageResponse:
-    removed = clipboard_crud.clear_items(current_user.id)
+async def clear_items(session: DbSession, current_user: CurrentUser) -> MessageResponse:
+    removed = await clipboard_crud.clear_items(session, current_user.id)
     return MessageResponse(success=True, message=f"已清空 {removed} 条记录")

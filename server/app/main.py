@@ -20,6 +20,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.db.session import dispose_engine, ping
 from app.routers import auth, clipboard, dev
 
 TAGS_METADATA: list[dict[str, Any]] = [
@@ -27,32 +28,39 @@ TAGS_METADATA: list[dict[str, Any]] = [
         "name": "认证",
         "description": (
             "注册、登录、获取当前用户。**第 4 步接入真实 JWT 后**才会校验凭证；"
-            "当前所有接口都返回演示用户。"
+            "当前所有接口都返回配置里的演示用户。"
         ),
     },
     {
         "name": "剪贴板",
         "description": (
             "文字剪贴板的上传、列表、详情、删除。"
-            "数据保存在进程内存中，**重启即重置为种子数据**（第 3 步接入 PostgreSQL 后消除）。"
+            "数据持久化在 PostgreSQL；同一用户提交相同内容会命中去重，不新建记录。"
         ),
     },
     {
         "name": "系统",
-        "description": "健康检查与服务信息。",
+        "description": "健康检查、服务信息，以及仅开发环境可用的辅助接口。",
     },
 ]
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """应用生命周期钩子。
+    """应用生命周期：启动时探测数据库，退出时释放连接池。
 
-    第 3 步在此初始化数据库连接池，第 5 步在此初始化 Redis 订阅。
+    第 5 步将在此初始化 Redis 订阅。
     """
     print(f"[startup] {settings.APP_NAME} v{settings.APP_VERSION} ({settings.APP_ENV})")
-    print(f"[startup] Swagger UI: http://127.0.0.1:8000/docs")
+    try:
+        info = await ping()
+        print(f"[startup] 数据库已连接: {info['database']} · {info['version']}")
+    except Exception as exc:  # noqa: BLE001 - 启动阶段要把原因打清楚
+        print(f"[startup] ⚠️ 数据库连接失败: {type(exc).__name__}: {exc}")
+        print("[startup] 请确认容器已启动: docker compose -f infra/docker-compose.yml up -d")
+    print("[startup] Swagger UI: http://127.0.0.1:8000/docs")
     yield
+    await dispose_engine()
     print("[shutdown] bye")
 
 
@@ -83,9 +91,8 @@ def create_app() -> FastAPI:
     application.include_router(clipboard.router, prefix=settings.API_V1_PREFIX)
     # 第 5 步在此注册 WebSocket 路由：application.include_router(ws.router, ...)
 
-    # 开发/测试辅助路由（重置种子数据）。
-    # 受独立的 ENABLE_DEV_ROUTES 控制，**不复用 DEBUG**：
-    # 第 3 步接入数据库后该路由会变成"清库"，绝不能因为调试开了 DEBUG 就跟着可用。
+    # 开发/测试辅助路由。受独立的 ENABLE_DEV_ROUTES 控制，**不复用 DEBUG**：
+    # /dev/reset 会删数据，绝不能因为调试开了 DEBUG 就跟着可用。
     if settings.ENABLE_DEV_ROUTES:
         application.include_router(dev.router, prefix=settings.API_V1_PREFIX)
 
