@@ -58,9 +58,9 @@ cloud-clipboard/
 ├── AGENT.md                  # 本文件
 ├── README.md                 # 已存在
 ├── docs/
-│   ├── api.yaml              # OpenAPI 契约（待创建）
-│   ├── ws-protocol.md        # WebSocket 协议（待创建）
-│   └── roadmap.md            # 路线图（待创建）
+│   ├── api.md                # API 契约存档 + 导出脚本（契约来源是 schemas/）
+│   ├── ws-protocol.md        # WebSocket 协议
+│   └── roadmap.md            # 进度、验收记录、已知问题
 │
 ├── server/                   # ✅ 后端 FastAPI（第 1 步已落地）
 │   ├── app/
@@ -171,7 +171,8 @@ class ClipboardItemResponse(BaseModel):
 
 ## 5. API 契约（目标设计）
 
-完整定义将放在 `docs/api.yaml`（OpenAPI 3.0）。摘要：
+完整定义的事实来源是 `server/app/schemas/`（Pydantic Schema）；
+在线文档 <http://localhost:8000/docs>，契约存档 [`docs/api.md`](docs/api.md)（含导出脚本）。摘要：
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -192,7 +193,7 @@ class ClipboardItemResponse(BaseModel):
 2. 重启 FastAPI，确认 `/openapi.json` 更新
 3. 重新生成 Web 类型：`npx openapi-typescript http://localhost:8000/openapi.json -o web/src/types/api.d.ts`
 4. 同步更新鸿蒙端 `models/ClipboardItem.ets`
-5. 更新 `docs/api.yaml`
+5. 刷新 `docs/api.md` 的契约存档（导出脚本见该文件开头）
 
 ---
 
@@ -230,39 +231,6 @@ class ClipboardItemResponse(BaseModel):
 开工前请先看 `docs/roadmap.md` 的「已知问题」与「环境前置条件」：
 那里记录了必须先修的高危项（`DEBUG` 默认值、测试清库风险）和本机实测状态
 （Docker 守护进程未运行、5432 端口已被本机 PostgreSQL 18 占用、Redis 未启动）。
-
----
-
-## 7.1 进度归档（历史，已迁至 roadmap）
-
-以下是第 1、2 步完成时的原始记录，仅作留存。**新进度不要再写到这里。**
-
-### 已完成
-- [x] 项目目录创建
-- [x] `README.md` 项目说明
-
-**后端（第 1 步：FastAPI 骨架 + 数据契约）**：
-- [x] FastAPI 项目初始化（`server/app/main.py`，`/docs`、`/redoc`、`/openapi.json` 均可用）
-- [x] Pydantic Schema 定义（`app/schemas/`：common / user / clipboard）
-- [x] 假数据 CRUD 路由（`app/routers/` + `app/crud/`，内存存储 + 4 条种子数据）
-- [x] 虚拟环境与依赖（fastapi 0.142.2、uvicorn 0.54.0、pydantic-settings 2.15.0）
-
-> 第 1 步实测：创建、列表（分页/筛选/搜索/排序）、详情、删除、清空、404/422 边界均正常。
-> 内容去重（相同 `content` 返回同一条记录并刷新 `updated_at`）已提前生效，为第 6 步打好基础。
-> 数据保存在进程内存中，**重启即重置为种子数据**，第 3 步接入数据库后消除。
-
-**Web 端（第 2 步：骨架 + 单端闭环）**：
-- [x] Vite + React + TS 初始化（Vite 5.4.21 / React 18.3.1 / TS 5.9.3，端口固定 5173）
-- [x] API 客户端封装（`src/api/client.ts`，axios + token + 错误归一化）
-- [x] 剪贴板读写工具（`src/utils/clipboard.ts`，含自身写入标志与 execCommand 降级）
-- [x] 两栏布局 + 同步按钮（左栏历史记录含搜索/刷新/排序/清空，右栏标题 + 加高输入区）
-- [x] 从 OpenAPI 生成类型（`pnpm run gen:api` → `src/types/api.d.ts`）
-- [x] 标题字段与防抖自动保存（`useAutoSave.ts`，默认开启、可关闭）
-- [x] 端到端测试（`pnpm test`：真实 store + 真实后端，11 用例全通过）
-
-> 第 2 步实测：`pnpm run typecheck` 0 错误、`pnpm build` 110 模块（gzip 72 KB）、`pnpm test` 11/11 通过。
-
-**后续步骤**：第 3～8 步全部未开始，明细见 `docs/roadmap.md`。
 
 ---
 
@@ -446,7 +414,7 @@ uvicorn app.main:app --reload --port 8000
 2. 在 `app/routers/` 添加路由函数
 3. 在 `app/main.py` 注册路由（如新模块）
 4. 启动服务，确认 `/docs` 出现新接口
-5. 更新 `docs/api.yaml`
+5. 刷新 `docs/api.md` 的契约存档（导出脚本见该文件开头）
 6. 通知前端重新生成类型
 
 ### 添加数据库模型
