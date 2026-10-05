@@ -34,12 +34,14 @@ cd server
 | POST | `/api/v1/auth/register` | 注册（当前返回演示用户 + 假 token） |
 | POST | `/api/v1/auth/login` | 登录（当前返回演示用户 + 假 token） |
 | GET | `/api/v1/auth/me` | 当前用户 |
-| POST | `/api/v1/clipboard/items` | 创建；`title` 留空时服务端自动生成 |
+| POST | `/api/v1/clipboard/items` | 创建；`title` 留空时自动生成，按 `timezone` 显示本地时间 |
 | GET | `/api/v1/clipboard/items` | 列表：分页 / 类型筛选 / 按标题或内容搜索 / 排序 |
 | GET | `/api/v1/clipboard/items/{id}` | 详情 |
+| PATCH | `/api/v1/clipboard/items/{id}` | 更新（自动保存复用同一条草稿，避免中间态多行） |
 | DELETE | `/api/v1/clipboard/items/{id}` | 删除单条 |
 | DELETE | `/api/v1/clipboard/items` | 清空 |
-| POST | `/api/v1/dev/reset` | 重置种子数据（**仅开发路由开启时注册**） |
+| POST | `/api/v1/dev/reset` | ⚠️ 删数据并重建种子（**仅开发路由开启时注册**） |
+| GET | `/api/v1/dev/db` | 探测当前连接的数据库（仅开发路由开启时） |
 | GET | `/health` | 健康检查 |
 | GET | `/` | 服务信息 |
 | WS | `/api/v1/clipboard/ws?token=xxx` | 实时同步（第 5 步，协议见 `ws-protocol.md`） |

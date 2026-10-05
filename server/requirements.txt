@@ -17,6 +17,7 @@ pydantic-settings
 sqlalchemy[asyncio]
 asyncpg
 alembic
+tzdata
 # Alembic 迁移走异步引擎（alembic/env.py），因此不需要同步驱动 psycopg2
 
 # ============================================================

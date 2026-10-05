@@ -11,11 +11,26 @@ import type { components } from '#src/types/api.ts'
 export type ClipboardItem = components['schemas']['ClipboardItemResponse']
 export type ClipboardItemList = components['schemas']['ClipboardItemList']
 export type ClipboardItemCreate = components['schemas']['ClipboardItemCreate']
+export type ClipboardItemUpdate = components['schemas']['ClipboardItemUpdate']
 export type User = components['schemas']['UserResponse']
 export type AuthResponse = components['schemas']['AuthResponse']
 export type SortBy = components['schemas']['SortBy']
 export type SortOrder = components['schemas']['SortOrder']
 export type ContentType = components['schemas']['ContentType']
+
+/**
+ * 浏览器所在时区（IANA 名，如 Asia/Shanghai）。
+ *
+ * **只用于自动生成标题时展示时间**：数据库统一存 UTC，
+ * 由服务端用它把 UTC 转成用户本地时间，避免标题显示成 UTC。
+ */
+export const LOCAL_TIMEZONE: string | undefined = (() => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined
+  } catch {
+    return undefined
+  }
+})()
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8000'
 
@@ -168,6 +183,15 @@ export const clipboardApi = {
    */
   create: async (payload: ClipboardItemCreate): Promise<ClipboardItem> => {
     const { data } = await http.post<ClipboardItem>('/clipboard/items', payload)
+    return data
+  },
+
+  /**
+   * 更新已有记录（只更新传入字段）。
+   * 自动保存用它复用同一条草稿，避免打字中间态产生多行。
+   */
+  update: async (id: string, payload: ClipboardItemUpdate): Promise<ClipboardItem> => {
+    const { data } = await http.patch<ClipboardItem>(`/clipboard/items/${id}`, payload)
     return data
   },
 

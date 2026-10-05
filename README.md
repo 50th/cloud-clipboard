@@ -187,7 +187,8 @@ npm run dev
 | `POST` | `/api/v1/auth/register` | 用户注册 |
 | `POST` | `/api/v1/auth/login` | 用户登录 |
 | `GET` | `/api/v1/auth/me` | 当前用户 |
-| `POST` | `/api/v1/clipboard/items` | 创建剪贴板项（`title` 留空时服务端自动生成） |
+| `POST` | `/api/v1/clipboard/items` | 创建剪贴板项（`title` 留空时自动生成，按 `timezone` 显示本地时间） |
+| `PATCH` | `/api/v1/clipboard/items/{id}` | 更新（自动保存复用草稿，避免中间态产生多行） |
 | `GET` | `/api/v1/clipboard/items` | 获取列表（分页/筛选/按标题或内容搜索/排序） |
 | `GET` | `/api/v1/clipboard/items/{id}` | 获取详情 |
 | `DELETE` | `/api/v1/clipboard/items/{id}` | 删除单条 |

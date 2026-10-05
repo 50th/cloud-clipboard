@@ -12,8 +12,9 @@ from datetime import datetime
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.models.clipboard import ClipboardItem
-from app.schemas.clipboard import ClipboardItemCreate
+from app.schemas.clipboard import ClipboardItemCreate, ClipboardItemUpdate
 from app.schemas.common import ContentType, SortBy, SortOrder, utc_now
 
 PREVIEW_LIMIT = 80
@@ -30,9 +31,34 @@ def make_preview(content: str, limit: int = PREVIEW_LIMIT) -> str:
     return collapsed if len(collapsed) <= limit else f"{collapsed[:limit]}..."
 
 
-def generate_default_title(username: str, moment: datetime) -> str:
-    """用户未填标题时的自动标题：`demo · 10-04 14:30`。"""
-    return f"{username} · {moment.strftime('%m-%d %H:%M')}"
+def resolve_timezone(name: str | None) -> ZoneInfo:
+    """把 IANA 时区名解析为 ZoneInfo；非法或缺失时回退到配置的默认时区。
+
+    注意：数据库统一存 UTC，时区**只影响自动标题里展示的时间**。
+    """
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError  # noqa: PLC0415
+    from zoneinfo import available_timezones
+
+    candidate = (name or "").strip()
+    if candidate and candidate in available_timezones():
+        try:
+            return ZoneInfo(candidate)
+        except (ZoneInfoNotFoundError, ValueError, KeyError):
+            pass
+    return ZoneInfo(settings.DEFAULT_TIMEZONE)
+
+
+def generate_default_title(
+    username: str,
+    moment: datetime,
+    tz: ZoneInfo | None = None,
+) -> str:
+    """用户未填标题时的自动标题，按指定时区展示：`demo · 10-05 21:56`。
+
+    `moment` 是带时区的 UTC 时间；未指定 `tz` 时使用 `DEFAULT_TIMEZONE`。
+    """
+    zone = tz or resolve_timezone(None)
+    return f"{username} · {moment.astimezone(zone).strftime('%m-%d %H:%M')}"
 
 
 async def list_items(
@@ -142,7 +168,8 @@ async def create_item(
     item = ClipboardItem(
         id=uuid.uuid4(),
         user_id=user_id,
-        title=(payload.title or "").strip() or generate_default_title(username, now),
+        title=(payload.title or "").strip()
+        or generate_default_title(username, now, resolve_timezone(payload.timezone)),
         content_type=payload.content_type.value,
         content=payload.content,
         preview=payload.preview or make_preview(payload.content),
@@ -156,6 +183,49 @@ async def create_item(
     await session.commit()
     await session.refresh(item)
     return item, True
+
+
+async def update_item(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    item_id: str | uuid.UUID,
+    payload: ClipboardItemUpdate,
+    *,
+    username: str = "demo",
+) -> ClipboardItem | None:
+    """更新已有剪贴板项（只更新显式传入的字段）。
+
+    用途：**自动保存时复用同一条草稿记录**，避免打字过程中的每个中间态都新建一行。
+
+    返回更新后的对象；不存在或不属于该用户时返回 None。
+    """
+    item = await get_item(session, user_id, item_id)
+    if item is None:
+        return None
+
+    now = utc_now()
+
+    if payload.content is not None and payload.content != item.content:
+        item.content = payload.content
+        item.content_hash = content_hash(payload.content)
+        item.preview = payload.preview or make_preview(payload.content)
+        # 内容变了但用户没给标题 → 标题跟随内容重新生成（时间取更新时刻）
+        if not (payload.title or "").strip():
+            item.title = generate_default_title(
+                username, now, resolve_timezone(payload.timezone)
+            )
+
+    if (payload.title or "").strip():
+        item.title = payload.title.strip()  # type: ignore[assignment]
+    if payload.preview is not None:
+        item.preview = payload.preview
+    if payload.metadata is not None:
+        item.meta = payload.metadata
+
+    item.updated_at = now
+    await session.commit()
+    await session.refresh(item)
+    return item
 
 
 async def delete_item(

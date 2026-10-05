@@ -8,7 +8,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-import { clipboardApi, getErrorMessage } from '#src/api/client.ts'
+import { LOCAL_TIMEZONE, clipboardApi, getErrorMessage } from '#src/api/client.ts'
 import type { ClipboardItem, SortOrder } from '#src/api/client.ts'
 
 export const PAGE_SIZE = 20
@@ -31,6 +31,21 @@ export const useClipboardStore = defineStore('clipboard', () => {
   const error = ref<string | null>(null)
   const search = ref('')
   const order = ref<SortOrder>('desc')
+
+  /**
+   * 「自动保存草稿」的当前记录 id 与它已保存的内容/标题。
+   *
+   * 自动保存复用同一条记录：打字过程中每隔一段时间保存一次、
+   * 只更新这一行，而不是每个中间态都新建一行（否则历史列表会被刷屏）。
+   */
+  let draftId: string | null = null
+  let draftContent = ''
+
+  /** 清空草稿关联（用户清空输入框、或手动上传后另起一行时调用） */
+  function resetDraft() {
+    draftId = null
+    draftContent = ''
+  }
 
   /** 拉取列表；`silent=true` 用于上传后静默刷新，不显示加载态 */
   async function fetchItems(options: { page?: number; silent?: boolean } = {}) {
@@ -82,19 +97,51 @@ export const useClipboardStore = defineStore('clipboard', () => {
   }
 
   /**
-   * 上传文本；`title` 留空时由服务端自动生成。
-   * 返回 `deduped=true` 表示命中了服务端内容去重。
+   * 保存自动保存草稿：**复用同一条记录**，没有草稿时才新建。
+   *
+   * 返回 `deduped=true` 表示新建时命中了服务端内容去重。
    */
-  async function uploadText(
+  async function saveDraft(
     text: string,
     title?: string,
   ): Promise<{ item: ClipboardItem; deduped: boolean }> {
-    // 服务端去重时返回的是已存在的记录：该 id 必然在「本次上传之前」就出现过。
-    // 因此用跨请求累积的 knownIds 判断，避免「上传 → 立刻再传同样内容」时漏判。
+    const trimmedTitle = title?.trim() ?? ''
+
+    if (draftId) {
+      try {
+        const item = await clipboardApi.update(draftId, {
+          content: text,
+          ...(trimmedTitle ? { title: trimmedTitle } : {}),
+          timezone: LOCAL_TIMEZONE,
+        })
+        draftContent = item.content
+        await fetchItems({ page: 1, silent: true })
+        return { item, deduped: false }
+      } catch (err) {
+        // 草稿可能在别处被删了 → 丢掉关联，走下面的新建分支
+        if (!isNotFound(err)) {
+          throw err
+        }
+        resetDraft()
+      }
+    }
+
+    const { item, deduped } = await createNew(text, title)
+    draftId = item.id
+    draftContent = item.content
+    return { item, deduped }
+  }
+
+  /** 新建一条记录（不做草稿复用） */
+  async function createNew(
+    text: string,
+    title?: string,
+  ): Promise<{ item: ClipboardItem; deduped: boolean }> {
     const trimmedTitle = title?.trim() ?? ''
     const item = await clipboardApi.create({
       content: text,
       content_type: 'text',
+      timezone: LOCAL_TIMEZONE,
       ...(trimmedTitle ? { title: trimmedTitle } : {}),
     })
     const deduped = knownIds.has(item.id)
@@ -103,8 +150,45 @@ export const useClipboardStore = defineStore('clipboard', () => {
     return { item, deduped }
   }
 
+  /**
+   * 手动上传。
+   *
+   * 若输入框内容与当前草稿保存的内容一致，则**复用草稿那一行**（只更新标题），
+   * 避免「自动保存已经把内容存进去了，再点上传又冒出一行一模一样的」。
+   */
+  async function uploadText(
+    text: string,
+    title?: string,
+  ): Promise<{ item: ClipboardItem; deduped: boolean }> {
+    const trimmedTitle = title?.trim() ?? ''
+    const content = text.trim()
+
+    if (draftId && draftContent === content) {
+      const item = await clipboardApi.update(draftId, {
+        ...(trimmedTitle ? { title: trimmedTitle } : {}),
+        timezone: LOCAL_TIMEZONE,
+      })
+      draftContent = item.content
+      await fetchItems({ page: 1, silent: true })
+      return { item, deduped: false }
+    }
+
+    // 手动上传视为「记录定稿」：另起一行，并解除草稿关联
+    const result = await createNew(content, title)
+    resetDraft()
+    return result
+  }
+
+  /** 用户清空输入框时调用，避免下一条内容覆盖旧草稿 */
+  function clearDraft() {
+    resetDraft()
+  }
+
   async function removeItem(id: string) {
     await clipboardApi.remove(id)
+    if (draftId === id) {
+      resetDraft()
+    }
     // 删除当前页最后一条时回退一页，避免停在空页
     const nextPage = items.value.length === 1 && page.value > 1 ? page.value - 1 : page.value
     await fetchItems({ page: nextPage, silent: true })
@@ -113,6 +197,7 @@ export const useClipboardStore = defineStore('clipboard', () => {
   async function clearAll(): Promise<number> {
     const removed = total.value
     await clipboardApi.clear()
+    resetDraft()
     await fetchItems({ page: 1, silent: true })
     return removed
   }
@@ -131,8 +216,20 @@ export const useClipboardStore = defineStore('clipboard', () => {
     setPage,
     setSearch,
     setOrder,
+    saveDraft,
     uploadText,
+    clearDraft,
     removeItem,
     clearAll,
   }
 })
+
+/** 判断异常是否为 404（草稿已被删除） */
+function isNotFound(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'response' in error &&
+    (error as { response?: { status?: number } }).response?.status === 404
+  )
+}

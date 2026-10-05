@@ -17,6 +17,9 @@ const emit = defineEmits<{
 
 const store = useClipboardStore()
 
+/** 停止输入多久后自动保存（毫秒）。2 秒比 1.5 秒更能避开打字中的自然停顿 */
+const AUTO_SAVE_DELAY = 2000
+
 const title = ref('')
 const text = ref('')
 const autoSave = ref(true)
@@ -26,16 +29,21 @@ const contentSize = computed(() => (text.value ? formatBytes(byteSize(text.value
 function clearInput() {
   title.value = ''
   text.value = ''
+  // 解除草稿关联：下一条内容应另起一行，而不是覆盖刚清掉的那条
+  store.clearDraft()
 }
 
 const { saving, error: autoSaveError, lastSaved, markSaved } = useAutoSave({
   text,
   extra: title,
   enabled: autoSave,
+  delay: AUTO_SAVE_DELAY,
   onSave: async () => {
     try {
-      const { item } = await store.uploadText(text.value, title.value)
-      emit('notice', { kind: 'ok', text: `已自动保存：${item.title}` })
+      // 自动保存复用同一条草稿记录，不会每个中间态都新建一行
+      const { item } = await store.saveDraft(text.value, title.value)
+      const at = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+      emit('notice', { kind: 'ok', text: `已自动保存（${at}）：${item.title}` })
     } catch (err) {
       // 抛回给 useAutoSave 记录 error，再由下面的 watch 统一提示
       throw new Error(getErrorMessage(err))
@@ -83,6 +91,11 @@ function onKeydown(event: KeyboardEvent) {
   }
 }
 
+/** 未保存（有改动但还没到自动保存时机） */
+const pending = computed(
+  () => autoSave.value && text.value.trim() !== '' && !saving.value && lastSaved.value === null,
+)
+
 const statusText = computed(() => {
   if (!autoSave.value) {
     return '已关闭'
@@ -94,9 +107,10 @@ const statusText = computed(() => {
     return '等待输入'
   }
   if (lastSaved.value === null) {
-    return '待保存'
+    return `${AUTO_SAVE_DELAY / 1000} 秒后自动保存`
   }
-  return `已保存 ${new Date(lastSaved.value).toLocaleTimeString('zh-CN', {
+  return `已自动保存 ${new Date(lastSaved.value).toLocaleTimeString('zh-CN', {
+    hour12: false,
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -112,7 +126,7 @@ const statusText = computed(() => {
     </div>
 
     <label class="field field--tight">
-      <span>标题（留空将自动生成，如「demo · 10-04 14:30」）</span>
+      <span>标题（留空将自动生成，如「demo · 10-05 21:56」，按本机时区）</span>
       <input
         v-model="title"
         maxlength="200"
@@ -155,9 +169,19 @@ const statusText = computed(() => {
     <div class="autosave">
       <label class="switch">
         <input v-model="autoSave" type="checkbox" />
-        <span>自动保存（停止输入 1.5 秒后上传）</span>
+        <span>自动保存（停止输入 {{ AUTO_SAVE_DELAY / 1000 }} 秒后保存到当前草稿）</span>
       </label>
-      <span class="autosave__status">{{ statusText }}</span>
+      <span
+        class="autosave__status"
+        :class="{
+          'autosave__status--saved': autoSave && !saving && lastSaved !== null && text.trim() !== '',
+          'autosave__status--pending': pending,
+        }"
+      >
+        <template v-if="saving">⏳ </template>
+        <template v-else-if="autoSave && !pending && lastSaved !== null && text.trim() !== ''">✓ </template>
+        {{ statusText }}
+      </span>
     </div>
   </section>
 </template>

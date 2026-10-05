@@ -137,6 +137,68 @@ describe('Web 端单端闭环（真实后端）', () => {
     assert.equal(current.items[0].id, item.id, '最新记录应排在列表首位')
   })
 
+  it('标题时间按传入时区展示，而不是 UTC', async () => {
+    // 北京 = UTC+8。用本地时间算出期望值，避免依赖测试机时区
+    const parts = new Intl.DateTimeFormat('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(new Date())
+    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+    const expected = `${get('month')}-${get('day')} ${get('hour')}:${get('minute')}`
+
+    const viaBeijing = await clipboardApi.create({
+      content: `${TAG} 时区验证`,
+      content_type: 'text',
+      timezone: 'Asia/Shanghai',
+    })
+    assert.equal(
+      viaBeijing.title,
+      `demo · ${expected}`,
+      `标题应按 Asia/Shanghai 展示，实际为 ${viaBeijing.title}`,
+    )
+
+    const viaUtc = await clipboardApi.create({
+      content: `${TAG} 时区验证 UTC`,
+      content_type: 'text',
+      timezone: 'UTC',
+    })
+    assert.match(viaUtc.title, /^demo · \d{2}-\d{2} \d{2}:\d{2}$/)
+    assert.notEqual(viaUtc.title, viaBeijing.title, 'UTC 与北京时间的标题不应相同')
+
+    await clipboardApi.remove(viaBeijing.id).catch(() => undefined)
+    await clipboardApi.remove(viaUtc.id).catch(() => undefined)
+  })
+
+  it('自动保存草稿：反复保存只占一条记录，不会每个中间态新建一行', async () => {
+    const first = await state().saveDraft(`${TAG} 草稿 v1`)
+    const second = await state().saveDraft(`${TAG} 草稿 v2`)
+    const third = await state().saveDraft(`${TAG} 草稿 v3`)
+
+    assert.equal(second.item.id, first.item.id, '第二次保存应复用同一条草稿')
+    assert.equal(third.item.id, first.item.id, '第三次保存应复用同一条草稿')
+    assert.equal(third.item.content, `${TAG} 草稿 v3`, '草稿内容应更新为最新值')
+
+    const found = await clipboardApi.list({ search: `${TAG} 草稿`, size: 100 })
+    assert.equal(found.total, 1, `草稿应只占 1 行，实际 ${found.total} 行`)
+
+    assert.ok(found.items[0].updated_at >= found.items[0].created_at, 'updated_at 不应早于 created_at')
+    await clipboardApi.remove(first.item.id).catch(() => undefined)
+  })
+
+  it('草稿被删除后再保存：自动新建一条而不是报错', async () => {
+    const first = await state().saveDraft(`${TAG} 会被删掉的草稿`)
+    await clipboardApi.remove(first.item.id)
+
+    const again = await state().saveDraft(`${TAG} 会被删掉的草稿 2`)
+    assert.notEqual(again.item.id, first.item.id, '草稿已删除，应新建一条')
+    assert.equal(again.item.content, `${TAG} 会被删掉的草稿 2`)
+
+    await clipboardApi.remove(again.item.id).catch(() => undefined)
+  })
   it('不传标题：服务端自动生成 `<用户名> · <月-日 时:分>`', async () => {
     const { item } = await upload(`${TAG} 自动标题`)
     assert.match(item.title, /^demo · \d{2}-\d{2} \d{2}:\d{2}$/, `自动标题格式不符：${item.title}`)

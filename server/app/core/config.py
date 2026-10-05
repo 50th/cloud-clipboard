@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     # 打开后会把每条 SQL 打到日志，排查问题时用
     DB_ECHO: bool = False
 
+    # --- 时区 ---
+    # 自动生成标题时展示用的时区。数据库统一存 UTC，这里只影响标题里的时间文本。
+    # 前端会把自己的 IANA 时区（如 Asia/Shanghai）随创建请求传来并优先使用；
+    # 本配置是前端未传或传了非法值时的兜底。
+    DEFAULT_TIMEZONE: str = "Asia/Shanghai"
+
     # --- 演示用户（第 4 步接入真实登录前，所有请求都归属该用户）---
     DEMO_USER_ID: str = "3f1a9c62-7d4b-4e18-9f2a-6b0c5d8e1a34"
     DEMO_USERNAME: str = "demo"

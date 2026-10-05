@@ -36,7 +36,16 @@ class ClipboardItemCreate(BaseModel):
         max_length=TITLE_MAX_LENGTH,
         description=(
             "标题。留空时由服务端自动生成，格式 `<用户名> · <月-日 时:分>`，"
-            "例如 `demo · 10-02 14:30`"
+            "时间按 `timezone` 指定的时区展示，例如 `demo · 10-05 21:56`"
+        ),
+    )
+    timezone: str | None = Field(
+        None,
+        max_length=64,
+        description=(
+            "自动生成标题时使用的 IANA 时区，例如 `Asia/Shanghai`。"
+            "**只影响标题里展示的时间，数据库仍统一存 UTC**。"
+            "留空时用服务端 `DEFAULT_TIMEZONE` 配置"
         ),
     )
     content_type: ContentType = Field(
@@ -52,6 +61,23 @@ class ClipboardItemCreate(BaseModel):
         None,
         description='附加元信息，例如 {"mime": "text/plain", "size": 1024}',
     )
+
+
+class ClipboardItemUpdate(BaseModel):
+    """更新剪贴板项请求（用于自动保存复用同一条草稿记录）。
+
+    所有字段可选，只更新显式传入的字段。
+    """
+
+    content: str | None = Field(None, min_length=1, max_length=100_000)
+    title: str | None = Field(None, max_length=TITLE_MAX_LENGTH)
+    timezone: str | None = Field(
+        None,
+        max_length=64,
+        description="内容变化且未显式传 `title` 时，重新生成标题所用的 IANA 时区",
+    )
+    preview: str | None = Field(None, max_length=500)
+    metadata: dict[str, Any] | None = Field(None)
 
 
 class ClipboardItemResponse(BaseModel):

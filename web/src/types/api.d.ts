@@ -74,7 +74,7 @@ export interface paths {
         put?: never;
         /**
          * 创建剪贴板项
-         * @description 提交文字内容。`title` 留空时由服务端自动生成（`<用户名> · <月-日 时:分>`）。
+         * @description 提交文字内容。`title` 留空时由服务端自动生成（`<用户名> · <月-日 时:分>`），时间按 `timezone`（IANA 时区名，前端会传浏览器时区）展示，例如 `demo · 10-05 21:56`。
          *
          *     **已内置内容去重**：同一用户提交相同 `content` 时不创建新记录，只更新 `updated_at`；此时仅当显式传了 `title` 才覆盖标题（第 6 步对应广播 `clipboard.updated`）。
          */
@@ -104,7 +104,15 @@ export interface paths {
         delete: operations["delete_item_api_v1_clipboard_items__id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * 更新剪贴板项
+         * @description 只更新显式传入的字段。
+         *
+         *     **用途：自动保存复用同一条草稿记录**——打字过程中每隔一段时间保存一次，而不是每个中间态都新建一行。
+         *
+         *     内容变化且未传 `title` 时，标题会按更新时刻与 `timezone` 重新生成。
+         */
+        patch: operations["update_item_api_v1_clipboard_items__id__patch"];
         trace?: never;
     };
     "/api/v1/dev/reset": {
@@ -268,9 +276,14 @@ export interface components {
             content: string;
             /**
              * Title
-             * @description 标题。留空时由服务端自动生成，格式 `<用户名> · <月-日 时:分>`，例如 `demo · 10-02 14:30`
+             * @description 标题。留空时由服务端自动生成，格式 `<用户名> · <月-日 时:分>`，时间按 `timezone` 指定的时区展示，例如 `demo · 10-05 21:56`
              */
             title?: string | null;
+            /**
+             * Timezone
+             * @description 自动生成标题时使用的 IANA 时区，例如 `Asia/Shanghai`。**只影响标题里展示的时间，数据库仍统一存 UTC**。留空时用服务端 `DEFAULT_TIMEZONE` 配置
+             */
+            timezone?: string | null;
             /**
              * @description 内容类型，阶段一固定 text
              * @default text
@@ -373,6 +386,29 @@ export interface components {
              * @description 最后更新时间（ISO 8601 UTC）
              */
             updated_at: string;
+        };
+        /**
+         * ClipboardItemUpdate
+         * @description 更新剪贴板项请求（用于自动保存复用同一条草稿记录）。
+         *
+         *     所有字段可选，只更新显式传入的字段。
+         */
+        ClipboardItemUpdate: {
+            /** Content */
+            content?: string | null;
+            /** Title */
+            title?: string | null;
+            /**
+             * Timezone
+             * @description 内容变化且未显式传 `title` 时，重新生成标题所用的 IANA 时区
+             */
+            timezone?: string | null;
+            /** Preview */
+            preview?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * ContentType
@@ -742,6 +778,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ClipboardDeleteResponse"];
+                };
+            };
+            /** @description 剪贴板项不存在或不属于当前用户 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_item_api_v1_clipboard_items__id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClipboardItemUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClipboardItemResponse"];
                 };
             };
             /** @description 剪贴板项不存在或不属于当前用户 */

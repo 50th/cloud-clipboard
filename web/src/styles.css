@@ -284,6 +284,18 @@ textarea {
 
 .autosave__status {
   white-space: nowrap;
+  transition: color 0.2s;
+}
+
+/* 自动保存成功：绿色 + 勾号，确保用户能注意到"已经存进去了" */
+.autosave__status--saved {
+  color: var(--success);
+  font-weight: 500;
+}
+
+/* 有改动但还没到保存时机：橙色，提示倒计时中 */
+.autosave__status--pending {
+  color: #b45309;
 }
 
 /* ---------- 记录卡片 ---------- */

@@ -19,6 +19,7 @@ from app.schemas.clipboard import (
     ClipboardItemCreate,
     ClipboardItemList,
     ClipboardItemResponse,
+    ClipboardItemUpdate,
     ClipboardListParams,
 )
 from app.schemas.common import MessageResponse
@@ -62,7 +63,8 @@ async def _get_owned_item(
     status_code=status.HTTP_201_CREATED,
     summary="创建剪贴板项",
     description=(
-        "提交文字内容。`title` 留空时由服务端自动生成（`<用户名> · <月-日 时:分>`）。\n\n"
+        "提交文字内容。`title` 留空时由服务端自动生成（`<用户名> · <月-日 时:分>`），"
+        "时间按 `timezone`（IANA 时区名，前端会传浏览器时区）展示，例如 `demo · 10-05 21:56`。\n\n"
         "**已内置内容去重**：同一用户提交相同 `content` 时不创建新记录，"
         "只更新 `updated_at`；此时仅当显式传了 `title` 才覆盖标题"
         "（第 6 步对应广播 `clipboard.updated`）。"
@@ -121,6 +123,39 @@ async def get_item(
     id: str, session: DbSession, current_user: CurrentUser
 ) -> ClipboardItemResponse:
     item = await _get_owned_item(session, current_user.id, id)
+    return to_item_response(item)
+
+
+@router.patch(
+    "/items/{id}",
+    response_model=ClipboardItemResponse,
+    summary="更新剪贴板项",
+    description=(
+        "只更新显式传入的字段。\n\n"
+        "**用途：自动保存复用同一条草稿记录**——打字过程中每隔一段时间保存一次，"
+        "而不是每个中间态都新建一行。\n\n"
+        "内容变化且未传 `title` 时，标题会按更新时刻与 `timezone` 重新生成。"
+    ),
+    responses={404: {"description": "剪贴板项不存在或不属于当前用户"}},
+)
+async def update_item(
+    id: str,
+    payload: ClipboardItemUpdate,
+    session: DbSession,
+    current_user: CurrentUser,
+) -> ClipboardItemResponse:
+    item = await clipboard_crud.update_item(
+        session,
+        current_user.id,
+        id,
+        payload,
+        username=current_user.username,
+    )
+    if item is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"剪贴板项不存在: {id}",
+        )
     return to_item_response(item)
 
 
