@@ -13,12 +13,14 @@ uvicorn[standard]
 # --- 配置管理 ---
 pydantic-settings
 
-# --- 数据库（第 1 步完成）---
+# --- 数据库（第 3 步完成）---
 sqlalchemy[asyncio]
 asyncpg
 alembic
-tzdata
 # Alembic 迁移走异步引擎（alembic/env.py），因此不需要同步驱动 psycopg2
+# ⚠️ Windows 没有系统时区数据库，zoneinfo 必须靠这个包才能解析 Asia/Shanghai 等时区
+#    （缺它会抛 ZoneInfoNotFoundError，导致创建剪贴板项直接 500）
+tzdata
 
 # ============================================================
 # 以下为后续步骤依赖，按第 10 节开发顺序逐步启用

@@ -36,6 +36,7 @@
 | ORM | SQLAlchemy（async） | 2.0+ | 2.1.3 |
 | 数据库驱动 | asyncpg | - | 0.31.0 |
 | 迁移 | Alembic | 最新稳定版 | 1.20.0 |
+| 时区数据 | tzdata | — | 2026.5（**Windows 必需**，见 §11） |
 | 缓存/广播 | Redis | 6+ | ⬜ 第 5 步 |
 | 认证 | ⚠️ **待定**：`pwdlib` 或 pin `bcrypt==4.0.1` | - | ⬜ 第 4 步 |
 | Web 前端 | **Vue 3 + TypeScript + Vite** | HTML/CSS/JS | 见下 |
