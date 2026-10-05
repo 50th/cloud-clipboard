@@ -173,22 +173,24 @@ export const useClipboardStore = defineStore('clipboard', () => {
       return { item, deduped: false }
     }
 
-    // 手动上传视为「记录定稿」：另起一行，并解除草稿关联
-    const result = await createNew(content, title)
-    resetDraft()
-    return result
+    // 手动上传但内容与草稿不同：视为另一条独立记录，草稿保留为独立行
+    return createNew(content, title)
   }
 
-  /** 用户清空输入框时调用，避免下一条内容覆盖旧草稿 */
-  function clearDraft() {
+  /**
+   * 显式开启一条新剪贴板：解除当前草稿关联。
+   *
+   * **只有用户点「新建剪贴板」时才调用**——清空输入框不会自动调用，
+   * 否则「清空 → 重新输入」会意外多出一行，而用户的预期是继续编辑同一条。
+   */
+  function startNewDraft() {
     resetDraft()
   }
 
   async function removeItem(id: string) {
     await clipboardApi.remove(id)
-    if (draftId === id) {
-      resetDraft()
-    }
+    // 注意：即使删的是当前草稿，也**不解除关联**——
+    // 下次保存会因 404 自动回退为新建，用户无感知（见 saveDraft）
     // 删除当前页最后一条时回退一页，避免停在空页
     const nextPage = items.value.length === 1 && page.value > 1 ? page.value - 1 : page.value
     await fetchItems({ page: nextPage, silent: true })
@@ -218,7 +220,7 @@ export const useClipboardStore = defineStore('clipboard', () => {
     setOrder,
     saveDraft,
     uploadText,
-    clearDraft,
+    startNewDraft,
     removeItem,
     clearAll,
   }

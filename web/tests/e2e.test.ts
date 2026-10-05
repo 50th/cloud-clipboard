@@ -199,6 +199,38 @@ describe('Web 端单端闭环（真实后端）', () => {
 
     await clipboardApi.remove(again.item.id).catch(() => undefined)
   })
+
+  it('清空输入不新开记录：后续编辑仍更新同一条', async () => {
+    const first = await state().saveDraft(`${TAG} 清空测试 A`)
+    const totalAfterFirst = (await clipboardApi.list({ search: TAG, size: 100 })).total
+
+    // 模拟用户点「清空输入」：界面清空，但**不解除草稿关联**
+    // （组件里 clearInput 只调 markSaved('')，不调 startNewDraft）
+    const second = await state().saveDraft(`${TAG} 清空测试 B`)
+
+    assert.equal(second.item.id, first.item.id, '清空输入后继续编辑，应仍复用同一行')
+    const after = await clipboardApi.list({ search: TAG, size: 100 })
+    assert.equal(after.total, totalAfterFirst, '清空输入不应新增记录')
+
+    await clipboardApi.remove(first.item.id).catch(() => undefined)
+  })
+
+  it('点「新建剪贴板」后才新开一条记录', async () => {
+    const first = await state().saveDraft(`${TAG} 新建前`)
+    const totalBefore = (await clipboardApi.list({ search: `${TAG} 新建`, size: 100 })).total
+
+    state().startNewDraft() // 等价于点「＋ 新建剪贴板」
+    const second = await state().saveDraft(`${TAG} 新建后`)
+
+    assert.notEqual(second.item.id, first.item.id, '新建剪贴板后应另起一条记录')
+    assert.equal(second.item.content, `${TAG} 新建后`)
+
+    const totalAfter = (await clipboardApi.list({ search: `${TAG} 新建`, size: 100 })).total
+    assert.equal(totalAfter, totalBefore + 1, '新建剪贴板后应恰好新增 1 条')
+
+    await clipboardApi.remove(first.item.id).catch(() => undefined)
+    await clipboardApi.remove(second.item.id).catch(() => undefined)
+  })
   it('不传标题：服务端自动生成 `<用户名> · <月-日 时:分>`', async () => {
     const { item } = await upload(`${TAG} 自动标题`)
     assert.match(item.title, /^demo · \d{2}-\d{2} \d{2}:\d{2}$/, `自动标题格式不符：${item.title}`)

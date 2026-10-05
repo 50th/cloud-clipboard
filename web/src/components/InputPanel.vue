@@ -26,13 +26,6 @@ const autoSave = ref(true)
 
 const contentSize = computed(() => (text.value ? formatBytes(byteSize(text.value)) : '0 B'))
 
-function clearInput() {
-  title.value = ''
-  text.value = ''
-  // 解除草稿关联：下一条内容应另起一行，而不是覆盖刚清掉的那条
-  store.clearDraft()
-}
-
 const { saving, error: autoSaveError, lastSaved, markSaved } = useAutoSave({
   text,
   extra: title,
@@ -57,6 +50,33 @@ watch(autoSaveError, (message) => {
     emit('notice', { kind: 'err', text: `自动保存失败：${message}` })
   }
 })
+
+/**
+ * 清空输入框。
+ *
+ * ⚠️ **不解除草稿关联**：清空只是清界面，用户的预期是"继续编辑同一条"。
+ * 想新开一条请点「新建剪贴板」。
+ * `markSaved('')` 让自动保存不会把空内容存进去，而重新输入后会正常再触发保存。
+ */
+function clearInput() {
+  title.value = ''
+  text.value = ''
+  markSaved('')
+}
+
+/**
+ * 显式开启一条新剪贴板。
+ *
+ * **只有这个动作会解除草稿关联**——此后输入的内容会另起一行，
+ * 而不是继续更新上一条记录。
+ */
+function handleStartNew() {
+  store.startNewDraft()
+  markSaved('')
+  title.value = ''
+  text.value = ''
+  emit('notice', { kind: 'ok', text: '已开启新剪贴板，接下来输入的内容会另起一条记录' })
+}
 
 async function handleManualUpload() {
   if (text.value.trim() === '') {
@@ -155,6 +175,9 @@ const statusText = computed(() => {
       </button>
       <button type="button" class="btn btn--primary" @click="handleSyncClipboard">
         同步剪贴板
+      </button>
+      <button type="button" class="btn" @click="handleStartNew">
+        ＋ 新建剪贴板
       </button>
       <button
         type="button"
