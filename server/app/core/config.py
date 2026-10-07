@@ -1,7 +1,7 @@
 """应用配置。
 
 所有配置项均可通过环境变量或 `server/.env` 覆盖。
-**禁止在代码中硬编码密钥**（见 AGENT.md 第 9 节）。
+**禁止在代码中硬编码密钥**（见 AGENTS.md 第 9 节）。
 """
 
 from __future__ import annotations
@@ -30,7 +30,8 @@ class Settings(BaseSettings):
         "当前为阶段一（文字剪贴板 MVP），数据已持久化到 PostgreSQL。"
     )
     APP_ENV: str = "development"
-    # ⚠️ 默认关闭。DEBUG 会影响错误详情暴露，生产务必保持 False（见 docs/roadmap.md 的 P1）。
+    # ⚠️ 默认关闭。DEBUG 会影响错误详情暴露，生产务必保持 False。
+    # 决策理由（为何与 ENABLE_DEV_ROUTES 解耦）见 `.env.example` 的「安全开关」注释。
     DEBUG: bool = False
     # 开发/测试辅助路由（如 /api/v1/dev/reset）的总开关。
     # 故意与 DEBUG 解耦：DEBUG 可能因调试临时打开，而该路由会清库，绝不该跟着被打开。

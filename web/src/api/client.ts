@@ -1,7 +1,7 @@
 /**
  * HTTP 客户端统一封装（axios）。
  *
- * 规范：组件不直接调用 axios（AGENT.md 第 8 节），一律走 `src/api/`。
+ * 规范：组件不直接调用 axios（AGENTS.md 第 8 节），一律走 `src/api/`。
  */
 
 import axios, { AxiosError } from 'axios'
@@ -206,9 +206,9 @@ export const clipboardApi = {
   },
 }
 
-/** 开发/测试辅助接口（仅后端 DEBUG=true 时可用） */
+/** 开发/测试辅助接口（仅后端 ENABLE_DEV_ROUTES=true 时注册，见 `docs/api.md` 的「接口摘要」） */
 export const devApi = {
-  /** 把后端内存数据重置为种子数据 */
+  /** ⚠️ 删除当前用户的剪贴板项并重建种子数据（仅开发路由开启时可用） */
   reset: async (): Promise<void> => {
     await http.post('/dev/reset')
   },

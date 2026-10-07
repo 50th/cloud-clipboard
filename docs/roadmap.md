@@ -1,6 +1,6 @@
-  ✓ P3 说明   ✓ P2 段落   ✓ 第 3 步段落   ✓ 顶部进度 # 项目路线图与进度
+# 项目路线图与进度
 
-> **本文件记录动态进度。** AGENT.md 只保存稳定约定（技术栈、契约、规范、开发顺序），
+> **本文件记录动态进度。** AGENTS.md 只保存稳定约定（技术栈、契约、规范、开发顺序），
 > 凡是"每完成一步就要改一遍"的内容都放这里。
 
 **最后更新**：2026-10-04
@@ -8,7 +8,7 @@
 
 ---
 
-## 阶段划分（AGENT.md 第 1 节）
+## 阶段划分（AGENTS.md 第 1 节）
 
 | 阶段 | 内容 | 状态 |
 |------|------|------|
@@ -19,60 +19,13 @@
 
 ---
 
-## 开发步骤进度（AGENT.md 第 10 节）
+## 开发步骤进度（AGENTS.md 第 10 节）
 
-### ✅ 第 1 步：FastAPI 骨架 + 数据契约（已完成）
+- ✅ **第 1 步（FastAPI 骨架 + 数据契约）已完成**，验收记录见 git log `89a03e9`
+- ✅ **第 2 步（Web 端骨架 + 单端闭环）已完成**，验收记录见 git log `2aa5e49`
+- ✅ **第 3 步（接入数据库）已完成**，验收记录见 git log `7f055ed`、`b5cc62d`
 
-- [x] `server/` 目录结构与虚拟环境
-- [x] `fastapi 0.142.2`、`uvicorn[standard] 0.54.0`、`pydantic-settings 2.15.0`
-- [x] Pydantic Schema：`app/schemas/`（common / user / clipboard）
-- [x] 假数据路由：`app/routers/`（auth / clipboard / dev）+ `app/crud/`（内存存储 + 4 条种子数据）
-- [x] 入口 `app/main.py`：注册路由、CORS、OpenAPI 元信息、`/health`
-- [x] `/docs`、`/redoc`、`/openapi.json` 均可用
-
-**验收记录**：创建 / 列表（分页·筛选·搜索·排序）/ 详情 / 删除 / 清空 / 404 / 422 全部实测通过。
-
-### ✅ 第 2 步：Web 端骨架 + 单端闭环（已完成）
-
-- [x] Vite 5.4.21 + TypeScript 5.9.3，端口固定 5273（框架见下）
-- [x] 从 OpenAPI 生成类型：`pnpm run gen:api` → `web/src/types/api.d.ts`
-- [x] axios 客户端封装：`web/src/api/client.ts`
-- [x] 剪贴板读写工具：`web/src/utils/clipboard.ts`
-- [x] 两栏布局：左栏历史记录（搜索/刷新/排序/清空）、右栏标题 + 加高输入区
-- [x] 标题字段（留空服务端自动生成）、清空输入、防抖自动保存
-- [x] 端到端测试：pnpm test（12 用例，驱动真实后端与 PostgreSQL）
-- [x] **Web 端框架由 React 18 迁移为 Vue 3**（第 2 步完成后调整，见下方「Web 端框架迁移」）
-
-**验收记录**：`pnpm run typecheck` 0 错误；`pnpm run build` 110 模块 / gzip 72 KB；`pnpm test` 12/12 通过。
-**待人工确认**：浏览器侧「读取剪贴板 → 上传 → 列表展示 → 点击复制」（剪贴板 API 依赖用户手势，无法自动化）。
-
-### ✅ 第 3 步：接入数据库（已完成）
-
-- [x] 决定数据库方案：**本地也用 Docker 容器跑 `postgres:16`**（见下方「本地基础设施」）
-- [x] 容器创建并验证通过（编码/时区/中文往返/卷持久化）
-- [x] 安装 `sqlalchemy[asyncio] 2.1.3`、`asyncpg 0.31.0`、`alembic 1.20.0`、`greenlet 3.5.6`
-- [x] `db/base.py`（声明式 Base + 约束命名约定）、`db/session.py`（异步引擎/会话/`get_db`/`ping`）
-- [x] SQLAlchemy 模型：`db/models/user.py`、`db/models/clipboard.py`
-- [x] Alembic 初始化（异步 env.py，连接串从 settings 读取）+ 首个迁移 `0001_initial`
-- [x] `crud/` 改为真实异步查询（`user.py`、`clipboard.py`），内存存储 `crud/store.py` 已删除
-- [x] 路由接入数据库 session，去重改由 `UNIQUE(user_id, content_hash)` 保证
-- [x] `scripts/init_db.py`：建表 + 演示用户 + 种子数据
-- [x] 验证重启后数据不丢失
-
-**验收记录**：
-
-- `GET /api/v1/dev/db` 返回 `clipboard` / PostgreSQL 16.15，确认连的是容器库
-- 契约字段完整（`id, user_id, title, content_type, content, preview, metadata, created_at, updated_at`），
-  **`content_hash` 未外泄**
-- 创建 / 自定义标题 / 自动标题（`demo · 10-04 14:49`）/ 去重（同 id、total 不增）/
-  搜索（标题+内容）/ 排序 / 分页 / 详情 / 404 / 422 / 删除 全部通过
-- **重启持久化**：写入标记 → 重启 uvicorn → 按 id 查到、内容一致、总数不变；
-  并直连数据库交叉验证记录数一致
-- Web 端端到端 **12/12 通过**（现在打的是真实 PostgreSQL，不再是内存假数据）
-- 迁移**幂等**（重复 `upgrade head` 无动作）、**无 schema 漂移**（再 autogenerate 无 Detected）
-- 同一份迁移在空库 `clipboard_test` 上执行成功
-
-**踩坑记录**：
+### 🚧 第 3 步踩坑记录（永久保留，勿删）
 
 1. Windows 上 `alembic.ini` 若含非 ASCII 字符会被 configparser 按 GBK 读取而崩，
    故该文件**保持纯 ASCII**；运行 Alembic 建议带 `$env:PYTHONUTF8='1'`
@@ -84,6 +37,7 @@
 
 - [ ] `tests/conftest.py` 已写好，但 **pytest / pytest-asyncio / httpx 未安装**，尚无后端测试用例
 - [ ] 迁移的 `upgrade`/`downgrade` 往返验证（downgrade 后重新 upgrade）
+
 ### ⬜ 第 4 步：JWT 认证
 
 - [ ] `core/security.py`：密码哈希、JWT 签发/校验
@@ -113,7 +67,7 @@
 - [ ] 去重分支也广播 `clipboard.updated`（待第 5 步）
 - [ ] Web 端处理 `updated` 事件
 
-**完成标准**：连续复制相同内容只产生一条记录。**该标准目前已在假数据层成立（有 e2e 用例覆盖）。**
+**完成标准**：连续复制相同内容只产生一条记录。**该标准目前已在数据库层成立（有 e2e 用例覆盖）。**
 
 ### ⬜ 第 7 步：鸿蒙 App
 
@@ -129,24 +83,14 @@
 
 - [ ] 三端同时运行，验证双向同步
 - [ ] 补充后端单元测试（pytest）
+- [ ] **人工验证**浏览器侧「读取剪贴板 → 上传 → 列表展示 → 点击复制」（剪贴板 API 依赖用户手势，无法自动化）
 - [ ] 修复边界问题
 
 ---
 
 ## 已知问题与技术债
 
-### ✅ P1 · `DEBUG` 默认值与开发路由（已解决）
-
-原先 `DEBUG` 默认 `true`、`.env.example` 也是 `true`，而 `dev/reset` 按 `DEBUG` 注册。
-接库后该路由会变成"清库"，一旦以 `DEBUG=true` 部署即可能丢数据。
-
-**已处理**：
-
-- `config.py`：`DEBUG` 默认改为 `False`
-- 新增独立开关 `ENABLE_DEV_ROUTES`（默认 `False`），**故意与 `DEBUG` 解耦**
-- `main.py`：dev 路由改为 `if settings.ENABLE_DEV_ROUTES`
-- `.env.example`：两者均为 `false`，并写明启用条件与风险
-- 本地 `server/.env`：`DEBUG=false` + `ENABLE_DEV_ROUTES=true`（跑 e2e 需要）
+**P1 / P4 / P7 / P8 已解决**（`DEBUG` 与开发路由解耦、文档文件名统一、`.gitignore` 补 `dist/`、README 路由表口径），过程见 git log。
 
 ### 🟡 P2 · 测试清库风险（守卫已就位，隔离待做）
 
@@ -168,76 +112,30 @@
   或把 e2e 也纳入 pytest 夹具统一管理
 - 后端 `tests/conftest.py` 已按"默认打 `clipboard_test`"写好（通过 `TEST_DATABASE_URL`），
   安装 pytest 后即可用
+
 ### 🟠 P3 · 多 worker 会打破 WebSocket 广播
 
 **第 3 步没有改变这个约束**：数据现在共享（同一数据库），但第 5 步的 `ConnectionManager` 仍是**进程内结构**。
 
 - uvicorn `--workers > 1` 时：数据一致（都在数据库），但**推送送不到另一个 worker**
 - 处理：第 5 步要么强制 `--workers 1` 并禁止扩容，要么同时引入 Redis Pub/Sub
-- **第 3 步后 AGENT.md 第 6 节已明确记录该约束（不再藏在"后期风险"里）**（已补注到 `ws-protocol.md`）
-
-### 🟡 P4 · 文档文件名矛盾（已解决）
-
-原先 AGENT.md 说 `docs/api.yaml`、README 说 `docs/api.md` 与 `docs/architecture.md`。
-**已统一为**：`api.md`（契约存档 + 导出脚本）、`ws-protocol.md`、`roadmap.md`。
+- **第 3 步后 AGENTS.md 第 6 节已明确记录该约束（不再藏在"后期风险"里）**，
+  完整协议约定见 [`ws-protocol.md`](ws-protocol.md)
 
 ### 🟡 P5 · 第 4 步依赖有已知兼容问题
 
-AGENT.md 第 2 节指定 `python-jose + passlib[bcrypt]`：
+AGENTS.md 第 2 节原先指定 `python-jose + passlib[bcrypt]`：
 
 - `passlib 1.7.4` 已停止维护，与 `bcrypt 4.x` 存在版本探测告警/报错
-- 处理：改用 `pwdlib`，或显式 pin `bcrypt==4.0.1`。偏离 AGENT.md 前需确认
+- 处理：改用 `pwdlib`，或显式 pin `bcrypt==4.0.1`。偏离 AGENTS.md 前需确认
 
 ### 🟡 P6 · WS token 走 query string 会被日志记录
 
 `ws?token=<JWT>` 会被 uvicorn 访问日志明文记录。第 5 步需对 `token` 脱敏。
 
-### ✅ P7 · 根 `.gitignore` 缺 `dist/`（已解决）
-
-已补齐 `dist/`、`build/`、`coverage/`、`__pycache__/`、`*.py[cod]`、`*.tsbuildinfo` 等兜底规则。
-
-### ✅ P8 · README 路由表口径不一致（已解决）
-
-- `POST /api/v1/clipboard/upload` 已标注为**阶段二、当前未实现**
-- 补齐 `GET /auth/me`、`DELETE /clipboard/items`、`POST /dev/reset`、`GET /health`
-- 路径参数统一为 `{id}`（后端路由、`docs/api.md`、Web 类型生成结果已一致）
-
 ---
 
-## Web 端框架迁移（React 18 → Vue 3）
-
-**背景**：第 2 步按原计划用 React 18 完成，之后按需求改为 Vue 3。属**框架层调整**，不改接口契约，
-后端与数据库一行未动。
-
-| 项 | 迁移前 | 迁移后 |
-|----|--------|--------|
-| 框架 | React 18.3.1 + react-dom | **Vue 3.5.43** |
-| 状态管理 | Zustand 4.5.7 | **Pinia 2.3.1**（setup store） |
-| 构建插件 | @vitejs/plugin-react | **@vitejs/plugin-vue** |
-| 类型检查 | tsc | **vue-tsc**（能检查 .vue 模板） |
-| 组件形态 | .tsx 函数组件 + Hooks | .vue SFC（`<script setup lang="ts">`） |
-| 复用逻辑 | `hooks/` | `composables/` |
-| 产物（JS / gzip） | 212 KB / 72.4 KB | **137.7 KB / 53.6 KB（-26%）** |
-
-**原样复用（占原实现约 60%）**：`api/client.ts`、`utils/clipboard.ts`、`utils/format.ts`、
-`types/api.d.ts`（851 行生成代码）、`styles.css`、`tests/e2e.test.ts` 的断言逻辑。
-
-**重写部分**：`App.vue`、3 个组件（`ClipboardHistory` / `ClipboardItemCard` / `InputPanel`）、
-4 个 composables、2 个 store。
-
-**验收**：`vue-tsc --noEmit` 0 错误；`pnpm test` **12/12 通过**（Pinia store + 真实 PostgreSQL）；
-`pnpm build` 成功；浏览器侧 `.vue` 均编译为渲染函数、依赖预构建完成、旧 `#root` 挂载点已移除。
-
-**新增注意事项**：
-
-- 导入别名**两套并存**：`.vue` 与 `main.ts` 用 `@/*`（Vite + tsconfig paths）；
-  **store / composables / api / utils 必须用 `#src/*.ts`**——Node 不读 tsconfig `paths`，
-  而端到端测试直接跑源码，靠 `package.json` 的 `imports` 才能解析。改动时误换别名会让 `pnpm test` 报模块找不到。
-- `pnpm-workspace.yaml` 的 `allowBuilds` 除 esbuild 外还要放行 **vue-demi**（Pinia 的 Vue 版本兼容层）
-- 待人工确认项不变：浏览器侧「读取剪贴板 → 上传 → 列表展示 → 点击复制」仍需手工验证
-
----
-## 本地基础设施（实测通过）
+## 本地基础设施
 
 **决策：本地开发与生产统一使用 Docker 容器跑 `postgres:16`**，
 本机原生的 PostgreSQL 18 保留不动（避免影响其他项目），容器走宿主 **5433** 端口错开。
@@ -252,19 +150,7 @@ AGENT.md 第 2 节指定 `python-jose + passlib[bcrypt]`：
 | 连接串 | `postgresql+asyncpg://clipboard:clipboard@127.0.0.1:5433/clipboard` |
 | 验证脚本 | `scripts/verify_postgres.py`（宿主侧运行） |
 
-**实测结果**：PostgreSQL 16.15、`server_encoding=UTF8`、`TimeZone=Etc/UTC`、
-healthcheck 变 `healthy`、中文/emoji/多行/5000 字符往返**全部一致**、
-`timestamptz` 带时区、容器 `restart` 后数据保留、宿主 5433 可连。
-
-**常用命令**（仓库根目录）：
-
-```powershell
-docker compose -f infra/docker-compose.yml up -d              # 启动
-docker compose -f infra/docker-compose.yml ps                 # 状态
-docker compose -f infra/docker-compose.yml logs -f postgres   # 日志
-docker compose -f infra/docker-compose.yml down               # 停止（保留数据）
-server\venv\Scripts\python.exe scripts\verify_postgres.py     # 连通性验证
-```
+启动、停止、看日志与连通性验证的完整命令见 `infra/docker-compose.yml` 顶部注释。
 
 **注意事项**：
 
@@ -298,22 +184,6 @@ server\venv\Scripts\python.exe scripts\verify_postgres.py     # 连通性验证
 - **5141-5240** 覆盖了原定的 Vite 5173 → 已改用 **5273**
 - **8903-9002** 覆盖了 MinIO 常用的 9000 → 阶段二需换端口
 - 排查命令：`netsh int ipv4 show excludedportrange protocol=tcp`
-
----
-
-## 版本保护点
-
-| commit | 内容 |
-|--------|------|
-| `89a03e9` | `feat(server): FastAPI 骨架 + 数据契约` |
-| `2aa5e49` | `feat(web): Web 端骨架与单端闭环` |
-| `72c15c1` | `docs: 补充项目文档并加固 gitignore` |
-| `12c72c3` | `fix(web): 开发端口 5173 改为 5273` |
-| `9e39b5e` | `feat(infra): 本地 PostgreSQL 16 容器与验证脚本` |
-| `747b482` | `docs: 补齐版本保护点并修正 roadmap 末尾重复段落` |
-| （本次） | `docs: 精简 AGENT.md，删除与 docs/ 重复的枚举` |
-| `7f055ed` | `feat(server): 接入 PostgreSQL + SQLAlchemy 异步 + Alembic 迁移` |
-| `b5cc62d` | `docs: 同步第 3 步完成情况` |
 
 ---
 

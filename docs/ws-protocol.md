@@ -9,7 +9,7 @@ ws://localhost:8000/api/v1/clipboard/ws?token=<JWT>
 ```
 
 - `token`：**必需**（第 4 步接入 JWT 后），服务端校验失败应关闭连接（关闭码 `4401`）
-- 生产环境必须用 `wss://`（AGENT.md 第 9 节）
+- 生产环境必须用 `wss://`（AGENTS.md 第 9 节）
 - `127.0.0.1` 与 `localhost` 等价
 
 > ⚠️ **实现注意**：token 走 query string 会被 uvicorn 的访问日志明文记录。
@@ -43,17 +43,18 @@ ws://localhost:8000/api/v1/clipboard/ws?token=<JWT>
 
 ## 约定
 
-- **心跳间隔 30 秒**（`WS_HEARTBEAT_MS = 30_000`，已定义于 `web/src/hooks/useWebSocket.ts`）
-- **重连策略**：指数退避，首次 1 秒、上限 30 秒（`WS_BACKOFF_MAX_MS = 30_000`）
+- **心跳间隔 30 秒**：`WS_HEARTBEAT_MS = 30_000`（**约定值**，第 5 步实现时落地到
+  `web/src/composables/useWebSocket.ts`——该文件已存在并导出了这两个常量，但**当前是占位实现**，尚未建立连接）
+- **重连策略**：指数退避，首次 1 秒、上限 30 秒（`WS_BACKOFF_MAX_MS = 30_000`，同上为约定值）
 - **重连成功后必须调用 `GET /api/v1/clipboard/items` 拉取最新列表**（断线期间可能漏事件）
-- **广播按用户隔离，不群发**（AGENT.md 第 9 节）
+- **广播按用户隔离，不群发**（AGENTS.md 第 9 节）
 
 ## 循环同步防护
 
 写回本地剪贴板会触发剪贴板变化监听，可能造成死循环：
 
-- Web 端：`web/src/utils/clipboard.ts` 的 `isSelfWrite()` 标志位（写入后 800ms 窗口内忽略）
-- 鸿蒙端：`harmony/entry/src/main/ets/services/clipboardMonitor.ets` 需实现同样的标志位
+- Web 端：`web/src/utils/clipboard.ts` 的 `isSelfWrite()` 标志位（写入后 800ms 窗口内忽略）✅ 已实现
+- 鸿蒙端：`harmony/entry/src/main/ets/services/clipboardMonitor.ets` 需实现同样的标志位 ⬜ 尚未创建
 
 ## 多实例问题（重要）
 
@@ -67,13 +68,24 @@ ws://localhost:8000/api/v1/clipboard/ws?token=<JWT>
 1. **第 5 步强制单 worker**（`--workers 1`），并在 Redis Pub/Sub 落地前禁止扩容；或
 2. **第 5 步同时引入 Redis Pub/Sub**，让广播跨进程
 
-**该约束已写入 AGENT.md 第 6 节**：不能拖到"多副本部署"阶段再处理。
+**该约束已写入 AGENTS.md 第 6 节**：不能拖到"多副本部署"阶段再处理。
 
 ## 调试
 
 ```powershell
-# 需先取到 token（第 4 步前可随便填）
-npx wscat -c "ws://127.0.0.1:8000/api/v1/clipboard/ws?token=<JWT>"
+# ⚠️ 端点与 `web/src/composables/useWebSocket.ts` 的连接逻辑均在第 5 步实现，当前执行会失败。
+# 需先取到 token（第 4 步接入 JWT 前可随便填）
+pnpm dlx wscat -c "ws://127.0.0.1:8000/api/v1/clipboard/ws?token=<JWT>"
 ```
 
 发送 `{"action":"ping"}`，应收到 `{"event":"pong","data":{}}`。
+
+## 落地位置（实现时对照）
+
+| 约定 | 落地文件 | 状态 |
+|------|---------|------|
+| WS 端点 + token 校验 | `server/app/routers/ws.py` | ⬜ 第 5 步创建 |
+| 连接管理与按用户广播 | `server/app/services/ws_manager.py` | ⬜ 第 5 步创建 |
+| Web 端连接、心跳、退避、事件分发 | `web/src/composables/useWebSocket.ts` | 占位实现（仅导出常量与类型） |
+| 自身写入标志位 | `web/src/utils/clipboard.ts` | ✅ 已实现 |
+| 鸿蒙端对应实现 | `harmony/entry/src/main/ets/services/clipboardMonitor.ets` | ⬜ 尚未创建 |

@@ -1,6 +1,6 @@
 """剪贴板路由。
 
-路由层只做参数校验与调用，业务/数据逻辑在 `app/crud/`（AGENT.md 第 8 节）。
+路由层只做参数校验与调用，业务/数据逻辑在 `app/crud/`（AGENTS.md 第 8 节）。
 """
 
 from __future__ import annotations

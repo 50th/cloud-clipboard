@@ -11,3 +11,4 @@ __pycache__/
 .vite/
 *.tsbuildinfo
 .DS_Store
+docs/.openapi.json

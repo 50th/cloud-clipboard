@@ -4,8 +4,8 @@
  * 用法（需先启动后端）：
  *   pnpm run gen:api
  *
- * 等价于 AGENT.md 第 11 节的：
- *   npx openapi-typescript http://127.0.0.1:8000/openapi.json -o src/types/api.d.ts
+ * 本脚本内部调用 devDependencies 里的 openapi-typescript；
+ * 不要用 `npx openapi-typescript`（会绕过 pnpm 锁定的本地版本）。
  */
 
 import { mkdir, writeFile } from 'node:fs/promises'

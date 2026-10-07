@@ -1,7 +1,7 @@
 /**
  * 剪贴板读写工具。
  *
- * 规范（AGENT.md 第 8、9 节）：
+ * 规范（AGENTS.md 第 8、9 节）：
  * - 组件不直接调用 `navigator.clipboard`，一律走本模块；
  * - 浏览器剪贴板 API 仅在 HTTPS 或 localhost 下可用；
  * - 读取必须由用户手势触发；

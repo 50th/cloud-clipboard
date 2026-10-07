@@ -1,6 +1,6 @@
 """剪贴板数据访问层（异步）。
 
-路由层只调用本模块，不直接写 SQL（AGENT.md 第 8 节）。
+路由层只调用本模块，不直接写 SQL（AGENTS.md 第 8 节）。
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ PREVIEW_LIMIT = 80
 
 
 def content_hash(content: str) -> str:
-    """内容去重用的哈希。**不对外暴露**（AGENT.md 第 4 节）。"""
+    """内容去重用的哈希。**不对外暴露**（AGENTS.md 第 4 节）。"""
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
@@ -74,7 +74,7 @@ async def list_items(
 ) -> tuple[list[ClipboardItem], int]:
     """分页查询，返回 (当前页数据, 总条数)。
 
-    搜索同时匹配 `title` 与 `content`（AGENT.md 第 4 节）。
+    搜索同时匹配 `title` 与 `content`（AGENTS.md 第 4 节）。
     """
     conditions = [ClipboardItem.user_id == user_id]
     if content_type is not None:

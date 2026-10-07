@@ -1,6 +1,6 @@
 """用户相关的数据契约。
 
-⚠️ 字段变更属于契约变更，必须同步 `docs/api.yaml`、Web 端类型与鸿蒙模型。
+⚠️ 字段变更属于契约变更，必须同步 `docs/api.md`、Web 端类型与鸿蒙模型。
 """
 
 from __future__ import annotations

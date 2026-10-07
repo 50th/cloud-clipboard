@@ -1,33 +1,44 @@
 # ============================================================
 # 云剪贴板后端依赖
+#
 # 安装（Windows）：
 #   cd server
 #   python -m venv venv
 #   .\venv\Scripts\python.exe -m pip install -r requirements.txt
+#
+# 版本策略：**直接依赖一律精确 pin（==）**，便于复现与排查。
+#   实测环境：Python 3.13.7
+#   版本号以本文件为准，AGENTS.md 第 2 节不再重复列版本。
+#   传递依赖（starlette / anyio / Mako 等）不在此锁定，交给 pip 解析；
+#   完整快照可用 `.\venv\Scripts\python.exe -m pip freeze` 获取。
 # ============================================================
 
 # --- Web 框架 / ASGI 服务器 ---
-fastapi
-uvicorn[standard]
+fastapi==0.142.2
+uvicorn[standard]==0.54.0
 
-# --- 配置管理 ---
-pydantic-settings
+# --- 配置与数据校验 ---
+pydantic==2.13.5
+pydantic-settings==2.15.0
 
 # --- 数据库（第 3 步完成）---
-sqlalchemy[asyncio]
-asyncpg
-alembic
+sqlalchemy[asyncio]==2.1.3
+asyncpg==0.31.0
+alembic==1.20.0
 # Alembic 迁移走异步引擎（alembic/env.py），因此不需要同步驱动 psycopg2
+
+# --- 时区数据 ---
 # ⚠️ Windows 没有系统时区数据库，zoneinfo 必须靠这个包才能解析 Asia/Shanghai 等时区
 #    （缺它会抛 ZoneInfoNotFoundError，导致创建剪贴板项直接 500）
-tzdata
+tzdata==2026.5
 
 # ============================================================
-# 以下为后续步骤依赖，按第 10 节开发顺序逐步启用
+# 以下为后续步骤依赖，按 AGENTS.md 第 10 节开发顺序逐步启用
+# 启用时请去掉注释并**补上精确版本号**
 # ============================================================
 
 # 第 4 步：认证（JWT + 密码哈希）
-# ⚠️ 注意 passlib 1.7.4 已停止维护，与 bcrypt 4.x 存在兼容问题（见 docs/roadmap.md 的 P5）
+# ⚠️ passlib 1.7.4 已停止维护，与 bcrypt 4.x 存在兼容问题（见 docs/roadmap.md 的 P5）
 #    优先考虑 pwdlib，或显式 pin bcrypt==4.0.1
 # python-jose[cryptography]
 # passlib[bcrypt]

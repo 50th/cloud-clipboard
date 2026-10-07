@@ -1,7 +1,7 @@
 /**
  * 剪贴板状态（Pinia setup store）。
  *
- * 规范：状态集中在本 store，避免 prop drilling（AGENT.md 第 8 节）。
+ * 规范：状态集中在本 store，避免 prop drilling（AGENTS.md 第 8 节）。
  * 业务逻辑与框架无关——只有响应式 API 是 Vue 的，端到端测试可直接驱动本 store。
  */
 
