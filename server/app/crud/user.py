@@ -7,6 +7,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import security
 from app.core.config import settings
 from app.db.models.user import User
 
@@ -55,20 +56,29 @@ async def create(
     return user
 
 
-async def ensure_demo_user(session: AsyncSession) -> User:
-    """确保演示用户存在（按配置的用户名与固定 id）。
+async def ensure_demo_user(session: AsyncSession, *, reset_password: bool = False) -> User:
+    """确保演示用户存在，且**有可登录的密码**（按配置的用户名与固定 id）。
 
-    第 1/2 步未接入认证，所有请求都视为演示用户发起；
-    第 4 步接入真实登录后，本函数仅用于开发/测试数据准备。
+    认证已接入真实 JWT，演示用户不再享有"免登录"特权，必须能正常走登录流程：
+    - 用户不存在 → 创建，密码取 `settings.DEMO_PASSWORD`
+    - 用户已存在但 `password_hash` 为空（认证接入前建的历史数据）→ 补上密码
+    - `reset_password=True` → 无条件重置密码，保证本地开发始终能用演示口令登录
     """
-    user = await get_by_id(session, settings.DEMO_USER_ID)
-    if user is not None:
-        return user
+    demo_hash = security.hash_password(settings.DEMO_PASSWORD)
 
-    return await create(
-        session,
-        user_id=uuid.UUID(settings.DEMO_USER_ID),
-        username=settings.DEMO_USERNAME,
-        email=settings.DEMO_EMAIL,
-        nickname="演示用户",
-    )
+    user = await get_by_id(session, settings.DEMO_USER_ID)
+    if user is None:
+        return await create(
+            session,
+            user_id=uuid.UUID(settings.DEMO_USER_ID),
+            username=settings.DEMO_USERNAME,
+            email=settings.DEMO_EMAIL,
+            nickname="演示用户",
+            password_hash=demo_hash,
+        )
+
+    if reset_password or not user.password_hash:
+        user.password_hash = demo_hash
+        await session.commit()
+        await session.refresh(user)
+    return user

@@ -9,8 +9,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 用户注册（假数据）
-         * @description 第 1 步不落库、不校验唯一性，固定返回演示用户与假 token。
+         * 用户注册
+         * @description 创建账号并**直接返回令牌**，前端无需再登录一次。
+         *
+         *     `password` 上限 72 字节是 bcrypt 的硬限制（超出会抛错，不会被截断）。
          */
         post: operations["register_api_v1_auth_register_post"];
         delete?: never;
@@ -29,8 +31,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 用户登录（假数据）
-         * @description 任意用户名密码均返回演示用户与假 token；第 4 步接入真实校验。
+         * 用户登录
+         * @description `username` 支持用户名或邮箱。凭证错误统一返回 401，不区分是哪一个错。
          */
         post: operations["login_api_v1_auth_login_post"];
         delete?: never;
@@ -48,7 +50,7 @@ export interface paths {
         };
         /**
          * 获取当前用户
-         * @description 当前返回演示用户；第 4 步接入 JWT 后返回该 token 对应的用户。
+         * @description 依据 `Authorization: Bearer <token>` 返回对应账号；令牌无效返回 401。
          */
         get: operations["me_api_v1_auth_me_get"];
         put?: never;
@@ -475,6 +477,22 @@ export interface components {
             user: components["schemas"]["UserResponse"];
         };
         /**
+         * UserLoginRequest
+         * @description 登录请求。
+         */
+        UserLoginRequest: {
+            /**
+             * Username
+             * @description 用户名或邮箱
+             */
+            username: string;
+            /**
+             * Password
+             * @description 密码
+             */
+            password: string;
+        };
+        /**
          * UserRegisterRequest
          * @description 注册请求。
          */
@@ -491,7 +509,7 @@ export interface components {
             email: string;
             /**
              * Password
-             * @description 密码，6-72 字符（bcrypt 上限 72 字节）
+             * @description 密码，至少 6 字符，且不超过 72 字节（bcrypt 上限）
              */
             password: string;
         };
@@ -576,6 +594,13 @@ export interface operations {
                     "application/json": components["schemas"]["AuthResponse"];
                 };
             };
+            /** @description 用户名或邮箱已被占用 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -594,7 +619,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserLoginRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -603,6 +632,22 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            /** @description 用户名或密码错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -624,6 +669,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["UserResponse"];
                 };
+            };
+            /** @description 未提供令牌，或令牌无效/已过期 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

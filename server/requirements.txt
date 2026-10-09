@@ -37,11 +37,20 @@ tzdata==2026.5
 # 启用时请去掉注释并**补上精确版本号**
 # ============================================================
 
-# 第 4 步：认证（JWT + 密码哈希）
-# ⚠️ passlib 1.7.4 已停止维护，与 bcrypt 4.x 存在兼容问题（见 docs/roadmap.md 的 P5）
-#    优先考虑 pwdlib，或显式 pin bcrypt==4.0.1
-# python-jose[cryptography]
-# passlib[bcrypt]
+# 第 4 步：认证（JWT + 密码哈希）✅ 已启用
+# ⚠️ 不再使用 passlib[bcrypt]：Python 3.13 按 PEP 594 移除了标准库 `crypt` 模块，
+#    而 passlib 依赖它，import 阶段即 ModuleNotFoundError。
+#    注意 **pin 老版本 bcrypt 解决不了**——根本走不到调用 bcrypt 那一步。
+#    故改用为 Python 3.13+ 而生的 pwdlib。
+# ⚠️ 不要用 pwdlib 的 PasswordHash.recommended()：它只返回 Argon2，
+#    本项目只装了 [bcrypt] 额外项，会抛 HasherNotAvailable。
+#    正确用法是显式构造 PasswordHash((BcryptHasher(),))，见 app/core/security.py。
+# ⚠️ bcrypt 限制的是 **72 字节**（不是 72 个字符），且超出时**抛 ValueError**、不再静默截断。
+#    24 个汉字就是 72 字节。契约层已按 UTF-8 字节数校验（见 app/schemas/user.py），
+#    只靠 Pydantic 的 max_length（数字符）会漏掉多字节密码。
+pwdlib[bcrypt]==0.3.1
+# JWT：只用到 HS256 对称签名，不需要 python-jose（已停止维护）的算法矩阵
+PyJWT==2.15.1
 
 # 第 5 步：Redis 广播（多实例）
 # redis

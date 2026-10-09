@@ -47,6 +47,24 @@ export const useClipboardStore = defineStore('clipboard', () => {
     draftContent = ''
   }
 
+  /**
+   * 重置为初始状态（登出时调用）。
+   *
+   * 必须连 `knownIds` 一起清掉：它是判断"是否命中服务端去重"的依据，
+   * 跨账号残留会把另一个账号的新记录误判成去重。
+   */
+  function reset() {
+    items.value = []
+    total.value = 0
+    pages.value = 0
+    page.value = 1
+    error.value = null
+    search.value = ''
+    order.value = 'desc'
+    resetDraft()
+    knownIds.clear()
+  }
+
   /** 拉取列表；`silent=true` 用于上传后静默刷新，不显示加载态 */
   async function fetchItems(options: { page?: number; silent?: boolean } = {}) {
     const target = options.page ?? page.value
@@ -223,6 +241,7 @@ export const useClipboardStore = defineStore('clipboard', () => {
     startNewDraft,
     removeItem,
     clearAll,
+    reset,
   }
 })
 

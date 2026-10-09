@@ -60,9 +60,9 @@ cd server
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/v1/auth/register` | 注册：收 `username/email/password`，**不落库、不校验唯一性**，返回演示用户 + 假 token |
-| POST | `/api/v1/auth/login` | 登录：**当前不接收请求体、不校验凭证**，直接返回演示用户 + 假 token（第 4 步接入真实校验） |
-| GET | `/api/v1/auth/me` | 当前用户（当前固定返回演示用户） |
+| POST | `/api/v1/auth/register` | 注册：收 `username/email/password`，落库并校验唯一性，**直接返回令牌**；重名/重邮箱 409 |
+| POST | `/api/v1/auth/login` | 登录：`username` 支持用户名或邮箱，凭证错误统一 401 |
+| GET | `/api/v1/auth/me` | 当前用户，依据 `Authorization: Bearer <token>` |
 | POST | `/api/v1/clipboard/items` | 创建；`title` 留空时自动生成，按 `timezone` 显示本地时间 |
 | GET | `/api/v1/clipboard/items` | 列表：分页 / 类型筛选 / 按标题或内容搜索 / 排序 |
 | GET | `/api/v1/clipboard/items/{id}` | 详情 |
@@ -78,6 +78,23 @@ cd server
 
 > 最后两个接口**不在 `/openapi.json` 里**——`ws` 与 `upload` 尚未实现，所以不会出现在在线文档中。
 > 它们是已排期的约定目标，列在这里只为了避免下游以为漏掉。排期见 [`roadmap.md`](roadmap.md)。
+
+### 认证
+
+**`/api/v1/clipboard/*` 全部需要认证**：不带令牌一律返回 `401`，并带 `WWW-Authenticate: Bearer`。
+
+```http
+POST /api/v1/auth/login      {"username": "demo", "password": "demo1234"}
+→ 200 {"id": "...", "username": "demo", ..., "token": {"access_token": "<JWT>", ...}}
+
+GET /api/v1/clipboard/items
+Authorization: Bearer <JWT>
+```
+
+- 令牌为 HS256 JWT，`sub` 是用户 UUID，有效期由 `JWT_EXPIRE_MINUTES` 控制（默认 7 天）
+- 密码用 **bcrypt** 哈希（`pwdlib`）入库；`password_hash` **绝不出现在任何响应里**
+- `password` 上限是 **72 字节**（不是字符数）：24 个汉字即达上限，超出返回 `422`
+- 登录失败时"用户不存在"与"密码错误"返回**同一条提示**，避免枚举出已注册用户名
 
 ## 核心数据契约
 
@@ -108,6 +125,7 @@ class ClipboardItemResponse(BaseModel):
 - 搜索同时匹配 `title` 与 `content`
 - 分页：`page` 从 1 开始，`size` 默认 20、最大 100
 - 阶段一仅支持 `content_type = text`；`image` / `file` 属阶段二、阶段三
+- 认证：`/clipboard/*` 需要 `Authorization: Bearer <JWT>`；`UserResponse` 永不含 `password_hash`
 
 ---
 

@@ -3,8 +3,8 @@
 > **本文件记录动态进度。** AGENTS.md 只保存稳定约定（技术栈、契约、规范、开发顺序），
 > 凡是"每完成一步就要改一遍"的内容都放这里。
 
-**最后更新**：2026-10-04
-**当前进度**：第 1、2、3 步已完成 → **下一步：第 4 步（JWT 认证）**
+**最后更新**：2026-10-09
+**当前进度**：第 1、2、3、4 步已完成 → **下一步：第 5 步（WebSocket 实时同步）**
 
 ---
 
@@ -24,6 +24,7 @@
 - ✅ **第 1 步（FastAPI 骨架 + 数据契约）已完成**，验收记录见 git log `89a03e9`
 - ✅ **第 2 步（Web 端骨架 + 单端闭环）已完成**，验收记录见 git log `2aa5e49`
 - ✅ **第 3 步（接入数据库）已完成**，验收记录见 git log `7f055ed`、`b5cc62d`
+- ✅ **第 4 步（JWT 认证）已完成**，见下方「第 4 步踩坑记录」
 
 ### 🚧 第 3 步踩坑记录（永久保留，勿删）
 
@@ -35,19 +36,45 @@
 
 ### 🚧 第 3 步遗留（并入第 8 步）
 
-- [ ] `tests/conftest.py` 已写好，但 **pytest / pytest-asyncio / httpx 未安装**，尚无后端测试用例
+- [ ] `tests/conftest.py` 已写好，但 **pytest / pytest-asyncio 未安装**，尚无后端测试用例
+  （`httpx` 已在第 4 步装上，见下方 P5 处理记录）
 - [ ] 迁移的 `upgrade`/`downgrade` 往返验证（downgrade 后重新 upgrade）
 
-### ⬜ 第 4 步：JWT 认证
+### ✅ 第 4 步：JWT 认证已完成
 
-- [ ] `core/security.py`：密码哈希、JWT 签发/校验
-- [ ] 真实的注册、登录接口
-- [ ] 认证依赖 `get_current_user`
-- [ ] 剪贴板路由加认证保护
-- [ ] Web 端登录页，token 存 localStorage
+- ✅ `core/security.py`：bcrypt 密码哈希（`pwdlib`）、JWT 签发/校验（`PyJWT`）
+- ✅ 真实的注册、登录接口（注册落库 + 唯一性校验，登录支持用户名或邮箱）
+- ✅ 认证依赖 `get_current_user`（解析 `Authorization: Bearer`，失败 401 + `WWW-Authenticate`）
+- ✅ 剪贴板路由加认证保护（本步骤前它就已经依赖 `CurrentUser`，只差真实实现）
+- ✅ Web 端登录/注册页（`components/LoginPanel.vue`）、token 存 localStorage、
+  401 自动登出回到登录页
 
-**完成标准**：未带 token 请求返回 401，带 token 正常。
-**开工前置**：见 P5（passlib/bcrypt 兼容性）。
+**完成标准**：未带 token 请求返回 401，带 token 正常。**已达成**——后端进程内验收覆盖
+401/200/409/422，Web e2e 20/20 通过（含 4 个新增认证用例）。
+
+#### 🚧 第 4 步踩坑记录（永久保留，勿删）
+
+1. **P5 的真实根因不是 bcrypt 版本冲突，而是 Python 3.13 移除了 `crypt` 模块**
+   （PEP 594 的 19 个 dead batteries 之一）。`passlib` 依赖 `crypt`，import 阶段就
+   `ModuleNotFoundError`。**所以 document 里"pin bcrypt==4.0.1"这条建议是死路**——
+   根本走不到调用 bcrypt 那一步。已改用为 Python 3.13+ 而生的 `pwdlib`。
+2. **`pwdlib` 的 `PasswordHash.recommended()` 只返回 Argon2**，本项目装的是
+   `pwdlib[bcrypt]`，调它会抛 `HasherNotAvailable`。必须显式
+   `PasswordHash((BcryptHasher(rounds=12),))`。
+3. **bcrypt 限制的是 72 字节，不是 72 字符**。Schema 里原先只写 `max_length=72`（字符），
+   24 个汉字（=72 字节）刚好卡线、25 个汉字就会在哈希阶段抛错变成 500。
+   已加按 UTF-8 字节数的 `field_validator`，请求侧直接 422。
+4. **`AuthResponse` 是扁平结构**：用户对象在 `token.user` 上。Web 端 `userStore` 原先
+   把整个 `result` 赋给了 `user`，登录后界面会拿不到用户名。
+5. **401 拦截器要排除 `/auth/login` 与 `/auth/register` 自身**，
+   否则用户在登录页输错一次密码就会触发"全局登出"。
+6. 默认 `JWT_SECRET` 若短于 32 字节，PyJWT 会发 `InsecureKeyLengthWarning`
+   （RFC 7518 3.2 建议 HS256 密钥不短于 32 字节），故开发默认值也保持 32 字节以上。
+7. **顶部提示必须有生命周期**（用户实测发现：登出后"已退出登录"一直不消失）。
+   根因是提示**只在被下一条提示覆盖时才变**，而登出后界面停在登录页、
+   没有任何后续操作能覆盖它。同类缺陷也影响错误提示（同步失败会永久挂着）。
+   已抽成 `web/src/composables/useNotice.ts`：成功提示 3s、错误 8s 自动消失，
+   并在登录成功时主动清除，配 `web/tests/notice.test.ts` 4 个回归用例。
 
 ### ⬜ 第 5 步：WebSocket 实时同步
 
@@ -122,12 +149,17 @@
 - **第 3 步后 AGENTS.md 第 6 节已明确记录该约束（不再藏在"后期风险"里）**，
   完整协议约定见 [`ws-protocol.md`](ws-protocol.md)
 
-### 🟡 P5 · 第 4 步依赖有已知兼容问题
+### ✅ P5 · 第 4 步认证依赖（已解决）
 
-AGENTS.md 第 2 节原先指定 `python-jose + passlib[bcrypt]`：
+AGENTS.md 第 2 节原先指定 `python-jose + passlib[bcrypt]`。**该组合在本机根本装不起来**：
 
-- `passlib 1.7.4` 已停止维护，与 `bcrypt 4.x` 存在版本探测告警/报错
-- 处理：改用 `pwdlib`，或显式 pin `bcrypt==4.0.1`。偏离 AGENTS.md 前需确认
+- 表面症状：`passlib 1.7.4` 与 `bcrypt 4.x` 的版本探测冲突
+- **真实根因**：Python 3.13 按 PEP 594 移除了标准库 **`crypt`** 模块，而 `passlib` 依赖它，
+  `import passlib` 阶段即 `ModuleNotFoundError`
+- ⚠️ **所以"pin `bcrypt==4.0.1`"是死路**：根本走不到调用 bcrypt 那一步
+- **处理**：改用为 Python 3.13+ 而生的 `pwdlib[bcrypt]==0.3.1` + `PyJWT==2.15.1`
+  （只用 HS256 对称签名，不需要 `python-jose` 的算法矩阵）
+- 顺带装上 `httpx`（第 8 步后端测试也要用），已用于第 4 步的进程内验收
 
 ### 🟡 P6 · WS token 走 query string 会被日志记录
 
@@ -189,7 +221,9 @@ AGENTS.md 第 2 节原先指定 `python-jose + passlib[bcrypt]`：
 
 ## 下一步行动
 
-1. **第 4 步（JWT 认证）**：先定 `pwdlib` 还是 pin `bcrypt`（P5），再动 `core/security.py`
+1. **第 5 步（WebSocket 实时同步）**：开工前必须先决定**单 worker 还是 Redis Pub/Sub**（P3），
+   并处理 `ws?token=` 的**日志脱敏**（P6）。协议见 [`ws-protocol.md`](ws-protocol.md)。
 2. **P2 剩余项**：给 Web e2e 加一个指向 `clipboard_test` 的测试后端实例，
    让测试不再重置开发库
-3. **第 8 步预留**：安装 `pytest pytest-asyncio httpx`，为 `tests/conftest.py` 补测试用例
+3. **第 8 步预留**：安装 `pytest`、`pytest-asyncio`（`httpx` 已在第 4 步装上），
+   为 `tests/conftest.py` 补测试用例

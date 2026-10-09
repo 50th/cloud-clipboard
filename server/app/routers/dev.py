@@ -44,7 +44,9 @@ SEED_ITEMS: list[tuple[str, str]] = [
     ),
 )
 async def reset_store(session: AsyncSession = Depends(get_db)) -> MessageResponse:
-    user = await user_crud.ensure_demo_user(session)
+    # reset_password=True：本地重置后演示账号始终能用配置里的口令登录，
+    # 避免"改了密码就再进不去"的死角。
+    user = await user_crud.ensure_demo_user(session, reset_password=True)
     await clipboard_crud.clear_items(session, user.id)
     for title, content in SEED_ITEMS:
         await clipboard_crud.create_item(

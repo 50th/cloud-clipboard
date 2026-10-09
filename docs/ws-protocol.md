@@ -74,7 +74,9 @@ ws://localhost:8000/api/v1/clipboard/ws?token=<JWT>
 
 ```powershell
 # ⚠️ 端点与 `web/src/composables/useWebSocket.ts` 的连接逻辑均在第 5 步实现，当前执行会失败。
-# 需先取到 token（第 4 步接入 JWT 前可随便填）
+# token 必须是真实 JWT（认证已接入）：
+#   $body = @{ username='demo'; password='demo1234' } | ConvertTo-Json
+#   (Invoke-RestMethod -Uri http://127.0.0.1:8000/api/v1/auth/login -Method Post -Body $body -ContentType 'application/json').token.access_token
 pnpm dlx wscat -c "ws://127.0.0.1:8000/api/v1/clipboard/ws?token=<JWT>"
 ```
 

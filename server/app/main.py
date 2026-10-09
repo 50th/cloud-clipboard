@@ -19,7 +19,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import settings
+from app.core.config import assert_production_secret, settings
 from app.db.session import dispose_engine, ping
 from app.routers import auth, clipboard, dev
 
@@ -27,8 +27,8 @@ TAGS_METADATA: list[dict[str, Any]] = [
     {
         "name": "认证",
         "description": (
-            "注册、登录、获取当前用户。**第 4 步接入真实 JWT 后**才会校验凭证；"
-            "当前所有接口都返回配置里的演示用户。"
+            "注册、登录、获取当前用户。登录后返回 JWT，"
+            "后续请求需在 `Authorization: Bearer <token>` 中携带。"
         ),
     },
     {
@@ -52,6 +52,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     第 5 步将在此初始化 Redis 订阅。
     """
     print(f"[startup] {settings.APP_NAME} v{settings.APP_VERSION} ({settings.APP_ENV})")
+    # 生产环境若仍用开发默认密钥，直接拒绝启动（宁可起不来，也不要弱密钥上线）
+    assert_production_secret()
     try:
         info = await ping()
         print(f"[startup] 数据库已连接: {info['database']} · {info['version']}")

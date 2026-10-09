@@ -131,8 +131,9 @@ $env:PYTHONUTF8='1'                  # Windows 上跑 Alembic 建议设置（见
 
 访问 <http://127.0.0.1:8000/docs> 查看 API 文档。
 
-> ⚠️ **`init_db` 不能跳过**：在接入真实登录之前，所有请求都归属 `.env` 里配置的演示用户，
-> 该用户不存在时接口会返回 503。
+> ⚠️ **`init_db` 不能跳过**：它负责播种演示账号 `demo`（口令由 `DEMO_PASSWORD` 控制）。
+> 真实登录已接入，演示用户不再享有"免登录"特权——不播种就没有可用的本地账号，
+> 需要自己走 `/api/v1/auth/register` 注册。
 > 该脚本末尾带 `if __name__ == "__main__":`，并在内部把 `server/` 加进 `sys.path`，
 > 所以 `-m scripts.init_db` 这种模块方式可以直接用；等价的直接运行方式是
 > `.\venv\Scripts\python.exe scripts\init_db.py`（同样在 `server/` 目录下执行）。
@@ -186,14 +187,15 @@ pnpm dev
 | `API_V1_PREFIX` | API 前缀 | `/api/v1` |
 | `DATABASE_URL` | PostgreSQL 连接串（容器宿主端口 5433） | `postgresql+asyncpg://clipboard:clipboard@127.0.0.1:5433/clipboard` |
 | `DB_ECHO` | 是否把每条 SQL 打进日志（排查用） | `false` |
-| `DEMO_USER_ID` | 演示用户 UUID（第 4 步接入真实登录前，所有请求都归属该用户） | 见 `.env.example` |
+| `DEMO_USER_ID` | 演示用户 UUID（本地开发/测试用，不再是"免登录"身份） | 见 `.env.example` |
 | `DEMO_USERNAME` | 演示用户名 | `demo` |
 | `DEMO_EMAIL` | 演示用户邮箱 | `demo@cloud-clipboard.dev` |
+| `DEMO_PASSWORD` | 演示账号登录口令（由 `init_db` / `dev/reset` 播种） | `demo1234` |
 | `CORS_ORIGINS` | 允许跨域的来源（JSON 数组或逗号分隔） | `["http://localhost:5273", ...]` |
 | `REDIS_URL` | Redis 连接串（第 5 步启用，当前注释掉） | - |
-| `JWT_SECRET` | JWT 密钥（第 4 步启用，生产必须修改） | - |
-| `JWT_ALGORITHM` | JWT 算法（第 4 步启用） | `HS256` |
-| `JWT_EXPIRE_MINUTES` | Token 有效期（分钟，第 4 步启用） | `10080`（7 天） |
+| `JWT_SECRET` | JWT 密钥。**生产必须替换**：`APP_ENV=production` 时若仍是默认值或短于 32 字符，后端会拒绝启动 | `dev-only-...`（开发用） |
+| `JWT_ALGORITHM` | JWT 算法 | `HS256` |
+| `JWT_EXPIRE_MINUTES` | Token 有效期（分钟） | `10080`（7 天） |
 | `TEST_DATABASE_URL` | 后端 pytest 用的独立测试库（第 8 步启用） | `...5433/clipboard_test` |
 
 > ⚠️ 本地要跑 `web` 的端到端测试（会调用 `dev/reset` 恢复种子数据）时，
@@ -206,7 +208,7 @@ pnpm dev
 |------|------|--------|
 | `VITE_API_BASE_URL` | 后端 API 地址 | `http://127.0.0.1:8000` |
 | `VITE_WS_URL` | WebSocket 地址（第 5 步启用） | `ws://127.0.0.1:8000` |
-| `VITE_AUTH_TOKEN` | 认证令牌（第 4 步启用；留空则后端按演示用户处理） | 空 |
+| `VITE_AUTH_TOKEN` | 认证令牌覆盖值（一般留空，令牌由登录后写入 localStorage；仅自动化测试需要预置） | 空 |
 
 > 只有 `VITE_` 前缀的变量会被注入前端代码。
 
@@ -239,8 +241,8 @@ pnpm dev
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `POST` | `/api/v1/auth/register` | 用户注册（**尚未校验凭证**，返回演示用户 + 假 token） |
-| `POST` | `/api/v1/auth/login` | 用户登录（同上；第 4 步接真实 JWT） |
+| `POST` | `/api/v1/auth/register` | 用户注册（落库 + 唯一性校验，**直接返回令牌**） |
+| `POST` | `/api/v1/auth/login` | 用户登录（`username` 支持用户名或邮箱，错误统一 401） |
 | `GET` | `/api/v1/auth/me` | 当前用户 |
 | `POST` | `/api/v1/clipboard/items` | 创建剪贴板项（`title` 留空时自动生成，按 `timezone` 显示本地时间） |
 | `PATCH` | `/api/v1/clipboard/items/{id}` | 更新（自动保存复用草稿，避免中间态产生多行） |

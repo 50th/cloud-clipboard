@@ -80,16 +80,25 @@ pnpm run dev
 
 ```powershell
 pnpm run typecheck   # vue-tsc --noEmit
-pnpm test            # 端到端：真实 Pinia store + 真实后端，12 个用例
+pnpm test            # 全部测试：e2e（真实后端）+ 纯前端回归，24 个用例
 pnpm run build       # vue-tsc --noEmit && vite build
 ```
 
-`pnpm test` 用 Node 内置测试运行器 + 类型擦除直接跑 `tests/e2e.test.ts`，覆盖：
-健康检查、首屏列表、上传新增、**自动标题格式**、**自定义标题**、相同内容去重、
-**按标题/正文搜索**、排序、删除、清空、错误可读性。
+`pnpm test` 用 Node 内置测试运行器 + 类型擦除**直接跑 `tests/**/*.test.ts`**：
+
+- `tests/e2e.test.ts`：真实 Pinia store + 真实后端。先登录拿 JWT（认证已启用，不带令牌一律 401），
+  覆盖健康检查、**未认证返回 401**、登录与错误密码、首屏列表、上传新增、**自动标题格式**、
+  **自定义标题**、相同内容去重、**按标题/正文搜索**、排序、删除、清空、错误可读性。
+- `tests/notice.test.ts`：纯前端，无后端依赖。覆盖顶部提示的生命周期
+  （登出提示与错误提示必须**自动消失**、新提示不能被打断、`clearNotice` 立即收起）。
+
+> **需要后端的只有 `e2e.test.ts`**。若只想跑不依赖后端的回归：
+> `pnpm test -- tests/notice.test.ts`
 
 - 破坏性用例（清空、`dev/reset`）**默认跳过**，需显式开启：`$env:E2E_ALLOW_DESTRUCTIVE='1'; pnpm test`
 - 测试收尾会调用 `POST /api/v1/dev/reset` 恢复 4 条种子数据，跑完可直接接着手工验证
+- 演示账号由后端 `DEMO_USERNAME` / `DEMO_PASSWORD` 决定（默认 `demo` / `demo1234`），
+  可用 `VITE_E2E_USERNAME` / `VITE_E2E_PASSWORD` 覆盖
 - **剪贴板读写依赖浏览器 API，不在自动化范围内**，需按上一节手工验证
 
 ## 目录结构
@@ -105,7 +114,8 @@ web/
 ├── scripts/
 │   └── generate-api-types.mjs   # pnpm run gen:api 的入口
 ├── tests/
-│   └── e2e.test.ts              # 端到端闭环测试（驱动 store + client，与框架无关）
+│   ├── e2e.test.ts              # 端到端闭环测试（驱动 store + client，与框架无关，需后端）
+│   └── notice.test.ts           # 顶部提示生命周期回归测试（纯前端，无需后端）
 ├── src/
 │   ├── main.ts                  # 挂载应用 + 安装 Pinia
 │   ├── App.vue                  # 两栏布局 + 全局提示

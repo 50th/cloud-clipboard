@@ -30,7 +30,7 @@
 | ORM / 迁移 | SQLAlchemy 2.x（async）+ asyncpg + Alembic |
 | 时区数据 | tzdata：**Windows 没有系统时区数据库，`zoneinfo` 靠它才能解析 `Asia/Shanghai`**（缺失抛 `ZoneInfoNotFoundError`，创建剪贴板项直接 500）。注意：与 asyncpg 无关 |
 | 缓存 / 广播 | Redis —— ⬜ 未启用（第 5 步需要时引入） |
-| 认证 | ⚠️ **待定**：`pwdlib` 或 pin `bcrypt==4.0.1`（原定 `passlib[bcrypt]` 已停止维护、与 `bcrypt 4.x` 冲突）；⬜ 未引入，第 4 步开工前必须二选一并登记。详见 [`docs/roadmap.md`](docs/roadmap.md) 的 P5 |
+| 认证 | ✅ 已接入：`pwdlib[bcrypt]`（密码哈希）+ `PyJWT`（HS256 令牌）。**不用 `passlib`**：Python 3.13 按 PEP 594 移除了 `crypt` 模块，passlib 在 import 阶段就会失败（pin 老版本 bcrypt 也救不回来） |
 | Web 前端 | Vue 3 + TypeScript + Vite；状态管理 Pinia（setup store）；HTTP 客户端 Axios |
 | 鸿蒙 | ArkTS + ArkUI，API 12+ —— ⬜ 未创建（第 7 步） |
 
@@ -53,10 +53,10 @@ cloud-clipboard/
 ├── infra/                  # ✅ docker-compose.yml（Postgres 容器，宿主 5433）
 ├── scripts/                # ✅ verify_postgres.py（宿主侧连通性验证）
 ├── server/                 # 后端：app/{core,db,schemas,crud,routers,services} + alembic/ + tests/
-│   │                       #   core/security.py ⬜第4步；routers/ws.py、services/ws_manager.py ⬜第5步
+│   │                       #   core/security.py ✅（密码哈希 + JWT）；routers/ws.py、services/ws_manager.py ⬜第5步
 │   └── alembic.ini         # ⚠️ 必须保持纯 ASCII（见 §11）
-├── web/                    # 前端：src/{api,types,utils,stores,composables,components} + tests/e2e.test.ts
-│   │                       #   vite.config.ts 端口 5273（见 §12）；src/views/ ⬜第4步
+├── web/                    # 前端：src/{api,types,utils,stores,composables,components} + tests/*.test.ts
+│   │                       #   vite.config.ts 端口 5273（见 §12）；登录页是 components/LoginPanel.vue
 │   └── pnpm-workspace.yaml # ✅ allowBuilds 放行 esbuild 与 vue-demi
 └── harmony/                # ⬜ 第 7 步：鸿蒙 App（entry/src/main/ets/{pages,components,services,models}）
 ```
@@ -195,13 +195,14 @@ cloud-clipboard/
 
 改 Schema → 改路由 → 确认 `/docs` → `pnpm run gen:api` → 刷新 `docs/api.md`（详见 §4）
 
-### 修改会被端到端测试引入的模块
+### 修改会被测试引入的模块
 
-`tests/e2e.test.ts` **直接跑源码**（Node 类型擦除），不经过打包。因此：
+`tests/*.test.ts` **直接跑源码**（Node 类型擦除），不经过打包。因此：
 
 - `stores/`、`composables/`、`api/`、`utils/` 里的导入必须用 **`#src/*` 且带 `.ts` 扩展名**——
   Node 不读 tsconfig 的 `paths`，`@/xxx` 会被当裸包名报 `ERR_MODULE_NOT_FOUND`
 - 只有 `.vue` 组件与 `main.ts` 用 `@/*`
+- 新增测试文件放在 `web/tests/` 下、以 `.test.ts` 结尾即会被 `pnpm test` 收集
 - 改完跑 `pnpm test` 验证，别只跑 `typecheck`（`vue-tsc` 会通过但 Node 跑不起来）
 
 ### 添加/修改数据库模型

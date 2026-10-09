@@ -30,7 +30,7 @@ class User(Base):
     )
     username: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     email: Mapped[str] = mapped_column(String(254), unique=True, index=True)
-    # 第 4 步写入真实哈希；当前演示用户无密码
+    # 存 bcrypt 哈希（pwdlib）；NULL 表示该账号没有可用口令（如历史遗留数据）
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     nickname: Mapped[str | None] = mapped_column(String(64), nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)

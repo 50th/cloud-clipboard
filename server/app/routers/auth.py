@@ -1,7 +1,7 @@
-"""认证路由。
+"""认证路由：注册、登录、获取当前用户。
 
-第 1/2 步：不校验凭证，固定返回配置里的演示用户（便于 Web 端先跑通闭环）。
-第 4 步：替换为真实的密码哈希校验与 JWT 签发。
+分层：本模块负责 HTTP 语义（解析请求头、抛 401、查库取用户），
+密码哈希与 JWT 的纯逻辑在 `app/core/security.py`。
 """
 
 from __future__ import annotations
@@ -9,9 +9,10 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
+from app.core import security
 from app.crud import user as user_crud
 from app.db.models.user import User
 from app.db.session import get_db
@@ -25,9 +26,26 @@ from app.schemas.user import (
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+
+# auto_error=False：缺少 Authorization 头时不直接 403，交给我们统一抛 401 并带上
+# WWW-Authenticate 头（RFC 6750 要求）。
+_bearer_scheme = HTTPBearer(auto_error=False, description="JWT，形如 `Bearer <token>`")
+
+_UNAUTHORIZED_HEADERS = {"WWW-Authenticate": "Bearer"}
+
+
+def _unauthorized(detail: str) -> HTTPException:
+    """构造 401，并带上标准 WWW-Authenticate 头。"""
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=detail,
+        headers=_UNAUTHORIZED_HEADERS,
+    )
+
 
 def to_user_response(user: User) -> UserResponse:
-    """把 ORM 用户对象转换为对外响应模型。"""
+    """把 ORM 用户对象转换为对外响应模型。**绝不包含 password_hash**。"""
     return UserResponse(
         id=str(user.id),
         username=user.username,
@@ -38,65 +56,109 @@ def to_user_response(user: User) -> UserResponse:
     )
 
 
-async def get_current_user(session: Annotated[AsyncSession, Depends(get_db)]) -> User:
-    """认证依赖。
+def issue_token(user: User) -> TokenResponse:
+    """为用户签发访问令牌。"""
+    return TokenResponse(
+        access_token=security.create_access_token(user.id),
+        token_type="bearer",
+        expires_in=security.access_token_expires_in(),
+        user=to_user_response(user),
+    )
 
-    当前返回配置里的演示用户；第 4 步改为解析
-    `Authorization: Bearer <token>`，无效时抛 401。
+
+async def get_current_user(
+    session: DbSession,
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)
+    ] = None,
+) -> User:
+    """认证依赖：解析 `Authorization: Bearer <token>` 并取出对应用户。
+
+    401 的三种情形：
+    - 完全没有带 Authorization 头
+    - 令牌无效 / 过期 / 签名不符
+    - 令牌有效但用户已不存在（如已被删除）
+
+    注意：这里**不做**"token 里的用户名与库中是否一致"之类的额外校验，
+    `sub` 是唯一事实来源。
     """
-    user = await user_crud.get_by_id(session, settings.DEMO_USER_ID)
+    if credentials is None or not credentials.credentials:
+        raise _unauthorized("未提供访问令牌，请在 Authorization 头中携带 Bearer token")
+
+    subject = security.get_token_subject(credentials.credentials)
+    if subject is None:
+        raise _unauthorized("访问令牌无效或已过期")
+
+    user = await user_crud.get_by_id(session, subject)
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="演示用户不存在，请先执行 python -m scripts.init_db",
-        )
+        raise _unauthorized("访问令牌对应的用户不存在")
+
     return user
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
-def _fake_token(user: User) -> TokenResponse:
-    """签发假 JWT（仅用于打通前端流程，不具备任何安全性）。"""
-    return TokenResponse(
-        access_token=f"fake-jwt-token-for.{user.username}.step1",
-        token_type="bearer",
-        expires_in=7 * 24 * 3600,
-        user=to_user_response(user),
-    )
-
-
 @router.post(
     "/register",
     response_model=AuthResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="用户注册（假数据）",
-    description="第 1 步不落库、不校验唯一性，固定返回演示用户与假 token。",
+    summary="用户注册",
+    description=(
+        "创建账号并**直接返回令牌**，前端无需再登录一次。\n\n"
+        "`password` 上限 72 字节是 bcrypt 的硬限制（超出会抛错，不会被截断）。"
+    ),
+    responses={409: {"description": "用户名或邮箱已被占用"}},
 )
-async def register(payload: UserRegisterRequest, current_user: CurrentUser) -> AuthResponse:
-    user = to_user_response(current_user).model_copy(
-        update={"username": payload.username, "email": payload.email}
+async def register(payload: UserRegisterRequest, session: DbSession) -> AuthResponse:
+    """注册新用户：用户名与邮箱都要求全局唯一。"""
+    if await user_crud.get_by_username(session, payload.username) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"用户名已被占用: {payload.username}",
+        )
+    if await user_crud.get_by_email(session, payload.email) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"邮箱已被占用: {payload.email}",
+        )
+
+    user = await user_crud.create(
+        session,
+        username=payload.username,
+        email=payload.email,
+        password_hash=security.hash_password(payload.password),
     )
-    return AuthResponse(**user.model_dump(), token=_fake_token(current_user))
+    return AuthResponse(**to_user_response(user).model_dump(), token=issue_token(user))
 
 
 @router.post(
     "/login",
     response_model=AuthResponse,
-    summary="用户登录（假数据）",
-    description="任意用户名密码均返回演示用户与假 token；第 4 步接入真实校验。",
+    summary="用户登录",
+    description="`username` 支持用户名或邮箱。凭证错误统一返回 401，不区分是哪一个错。",
+    responses={401: {"description": "用户名或密码错误"}},
 )
-async def login(current_user: CurrentUser) -> AuthResponse:
-    return AuthResponse(
-        **to_user_response(current_user).model_dump(), token=_fake_token(current_user)
-    )
+async def login(payload: UserLoginRequest, session: DbSession) -> AuthResponse:
+    """校验凭证并签发令牌。"""
+    user = await user_crud.get_by_username(session, payload.username)
+    if user is None:
+        user = await user_crud.get_by_email(session, payload.username)
+
+    # 用户不存在与密码错误返回同一个提示：避免枚举出哪些用户名已注册。
+    if user is None or not security.verify_password(payload.password, user.password_hash):
+        raise _unauthorized("用户名或密码错误")
+
+    return AuthResponse(**to_user_response(user).model_dump(), token=issue_token(user))
 
 
 @router.get(
     "/me",
     response_model=UserResponse,
     summary="获取当前用户",
-    description="当前返回演示用户；第 4 步接入 JWT 后返回该 token 对应的用户。",
+    description="依据 `Authorization: Bearer <token>` 返回对应账号；令牌无效返回 401。",
+    responses={401: {"description": "未提供令牌，或令牌无效/已过期"}},
 )
 async def me(current_user: CurrentUser) -> UserResponse:
+    """返回当前登录用户。"""
     return to_user_response(current_user)

@@ -111,17 +111,22 @@ $env:PYTHONUTF8 = '1'
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/v1/auth/register` | 注册（假数据） |
-| POST | `/api/v1/auth/login` | 登录，返回假 token |
-| GET | `/api/v1/auth/me` | 当前用户 |
+| POST | `/api/v1/auth/register` | 注册（落库 + 唯一性校验，**直接返回令牌**；重名/重邮箱 409） |
+| POST | `/api/v1/auth/login` | 登录（`username` 支持用户名或邮箱，错误统一 401） |
+| GET | `/api/v1/auth/me` | 当前用户（需 `Authorization: Bearer <token>`） |
 | POST | `/api/v1/clipboard/items` | 创建（含内容去重） |
 | GET | `/api/v1/clipboard/items` | 列表（分页/筛选/按标题或内容搜索/排序） |
 | GET | `/api/v1/clipboard/items/{id}` | 详情 |
+| PATCH | `/api/v1/clipboard/items/{id}` | 更新（只改传入字段） |
 | DELETE | `/api/v1/clipboard/items/{id}` | 删除单条 |
 | DELETE | `/api/v1/clipboard/items` | 清空 |
 | POST | `/api/v1/dev/reset` | ⚠️ 删数据重建种子（仅 dev 路由开启时） |
 | GET | `/api/v1/dev/db` | 数据库连通性探测（确认连的是哪个库） |
 | GET | `/health` | 健康检查 |
+
+> **`/api/v1/clipboard/*` 全部需要认证**：不带令牌返回 `401`。
+> 本地可用演示账号登录：`demo` / `demo1234`（口令由 `DEMO_PASSWORD` 配置，
+> 由 `scripts/init_db` 与 `dev/reset` 播种）。
 
 ## 契约改动流程
 

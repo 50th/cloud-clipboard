@@ -86,7 +86,7 @@ export const http = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// 自动附加 Bearer token（未登录时后端按演示用户处理）
+// 自动附加 Bearer token。第 4 步起剪贴板接口必须带令牌，缺失会被后端 401。
 http.interceptors.request.use((config) => {
   const bearer = readEnv('VITE_AUTH_TOKEN') || getToken()
   if (bearer) {
@@ -94,6 +94,37 @@ http.interceptors.request.use((config) => {
   }
   return config
 })
+
+/**
+ * 401 处理器。
+ *
+ * 用回调注册而不是在这里直接 import userStore：store 会 import 本模块，
+ * 反向依赖会形成循环。由 `main.ts` 在 Pinia 就绪后注册。
+ */
+type UnauthorizedHandler = () => void
+let onUnauthorized: UnauthorizedHandler | null = null
+
+/** 注册"令牌失效"回调（401 时触发，用于清状态并回到登录页）。 */
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+  onUnauthorized = handler
+}
+
+http.interceptors.response.use(
+  (response) => response,
+  (error: unknown) => {
+    // 登录/注册本身返回 401 属于"凭证错误"，交给调用方展示，
+    // 不能触发全局登出（否则用户在登录页输错密码会被反复重置）。
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      const url = error.config?.url ?? ''
+      const isAuthEntry = url.includes('/auth/login') || url.includes('/auth/register')
+      if (!isAuthEntry) {
+        setToken(null)
+        onUnauthorized?.()
+      }
+    }
+    return Promise.reject(error)
+  },
+)
 
 /** 从任意异常中提取对用户友好的错误文本。 */
 export function getErrorMessage(error: unknown): string {
@@ -126,19 +157,19 @@ export function getErrorMessage(error: unknown): string {
 
 /** 认证接口 */
 export const authApi = {
-  /** 获取当前用户（第 1 步后端固定返回演示用户） */
+  /** 获取当前用户（需已登录，否则 401） */
   me: async (): Promise<User> => {
     const { data } = await http.get<User>('/auth/me')
     return data
   },
 
-  /** 登录（第 1 步后端返回假 token） */
+  /** 登录：`username` 支持用户名或邮箱，返回 JWT 与用户信息 */
   login: async (username: string, password: string): Promise<AuthResponse> => {
     const { data } = await http.post<AuthResponse>('/auth/login', { username, password })
     return data
   },
 
-  /** 注册 */
+  /** 注册：成功即返回令牌，无需再登录一次 */
   register: async (
     username: string,
     email: string,

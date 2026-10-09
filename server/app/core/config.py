@@ -52,10 +52,22 @@ class Settings(BaseSettings):
     # 本配置是前端未传或传了非法值时的兜底。
     DEFAULT_TIMEZONE: str = "Asia/Shanghai"
 
-    # --- 演示用户（第 4 步接入真实登录前，所有请求都归属该用户）---
+    # --- JWT 认证 ---
+    # ⚠️ 默认值仅用于本地开发。生产必须通过 .env 覆盖，否则任何人都能签发合法 token。
+    # 启动时 `assert_production_secret()` 会拦下"生产环境仍用默认密钥"的情况。
+    # 长度按 RFC 7518 3.2：HS256 的密钥不应短于 32 字节，否则 PyJWT 会发
+    # InsecureKeyLengthWarning，故开发默认值也保持 32 字节以上。
+    JWT_SECRET: str = "dev-only-insecure-secret-change-me-in-production-32b"
+    JWT_ALGORITHM: str = "HS256"
+    # 默认 7 天（10080 分钟）
+    JWT_EXPIRE_MINUTES: int = 10080
+
+    # --- 演示用户（仅用于本地开发/测试播种；真实登录已接入，不再是兜底身份）---
     DEMO_USER_ID: str = "3f1a9c62-7d4b-4e18-9f2a-6b0c5d8e1a34"
     DEMO_USERNAME: str = "demo"
     DEMO_EMAIL: str = "demo@cloud-clipboard.dev"
+    # 演示用户的初始密码，供 init_db 播种一个可直接登录的演示账号。
+    DEMO_PASSWORD: str = "demo1234"
 
     # --- CORS ---
     # Web 端开发服务器（Vite）+ 鸿蒙调试端
@@ -81,3 +93,21 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+# 默认密钥（仅限本地开发）。生产环境仍在用它就必须拦下。
+DEFAULT_JWT_SECRET = "dev-only-insecure-secret-change-me-in-production-32b"
+
+
+def assert_production_secret() -> None:
+    """生产环境下若仍使用默认 JWT 密钥，直接拒绝启动。
+
+    失败即退出胜过"悄悄用弱密钥上线"：默认密钥是公开可见的，
+    任何人都能伪造出通过校验的 token。
+    """
+    if settings.APP_ENV != "production":
+        return
+    if settings.JWT_SECRET == DEFAULT_JWT_SECRET or len(settings.JWT_SECRET) < 32:
+        raise RuntimeError(
+            "生产环境必须通过 .env 设置足够长的 JWT_SECRET（至少 32 字符），"
+            "当前仍是开发默认值。"
+        )

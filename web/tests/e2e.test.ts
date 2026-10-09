@@ -30,8 +30,23 @@ const memory = new Map<string, string>()
 // Pinia 需要一个激活实例，才能在组件外使用 store
 setActivePinia(createPinia())
 
-const { API_BASE_URL, clipboardApi, devApi } = await import('#src/api/client.ts')
+const { API_BASE_URL, authApi, clipboardApi, devApi, setToken } = await import(
+  '#src/api/client.ts'
+)
 const { useClipboardStore, PAGE_SIZE } = await import('#src/stores/clipboardStore.ts')
+
+/**
+ * 先登录拿 JWT：第 4 步起剪贴板接口全部受保护，不带令牌一律 401。
+ *
+ * 用演示账号（由 `scripts/init_db` 或 `dev/reset` 按 DEMO_PASSWORD 播种），
+ * 这样测试数据仍归属 demo 用户，与手工验证看到的一致。
+ * 可用 VITE_E2E_USERNAME / VITE_E2E_PASSWORD 覆盖。
+ */
+const E2E_USERNAME = process.env.VITE_E2E_USERNAME ?? 'demo'
+const E2E_PASSWORD = process.env.VITE_E2E_PASSWORD ?? 'demo1234'
+
+const loginResult = await authApi.login(E2E_USERNAME, E2E_PASSWORD)
+setToken(loginResult.token.access_token)
 
 const store = useClipboardStore()
 const state = () => useClipboardStore()
@@ -107,6 +122,33 @@ describe('Web 端单端闭环（真实后端）', () => {
     const response = await fetch(`${API_BASE_URL}/health`)
     assert.equal(response.status, 200)
     assert.deepEqual(await response.json(), { status: 'ok' })
+  })
+
+  it('认证已启用：不带令牌访问剪贴板返回 401', async () => {
+    // 刻意绕过 http 拦截器，直接发裸请求验证后端确实在保护接口
+    const response = await fetch(`${API_BASE_URL}/api/v1/clipboard/items`)
+    assert.equal(response.status, 401, '未带令牌必须 401，而不是回退到演示用户')
+  })
+
+  it('登录返回可用令牌，且 /auth/me 能解析出用户', async () => {
+    assert.ok(loginResult.token.access_token.length > 0, '应拿到非空 JWT')
+    assert.equal(loginResult.token.token_type, 'bearer')
+    assert.ok(loginResult.token.expires_in > 0)
+
+    const me = await authApi.me()
+    assert.equal(me.username, E2E_USERNAME, '/auth/me 应返回登录用户')
+    assert.ok(!('password_hash' in me), '响应绝不能带 password_hash')
+  })
+
+  it('错误密码登录返回 401', async () => {
+    await assert.rejects(
+      () => authApi.login(E2E_USERNAME, 'definitely-not-the-password'),
+      (error: unknown) => {
+        const status = (error as { response?: { status?: number } }).response?.status
+        assert.equal(status, 401)
+        return true
+      },
+    )
   })
 
   it('首屏拉取列表：返回分页元信息，且每条都有标题', async () => {
