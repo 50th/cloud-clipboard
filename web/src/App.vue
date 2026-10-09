@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 
-import { API_BASE_URL, getErrorMessage } from '@/api/client'
+import LoginPanel from '@/components/LoginPanel.vue'
 import ClipboardHistory from '@/components/ClipboardHistory.vue'
 import InputPanel from '@/components/InputPanel.vue'
+import { API_BASE_URL, getErrorMessage } from '@/api/client'
 import { useClipboard } from '@/composables/useClipboard'
+import { useNotice } from '@/composables/useNotice'
 import { useClipboardStore } from '@/stores/clipboardStore'
 import { useUserStore } from '@/stores/userStore'
 
-type Notice = { kind: 'ok' | 'err'; text: string } | null
+// 提示带自动消失：登出后停在登录页，没有后续操作能覆盖它，
+// 否则"已退出登录"会一直挂着（错误提示同理）。
+const { notice, showNotice, clearNotice } = useNotice()
 
-const notice = ref<Notice>(null)
 const searchInput = ref('')
 
 // 单实例：剪贴板能力探测与「同步剪贴板」都由这一个 composable 提供
@@ -22,11 +25,26 @@ const userStore = useUserStore()
 const search = computed(() => store.search)
 const total = computed(() => store.total)
 const user = computed(() => userStore.user)
+const isAuthenticated = computed(() => userStore.isAuthenticated)
 
-// 首屏：拉取当前用户 + 列表
-onMounted(() => {
-  void userStore.loadCurrentUser()
-  void store.fetchItems()
+// 首屏：先用本地 token 恢复会话，成功后再拉列表（未登录时拉列表必然 401）
+onMounted(async () => {
+  await userStore.restoreSession()
+  if (isAuthenticated.value) {
+    await store.fetchItems()
+  }
+})
+
+// 登录/登出后同步剪贴板列表，避免上一个账号的数据残留
+watch(isAuthenticated, async (loggedIn) => {
+  if (loggedIn) {
+    // 登录成功时清掉上一条提示（通常是"已退出登录"），否则会带到新会话里
+    clearNotice()
+    await store.fetchItems()
+  } else {
+    store.reset()
+    searchInput.value = ''
+  }
 })
 
 // 搜索防抖：停止输入 300ms 后查后端
@@ -40,14 +58,19 @@ watch(searchInput, (value) => {
   }, 300)
 })
 
+function handleLogout() {
+  userStore.logout()
+  showNotice({ kind: 'ok', text: '已退出登录' })
+}
+
 async function handleSync() {
   const result = await syncFromClipboard()
-  notice.value = { kind: result.ok ? 'ok' : 'err', text: result.message }
+  showNotice({ kind: result.ok ? 'ok' : 'err', text: result.message })
   return result
 }
 
 function handleNotice(next: { kind: 'ok' | 'err'; text: string }) {
-  notice.value = next
+  showNotice(next)
 }
 
 async function handleClearAll() {
@@ -59,9 +82,9 @@ async function handleClearAll() {
   }
   try {
     const removed = await store.clearAll()
-    notice.value = { kind: 'ok', text: `已清空 ${removed} 条记录` }
+    showNotice({ kind: 'ok', text: `已清空 ${removed} 条记录` })
   } catch (error) {
-    notice.value = { kind: 'err', text: getErrorMessage(error) }
+    showNotice({ kind: 'err', text: getErrorMessage(error) })
   }
 }
 </script>
@@ -69,38 +92,66 @@ async function handleClearAll() {
 <template>
   <div class="app">
     <header class="app__header">
-      <h1>云剪贴板</h1>
+      <div class="app__titlebar">
+        <h1>云剪贴板</h1>
+        <button
+          v-if="isAuthenticated"
+          type="button"
+          class="btn btn--small"
+          @click="handleLogout"
+        >
+          退出登录
+        </button>
+      </div>
       <p class="app__subtitle">
         后端 {{ API_BASE_URL }}
         <template v-if="user"> · 当前用户 {{ user.username }}</template>
-        <template v-else> · 演示用户</template>
+        <template v-else> · 未登录</template>
       </p>
     </header>
-
-    <p v-if="!supported" class="warn">
-      当前页面无法读取系统剪贴板（浏览器要求 https 或 localhost + 用户点击），
-      可直接在右侧输入框粘贴内容。
-    </p>
-    <p v-else-if="needsManualInput" class="warn">
-      读取剪贴板被拒绝，请检查浏览器权限，或在右侧输入框手动粘贴。
-    </p>
 
     <p v-if="notice" :class="['notice', notice.kind === 'ok' ? 'notice--ok' : 'notice--err']">
       {{ notice.text }}
     </p>
 
-    <!-- 左：历史记录（含搜索/排序/刷新/清空）  右：剪贴板输入 -->
-    <div class="layout">
-      <ClipboardHistory
-        v-model:search-input="searchInput"
-        @clear-all="handleClearAll"
-      />
-      <InputPanel :on-sync-clipboard="handleSync" @notice="handleNotice" />
-    </div>
+    <!-- 未登录：只显示登录/注册；JWT 未接入前这里曾是"演示用户"兜底入口 -->
+    <template v-if="userStore.restoring">
+      <p class="loading">正在恢复登录状态…</p>
+    </template>
 
-    <footer class="footer">
-      <template v-if="search">筛选：{{ search }} · </template>
-      阶段一 · 第 2 步：Web 端骨架与单端闭环（读取剪贴板 → 上传 → 列表展示 → 点击复制）
-    </footer>
+    <LoginPanel v-else-if="!isAuthenticated" @notice="handleNotice" />
+
+    <template v-else>
+      <p v-if="!supported" class="warn">
+        当前页面无法读取系统剪贴板（浏览器要求 https 或 localhost + 用户点击），
+        可直接在右侧输入框粘贴内容。
+      </p>
+      <p v-else-if="needsManualInput" class="warn">
+        读取剪贴板被拒绝，请检查浏览器权限，或在右侧输入框手动粘贴。
+      </p>
+
+      <!-- 左：历史记录（含搜索/排序/刷新/清空）  右：剪贴板输入 -->
+      <div class="layout">
+        <ClipboardHistory
+          v-model:search-input="searchInput"
+          @clear-all="handleClearAll"
+        />
+        <InputPanel :on-sync-clipboard="handleSync" @notice="handleNotice" />
+      </div>
+
+      <footer class="footer">
+        <template v-if="search">筛选：{{ search }} · </template>
+        阶段一 · 第 4 步：JWT 认证已接入（未登录请求返回 401）
+      </footer>
+    </template>
   </div>
 </template>
+
+<style scoped>
+.app__titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+</style>
