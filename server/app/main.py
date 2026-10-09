@@ -20,8 +20,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import assert_production_secret, settings
+from app.core.logging_utils import install_log_redaction
+from app.core.single_worker import assert_single_worker, release_single_worker
 from app.db.session import dispose_engine, ping
-from app.routers import auth, clipboard, dev
+from app.routers import auth, clipboard, dev, ws
 
 TAGS_METADATA: list[dict[str, Any]] = [
     {
@@ -54,6 +56,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     print(f"[startup] {settings.APP_NAME} v{settings.APP_VERSION} ({settings.APP_ENV})")
     # 生产环境若仍用开发默认密钥，直接拒绝启动（宁可起不来，也不要弱密钥上线）
     assert_production_secret()
+    # WebSocket 广播是进程内实现：多 worker 会导致"数据一致但推送丢事件"。
+    # 用单实例锁端口检测，CLI 的 --workers 与环境变量两条路径都能拦下。
+    lock_port = assert_single_worker()
+    print(f"[startup] 单实例守卫已生效（锁端口 {lock_port}）；WebSocket 广播依赖单 worker")
+    # WS 的 token 走 query string，会被访问日志明文记录，必须脱敏。
+    # 主防线是端点里的 scrub_scope_token（日志里压根不出现 token），
+    # 这里再包一层 formatter 兜住其他 logger。
+    install_log_redaction()
     try:
         info = await ping()
         print(f"[startup] 数据库已连接: {info['database']} · {info['version']}")
@@ -63,6 +73,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     print("[startup] Swagger UI: http://127.0.0.1:8000/docs")
     yield
     await dispose_engine()
+    release_single_worker()
     print("[shutdown] bye")
 
 
@@ -91,7 +102,8 @@ def create_app() -> FastAPI:
     # 业务路由统一挂在 /api/v1 下
     application.include_router(auth.router, prefix=settings.API_V1_PREFIX)
     application.include_router(clipboard.router, prefix=settings.API_V1_PREFIX)
-    # 第 5 步在此注册 WebSocket 路由：application.include_router(ws.router, ...)
+    # WebSocket 实时同步（与 clipboard 路由同为 /clipboard 前缀，挂在 /clipboard/ws）
+    application.include_router(ws.router, prefix=settings.API_V1_PREFIX)
 
     # 开发/测试辅助路由。受独立的 ENABLE_DEV_ROUTES 控制，**不复用 DEBUG**：
     # /dev/reset 会删数据，绝不能因为调试开了 DEBUG 就跟着可用。

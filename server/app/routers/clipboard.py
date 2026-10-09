@@ -1,10 +1,15 @@
 """剪贴板路由。
 
 路由层只做参数校验与调用，业务/数据逻辑在 `app/crud/`（AGENTS.md 第 8 节）。
+
+**广播时机**：所有实时事件都在**数据库提交之后**才发出（`crud` 内部已 commit），
+否则客户端可能收到一条查不到的记录。广播失败不影响 REST 响应——
+落库才是事实，推送只是尽力而为。
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -23,25 +28,28 @@ from app.schemas.clipboard import (
     ClipboardListParams,
 )
 from app.schemas.common import MessageResponse
+from app.services import events
+from app.services.ws_manager import manager
 
 router = APIRouter(prefix="/clipboard", tags=["剪贴板"])
 
+logger = logging.getLogger(__name__)
+
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
+# 序列化统一走 services/events，保证 REST 与 WebSocket 推送字段完全一致
+to_item_response = events.to_item_response
 
-def to_item_response(item: ClipboardItem) -> ClipboardItemResponse:
-    """把 ORM 对象转换为对外响应模型。**content_hash 不外露**。"""
-    return ClipboardItemResponse(
-        id=str(item.id),
-        user_id=str(item.user_id),
-        title=item.title,
-        content_type=item.content_type,
-        content=item.content,
-        preview=item.preview,
-        metadata=item.meta,
-        created_at=item.created_at,
-        updated_at=item.updated_at,
-    )
+
+async def _broadcast(user_id: object, event: str, data: object) -> None:
+    """把事件推给该用户的所有连接（按用户隔离，不群发）。
+
+    刻意吞掉异常：广播失败（如连接刚断开）不该让一次成功的写操作变成 500。
+    """
+    try:
+        await manager.send_to_user(str(user_id), event, data)
+    except Exception:  # noqa: BLE001 - 推送是尽力而为，失败只记日志
+        logger.exception("广播失败: event=%s user=%s", event, user_id)
 
 
 async def _get_owned_item(
@@ -75,12 +83,15 @@ async def create_item(
     session: DbSession,
     current_user: CurrentUser,
 ) -> ClipboardItemResponse:
-    item, _created = await clipboard_crud.create_item(
+    item, created = await clipboard_crud.create_item(
         session,
         current_user.id,
         payload,
         username=current_user.username,
     )
+    # ⚠️ 去重命中的分支必须发 `updated`——最容易漏的一条（见 docs/ws-protocol.md）
+    event = events.EVENT_CREATED if created else events.EVENT_UPDATED
+    await _broadcast(current_user.id, event, events.item_payload(item))
     return to_item_response(item)
 
 
@@ -156,6 +167,7 @@ async def update_item(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"剪贴板项不存在: {id}",
         )
+    await _broadcast(current_user.id, events.EVENT_UPDATED, events.item_payload(item))
     return to_item_response(item)
 
 
@@ -170,6 +182,7 @@ async def delete_item(
 ) -> ClipboardDeleteResponse:
     await _get_owned_item(session, current_user.id, id)
     await clipboard_crud.delete_item(session, current_user.id, id)
+    await _broadcast(current_user.id, events.EVENT_DELETED, events.deleted_payload(id))
     return ClipboardDeleteResponse(success=True, message="删除成功", id=id)
 
 
@@ -177,8 +190,9 @@ async def delete_item(
     "/items",
     response_model=MessageResponse,
     summary="清空剪贴板",
-    description="删除当前用户的全部剪贴板项（第 5 步对应广播 `clipboard.cleared`）。",
+    description="删除当前用户的全部剪贴板项，并广播 `clipboard.cleared`。",
 )
 async def clear_items(session: DbSession, current_user: CurrentUser) -> MessageResponse:
     removed = await clipboard_crud.clear_items(session, current_user.id)
+    await _broadcast(current_user.id, events.EVENT_CLEARED, {})
     return MessageResponse(success=True, message=f"已清空 {removed} 条记录")
