@@ -133,7 +133,8 @@ cloud-clipboard/
 - 模型字段与后端 Schema 严格对齐
 
 **提交规范**：遵循 Conventional Commits（`feat:` / `fix:` / `docs:` / `refactor:` / `test:` / `chore:`）。
-**分支策略**：`main` 稳定分支；`feature/*` 功能分支；`hotfix/*` 紧急修复。
+**分支策略**：`master` 是当前稳定分支（本仓库由 `git init` 默认命名为 `master`，尚未改名，
+也**未配置任何远程**）；功能分支用 `feature/*`，紧急修复用 `hotfix/*`。
 
 ---
 
