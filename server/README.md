@@ -25,9 +25,13 @@ Copy-Item .env.example .env
 .\venv\Scripts\python.exe -m alembic upgrade head      # 推荐：走迁移
 .\venv\Scripts\python.exe -m scripts.init_db           # 本地快速铺开（create_all + 种子数据）
 
-# 5. 启动服务
+# 5. 启动服务（⚠️ 必须单 worker）
 .\venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 ```
+
+> ⚠️ **不要用 `--workers > 1`**：WebSocket 广播是进程内实现，多 worker 会让
+> 事件送不到另一个 worker（数据一致、推送不一致，很难排查）。启动守卫会直接拒绝。
+> 注意 `--reload` 与 `--workers` 互斥，本地热重载就用上面的命令。
 
 访问 <http://127.0.0.1:8000/docs> 查看 Swagger UI。
 
@@ -122,11 +126,17 @@ $env:PYTHONUTF8 = '1'
 | DELETE | `/api/v1/clipboard/items` | 清空 |
 | POST | `/api/v1/dev/reset` | ⚠️ 删数据重建种子（仅 dev 路由开启时） |
 | GET | `/api/v1/dev/db` | 数据库连通性探测（确认连的是哪个库） |
+| WS | `/api/v1/clipboard/ws?token=<JWT>` | 实时同步（事件表见 [`../docs/ws-protocol.md`](../docs/ws-protocol.md)） |
 | GET | `/health` | 健康检查 |
 
 > **`/api/v1/clipboard/*` 全部需要认证**：不带令牌返回 `401`。
 > 本地可用演示账号登录：`demo` / `demo1234`（口令由 `DEMO_PASSWORD` 配置，
 > 由 `scripts/init_db` 与 `dev/reset` 播种）。
+
+> ⚠️ **必须用单 worker 启动**（`--workers 1`）。WebSocket 广播是进程内实现，
+> 多 worker 会导致"数据一致但推送丢事件"。启动时会自动检测并拒绝：
+> 既检查 `WEB_CONCURRENCY`，也独占一个固定回环端口（`core/single_worker.py`）。
+> 详见 [`../docs/ws-protocol.md`](../docs/ws-protocol.md) 的「多实例问题」。
 
 ## 契约改动流程
 

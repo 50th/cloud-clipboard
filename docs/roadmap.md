@@ -4,7 +4,7 @@
 > 凡是"每完成一步就要改一遍"的内容都放这里。
 
 **最后更新**：2026-10-09
-**当前进度**：第 1、2、3、4 步已完成 → **下一步：第 5 步（WebSocket 实时同步）**
+**当前进度**：第 1～5 步已完成 → **下一步：第 6 步（内容去重）**
 
 ---
 
@@ -25,6 +25,7 @@
 - ✅ **第 2 步（Web 端骨架 + 单端闭环）已完成**，验收记录见 git log `2aa5e49`
 - ✅ **第 3 步（接入数据库）已完成**，验收记录见 git log `7f055ed`、`b5cc62d`
 - ✅ **第 4 步（JWT 认证）已完成**，见下方「第 4 步踩坑记录」
+- ✅ **第 5 步（WebSocket 实时同步）已完成**，见下方「第 5 步踩坑记录」
 
 ### 🚧 第 3 步踩坑记录（永久保留，勿删）
 
@@ -76,16 +77,51 @@
    已抽成 `web/src/composables/useNotice.ts`：成功提示 3s、错误 8s 自动消失，
    并在登录成功时主动清除，配 `web/tests/notice.test.ts` 4 个回归用例。
 
-### ⬜ 第 5 步：WebSocket 实时同步
+### ✅ 第 5 步：WebSocket 实时同步已完成
 
-- [ ] `services/ws_manager.py` 连接管理
-- [ ] `routers/ws.py` 端点（token 校验）
-- [ ] 创建剪贴板项时广播
-- [ ] Web 端接入，实时更新列表
-- [ ] 验证多标签页同步
+- ✅ `services/ws_manager.py`：按用户分组的连接管理与广播（不同用户互不影响）
+- ✅ `routers/ws.py`：端点 + JWT 校验（失败先 accept 再以 `4401` 关闭）+ ping/pong
+- ✅ 四类事件全部广播：`created` / `updated` / `deleted` / `cleared`
+- ✅ Web 端接入 `useWebSocket`：心跳 30s、指数退避重连、重连后补拉列表、界面显示连接状态
+- ✅ 多标签页同步已自动化验证（`web/tests/websocket.test.ts`）
 
-**完成标准**：标签 A 上传，标签 B 秒级收到。
-**开工前置**：必须先决定单 worker 还是引入 Redis Pub/Sub，见 P3；token 日志脱敏见 P6。
+**完成标准**：标签 A 上传，标签 B 秒级收到。**已达成**——测试实测 173ms 内同步。
+
+**决策落地（P3）**：本地开发**强制单 worker**，见下方「第 5 步踩坑记录」第 1 条。
+
+#### 🚧 第 5 步踩坑记录（永久保留，勿删）
+
+1. **单 worker 守卫：只查环境变量是无效的。**
+   uvicorn 的 CLI `--workers N` **不会**写进环境变量——实测 worker 进程里
+   `WEB_CONCURRENCY` 是 `None`，只有 `WEB_CONCURRENCY=N` 这条路径才会。
+   所以额外加了"独占固定回环端口"的检测（`core/single_worker.py`）。
+   ⚠️ 锁端口**必须固定**：实测 `bind(('127.0.0.1', 0))` 每次都返回不同端口
+   （连续三次 13099/13100/13101），"探测-释放-再绑定"的写法在并发下永不相撞。
+   实测 `--workers 2` 时 worker B 检测到占用 → lifespan 失败 → supervisor
+   停止整个进程组（退出码 1），多 worker 服务无法对外服务。
+
+2. **日志脱敏不能用 `logging.Filter` 改写 `record.args`。**
+   我最初的实现把 `record.args` 清空，导致 uvicorn 的 `AccessFormatter`
+   （要求 args 里恰好 5 个字段）对**每一个 HTTP 请求**都抛
+   `ValueError: not enough values to unpack`，**访问日志整体报废**。
+   改为两层：端点入口 `scrub_scope_token()` 从 ASGI scope 删掉 token（日志里根本没有它），
+   再由 `install_log_redaction()` 包一层 formatter 兜底。
+   ⚠️ 不要把 `?token=***` 拼回 `scope["path"]`——uvicorn 会把它百分号编码成
+   `%3Ftoken%3D...`，既难看又不好 grep。
+
+3. **Node 测试运行器会并行跑多个测试文件。**
+   `websocket.test.ts` 一开始复用 demo 账号，与 `e2e.test.ts` 同时在增删记录，
+   导致 e2e 里"total 应 +1"随机失败（实测期望 5、实际 6）。
+   改为给 WebSocket 套件注册**自己的账号**（`ws_e2e_<时间戳>`）后稳定。
+   > 遗留：这些测试账号会留在库里（每次一行）。清理：
+   > `DELETE FROM users WHERE username LIKE 'ws_e2e_%';`
+
+4. **`pnpm test -- <file>` 不会只跑指定文件**：`--` 之后的参数被追加到已有 glob
+   之后，两个文件都会跑。要单跑某个文件得直接调 node：
+   `node --experimental-strip-types --test tests/websocket.test.ts`
+
+5. **`useWebSocket` 返回的是 ref，不是裸值。** 接口最初写成 `connected: boolean`，
+   与实际实现不符，`vue-tsc` 直接报错。返回类型已改为 `Ref<T>`。
 
 ### ⬜ 第 6 步：内容去重
 
@@ -140,14 +176,15 @@
 - 后端 `tests/conftest.py` 已按"默认打 `clipboard_test`"写好（通过 `TEST_DATABASE_URL`），
   安装 pytest 后即可用
 
-### 🟠 P3 · 多 worker 会打破 WebSocket 广播
+### ✅ P3 · 多 worker 会打破 WebSocket 广播（已决策并落地）
 
-**第 3 步没有改变这个约束**：数据现在共享（同一数据库），但第 5 步的 `ConnectionManager` 仍是**进程内结构**。
+**决策：本地开发强制单 worker**（`--workers 1`），Redis Pub/Sub 留到真正需要横向扩容时再引入。
 
 - uvicorn `--workers > 1` 时：数据一致（都在数据库），但**推送送不到另一个 worker**
-- 处理：第 5 步要么强制 `--workers 1` 并禁止扩容，要么同时引入 Redis Pub/Sub
-- **第 3 步后 AGENTS.md 第 6 节已明确记录该约束（不再藏在"后期风险"里）**，
-  完整协议约定见 [`ws-protocol.md`](ws-protocol.md)
+- 已落地**两道运行时守卫**（`core/single_worker.py`）：`WEB_CONCURRENCY` 检查 +
+  固定回环端口独占。实测 `--workers 2` 会被拦下并停止整个进程组
+- 解除该限制的前置条件：先给广播加上跨进程通道（Redis Pub/Sub）
+- 完整协议约定见 [`ws-protocol.md`](ws-protocol.md) 的「多实例问题」
 
 ### ✅ P5 · 第 4 步认证依赖（已解决）
 
@@ -161,9 +198,16 @@ AGENTS.md 第 2 节原先指定 `python-jose + passlib[bcrypt]`。**该组合在
   （只用 HS256 对称签名，不需要 `python-jose` 的算法矩阵）
 - 顺带装上 `httpx`（第 8 步后端测试也要用），已用于第 4 步的进程内验收
 
-### 🟡 P6 · WS token 走 query string 会被日志记录
+### ✅ P6 · WS token 走 query string 会被日志记录（已解决）
 
-`ws?token=<JWT>` 会被 uvicorn 访问日志明文记录。第 5 步需对 `token` 脱敏。
+`ws?token=<JWT>` 会被 uvicorn 访问日志明文记录。第 5 步已实现**两层脱敏**：
+
+1. 端点入口 `scrub_scope_token()` 把 token 从 ASGI scope 删掉 →
+   日志只剩 `/api/v1/clipboard/ws`，**根本没有 token**
+2. `install_log_redaction()` 给 uvicorn 的 handler 套一层 formatter 兜底
+
+⚠️ 踩坑记录见「第 5 步踩坑记录」第 2 条：**不要用 `logging.Filter` 改写 `record.args`**，
+那会让 uvicorn 的 `AccessFormatter` 对每个请求抛 `ValueError`，直接搞坏全部访问日志。
 
 ---
 
@@ -204,7 +248,7 @@ AGENTS.md 第 2 节原先指定 `python-jose + passlib[bcrypt]`。**该组合在
 | Docker Hub 拉取 | ❌ 网络不可达 | TLS handshake timeout，只能用本地已有镜像 |
 | 本机 PostgreSQL 18 | ✅ Running，`5432` | **保留不动**，与容器（5433）并存 |
 | 容器 PostgreSQL 16 | ✅ `cloud-clipboard-postgres` healthy | 本地开发主用 |
-| Redis | ⬜ 6379 空闲 | 未安装，第 5 步启用 |
+| Redis | ⬜ 6379 空闲 | **本阶段不引入**（P3 已决策走单 worker）；需要跨进程广播时再启用 |
 | MinIO | ⚠️ 9000 被 Windows 保留段占用 | 阶段二需另选端口（如 9010） |
 
 ### Windows 保留端口段（重要）
@@ -221,9 +265,14 @@ AGENTS.md 第 2 节原先指定 `python-jose + passlib[bcrypt]`。**该组合在
 
 ## 下一步行动
 
-1. **第 5 步（WebSocket 实时同步）**：开工前必须先决定**单 worker 还是 Redis Pub/Sub**（P3），
-   并处理 `ws?token=` 的**日志脱敏**（P6）。协议见 [`ws-protocol.md`](ws-protocol.md)。
+1. **第 6 步（内容去重）**：去重逻辑与 `content_hash` **已在数据库层成立**
+   （第 3 步顺带完成，有 e2e 用例覆盖），剩余的是：
+   - 确认去重分支广播 `clipboard.updated` —— **第 5 步已顺带完成**（`create_item` 里
+     `created=False` 发 `updated`），只需补齐用例
+   - Web 端处理 `updated` 事件 —— 已实现（静默刷新列表）
 2. **P2 剩余项**：给 Web e2e 加一个指向 `clipboard_test` 的测试后端实例，
    让测试不再重置开发库
 3. **第 8 步预留**：安装 `pytest`、`pytest-asyncio`（`httpx` 已在第 4 步装上），
    为 `tests/conftest.py` 补测试用例
+4. **清理测试账号**：`websocket.test.ts` 每次运行会留下一个 `ws_e2e_*` 账号，需要时执行
+   `DELETE FROM users WHERE username LIKE 'ws_e2e_%';`

@@ -89,11 +89,17 @@ pnpm run build       # vue-tsc --noEmit && vite build
 - `tests/e2e.test.ts`：真实 Pinia store + 真实后端。先登录拿 JWT（认证已启用，不带令牌一律 401），
   覆盖健康检查、**未认证返回 401**、登录与错误密码、首屏列表、上传新增、**自动标题格式**、
   **自定义标题**、相同内容去重、**按标题/正文搜索**、排序、删除、清空、错误可读性。
+- `tests/websocket.test.ts`：真实 `useWebSocket` + 真实后端，**多标签页同步**
+  （开两条连接，验证 A 上传 → B 自动出现、A 删除 → B 同步消失），以及 4401 不重连。
+  该套件会**注册自己的账号**（`ws_e2e_<时间戳>`），避免与 e2e 套件并行时互相干扰。
 - `tests/notice.test.ts`：纯前端，无后端依赖。覆盖顶部提示的生命周期
   （登出提示与错误提示必须**自动消失**、新提示不能被打断、`clearNotice` 立即收起）。
 
-> **需要后端的只有 `e2e.test.ts`**。若只想跑不依赖后端的回归：
+> **需要后端的**是 `e2e.test.ts` 与 `websocket.test.ts`；只想跑纯前端回归：
 > `pnpm test -- tests/notice.test.ts`
+>
+> ⚠️ Node 测试运行器会**并行**跑各测试文件，所以各套件必须用**独立账号**，
+> 否则一方的增删会让另一方的 `total` 断言随机失败（实测踩过）。
 
 - 破坏性用例（清空、`dev/reset`）**默认跳过**，需显式开启：`$env:E2E_ALLOW_DESTRUCTIVE='1'; pnpm test`
 - 测试收尾会调用 `POST /api/v1/dev/reset` 恢复 4 条种子数据，跑完可直接接着手工验证
@@ -114,8 +120,9 @@ web/
 ├── scripts/
 │   └── generate-api-types.mjs   # pnpm run gen:api 的入口
 ├── tests/
-│   ├── e2e.test.ts              # 端到端闭环测试（驱动 store + client，与框架无关，需后端）
-│   └── notice.test.ts           # 顶部提示生命周期回归测试（纯前端，无需后端）
+│   ├── e2e.test.ts              # 端到端闭环（驱动 store + client，需后端）
+│   ├── websocket.test.ts        # 多标签页实时同步（驱动真实 useWebSocket，需后端）
+│   └── notice.test.ts           # 顶部提示生命周期回归（纯前端，无需后端）
 ├── src/
 │   ├── main.ts                  # 挂载应用 + 安装 Pinia
 │   ├── App.vue                  # 两栏布局 + 全局提示

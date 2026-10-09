@@ -13,7 +13,7 @@
 
 **云剪贴板（Cloud Clipboard）**：跨平台云剪贴板服务，实现多设备间剪贴板内容实时同步。
 
-客户端为鸿蒙 App（ArkTS + ArkUI）与 Web 端（Vue 3 + TS + Vite）；后端为 FastAPI + PostgreSQL + Redis + WebSocket。
+客户端为鸿蒙 App（ArkTS + ArkUI）与 Web 端（Vue 3 + TS + Vite）；后端为 FastAPI + PostgreSQL + WebSocket（Redis 见 §2，本阶段未引入）。
 
 **当前阶段**：阶段一 —— 文字剪贴板 MVP（阶段划分见 §10 与 [`docs/roadmap.md`](docs/roadmap.md)）。
 
@@ -29,7 +29,7 @@
 | 数据库 | PostgreSQL 16（**本地与生产统一 16**，本地走容器） |
 | ORM / 迁移 | SQLAlchemy 2.x（async）+ asyncpg + Alembic |
 | 时区数据 | tzdata：**Windows 没有系统时区数据库，`zoneinfo` 靠它才能解析 `Asia/Shanghai`**（缺失抛 `ZoneInfoNotFoundError`，创建剪贴板项直接 500）。注意：与 asyncpg 无关 |
-| 缓存 / 广播 | Redis —— ⬜ 未启用（第 5 步需要时引入） |
+| 缓存 / 广播 | WebSocket 广播走**进程内** `ConnectionManager`（按用户隔离）；Redis —— ⬜ **本阶段不引入**，需跨进程广播时再启用 |
 | 认证 | ✅ 已接入：`pwdlib[bcrypt]`（密码哈希）+ `PyJWT`（HS256 令牌）。**不用 `passlib`**：Python 3.13 按 PEP 594 移除了 `crypt` 模块，passlib 在 import 阶段就会失败（pin 老版本 bcrypt 也救不回来） |
 | Web 前端 | Vue 3 + TypeScript + Vite；状态管理 Pinia（setup store）；HTTP 客户端 Axios |
 | 鸿蒙 | ArkTS + ArkUI，API 12+ —— ⬜ 未创建（第 7 步） |
@@ -53,7 +53,7 @@ cloud-clipboard/
 ├── infra/                  # ✅ docker-compose.yml（Postgres 容器，宿主 5433）
 ├── scripts/                # ✅ verify_postgres.py（宿主侧连通性验证）
 ├── server/                 # 后端：app/{core,db,schemas,crud,routers,services} + alembic/ + tests/
-│   │                       #   core/security.py ✅（密码哈希 + JWT）；routers/ws.py、services/ws_manager.py ⬜第5步
+│   │                       #   core/{security,single_worker,logging_utils}.py ✅；routers/ws.py、services/ws_manager.py ✅
 │   └── alembic.ini         # ⚠️ 必须保持纯 ASCII（见 §11）
 ├── web/                    # 前端：src/{api,types,utils,stores,composables,components} + tests/*.test.ts
 │   │                       #   vite.config.ts 端口 5273（见 §12）；登录页是 components/LoginPanel.vue
@@ -100,9 +100,12 @@ cloud-clipboard/
 **本节只记两条容易漏的硬约束**：
 
 - ⚠️ **token 走 query string 会被 uvicorn 访问日志明文记录**，实现时必须对 `token` 参数脱敏
-- ⚠️ **多 worker 会打破广播**：`ConnectionManager` 是进程内结构，`--workers > 1` 时
-  A 连 worker 1、B 连 worker 2 → 事件送不到。第 5 步必须二选一：
-  **强制 `--workers 1`** 或**同时引入 Redis Pub/Sub**
+- ⚠️ **多 worker 会打破广播**：`ConnectionManager` 是**进程内**结构，`--workers > 1` 时
+  A 连 worker 1、B 连 worker 2 → 事件送不到（数据一致、推送不一致，现象隐蔽）。
+  **当前决策：强制单 worker**，由 `app/core/single_worker.py` 的两道守卫拦住
+  （`WEB_CONCURRENCY` 检查 + 固定回环端口独占）。Redis Pub/Sub 留到真正需要横向扩容时再引入。
+  ⚠️ 守卫**必须包含锁端口那道**：uvicorn 的 CLI `--workers N` 不会写进环境变量，
+  只查 `WEB_CONCURRENCY` 会漏掉最常见的手误。详见 [`docs/ws-protocol.md`](docs/ws-protocol.md)
 
 ---
 
@@ -239,7 +242,7 @@ pnpm run gen:api
 |------|------|------|
 | 浏览器剪贴板兼容性 | 部分浏览器不支持 `read()` | 已封装降级 + 手动粘贴入口 |
 | WebSocket 循环同步 | 写回剪贴板触发监听 | 见 **§9 剪贴板 API**（`isSelfWrite()` 标志位） |
-| 广播多实例不一致 | 多 worker 时事件送不到 | 见 **§5**（单 worker 或 Redis Pub/Sub），细则见 `docs/ws-protocol.md` |
+| 广播多实例不一致 | 多 worker 时事件送不到 | **已决策：强制单 worker**（见 **§5**），由 `core/single_worker.py` 运行时守卫拦住；细则见 `docs/ws-protocol.md` |
 | **Windows 保留端口段** | `5141-5240` 吃掉 5173、`8903-9002` 吃掉 9000 | Web 端已改 **5273**；MinIO 阶段二需换端口。排查：`netsh int ipv4 show excludedportrange protocol=tcp` |
 | 端到端加密与搜索冲突 | 服务端无法搜明文 | 搜索仅在客户端本地做（阶段四） |
 

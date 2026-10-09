@@ -73,11 +73,14 @@ cd server
 | GET | `/api/v1/dev/db` | 探测当前连接的数据库（仅开发路由开启时） |
 | GET | `/health` | 健康检查 |
 | GET | `/` | 服务信息 |
-| WS | `/api/v1/clipboard/ws?token=xxx` | ⬜ 实时同步（**第 5 步**，尚未实现；协议见 [`ws-protocol.md`](ws-protocol.md)） |
+| WS | `/api/v1/clipboard/ws?token=xxx` | ✅ 实时同步（事件与消息格式见 [`ws-protocol.md`](ws-protocol.md)） |
 | POST | `/api/v1/clipboard/upload` | ⬜ 图片/文件上传（**阶段二**，尚未实现） |
 
-> 最后两个接口**不在 `/openapi.json` 里**——`ws` 与 `upload` 尚未实现，所以不会出现在在线文档中。
-> 它们是已排期的约定目标，列在这里只为了避免下游以为漏掉。排期见 [`roadmap.md`](roadmap.md)。
+> `upload` **不在 `/openapi.json` 里**——尚未实现，所以不会出现在在线文档中。
+> 它是已排期的约定目标，列在这里只为了避免下游以为漏掉。排期见 [`roadmap.md`](roadmap.md)。
+>
+> WebSocket 端点同样**不出现在 `/openapi.json`**（OpenAPI 不描述 WS 握手），
+> 其契约以 [`ws-protocol.md`](ws-protocol.md) 为准。
 
 ### 认证
 
@@ -126,6 +129,8 @@ class ClipboardItemResponse(BaseModel):
 - 分页：`page` 从 1 开始，`size` 默认 20、最大 100
 - 阶段一仅支持 `content_type = text`；`image` / `file` 属阶段二、阶段三
 - 认证：`/clipboard/*` 需要 `Authorization: Bearer <JWT>`；`UserResponse` 永不含 `password_hash`
+- 实时同步：写操作（创建/去重/更新/删除/清空）成功后向**同用户**的 WebSocket 连接广播事件；
+  连接方式与事件表见 [`ws-protocol.md`](ws-protocol.md)
 
 ---
 
