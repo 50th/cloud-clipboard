@@ -7,6 +7,7 @@ import InputPanel from '@/components/InputPanel.vue'
 import { API_BASE_URL, getErrorMessage } from '@/api/client'
 import { useClipboard } from '@/composables/useClipboard'
 import { useNotice } from '@/composables/useNotice'
+import { useWebSocket } from '@/composables/useWebSocket'
 import { useClipboardStore } from '@/stores/clipboardStore'
 import { useUserStore } from '@/stores/userStore'
 
@@ -32,16 +33,34 @@ onMounted(async () => {
   await userStore.restoreSession()
   if (isAuthenticated.value) {
     await store.fetchItems()
+    connect()
   }
 })
 
-// 登录/登出后同步剪贴板列表，避免上一个账号的数据残留
+// 实时同步：登录后建立 WebSocket；收到事件就静默刷新列表。
+// 断线期间可能漏事件，所以重连成功后也要拉一次。
+const realtimeEnabled = computed(() => isAuthenticated.value)
+const {
+  connected: realtimeConnected,
+  connect,
+  disconnect,
+} = useWebSocket({
+  get enabled() {
+    return realtimeEnabled.value
+  },
+  onEvent: (envelope) => void store.applyRealtimeEvent(envelope),
+  onReconnect: () => void store.fetchItems({ page: store.page, silent: true }),
+})
+
+// 登录/登出后同步剪贴板列表与实时连接，避免上一个账号的数据残留
 watch(isAuthenticated, async (loggedIn) => {
   if (loggedIn) {
     // 登录成功时清掉上一条提示（通常是"已退出登录"），否则会带到新会话里
     clearNotice()
     await store.fetchItems()
+    connect()
   } else {
+    disconnect()
     store.reset()
     searchInput.value = ''
   }
@@ -107,6 +126,12 @@ async function handleClearAll() {
         后端 {{ API_BASE_URL }}
         <template v-if="user"> · 当前用户 {{ user.username }}</template>
         <template v-else> · 未登录</template>
+        <template v-if="isAuthenticated">
+          ·
+          <span :class="['realtime', realtimeConnected ? 'realtime--on' : 'realtime--off']">
+            {{ realtimeConnected ? '实时同步中' : '实时连接断开，正在重连…' }}
+          </span>
+        </template>
       </p>
     </header>
 
@@ -153,5 +178,13 @@ async function handleClearAll() {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.realtime--on {
+  color: var(--success);
+}
+
+.realtime--off {
+  color: #b45309;
 }
 </style>

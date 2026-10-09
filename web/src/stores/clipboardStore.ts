@@ -10,6 +10,7 @@ import { ref } from 'vue'
 
 import { LOCAL_TIMEZONE, clipboardApi, getErrorMessage } from '#src/api/client.ts'
 import type { ClipboardItem, SortOrder } from '#src/api/client.ts'
+import type { WsEnvelope } from '#src/composables/useWebSocket.ts'
 
 export const PAGE_SIZE = 20
 
@@ -222,6 +223,31 @@ export const useClipboardStore = defineStore('clipboard', () => {
     return removed
   }
 
+  /**
+   * 处理服务端推送的事件（WebSocket）。
+   *
+   * 统一用"静默重新拉取当前页"来实现，而不是把推送载荷合并进本地列表：
+   * - 删除/清空/排序/分页/搜索都会改变列表中该出现哪些记录，
+   *   本地合并极易与后端的排序与筛选规则不一致；
+   * - 列表查询有分页与搜索条件，本地补一条可能根本不该出现在当前视图里；
+   * - 静默刷新不显示加载态，用户无感，代价只是多一次轻量请求。
+   *
+   * 注意：**不重置草稿关联**。别的设备改了数据不该让本机正在编辑的草稿断开。
+   */
+  async function applyRealtimeEvent(envelope: WsEnvelope): Promise<void> {
+    switch (envelope.event) {
+      case 'clipboard.created':
+      case 'clipboard.updated':
+      case 'clipboard.deleted':
+      case 'clipboard.cleared':
+        await fetchItems({ page: page.value, silent: true })
+        break
+      default:
+        // 未知事件（如未来新增的类型）忽略即可，不要因此报错
+        break
+    }
+  }
+
   return {
     items,
     total,
@@ -242,6 +268,7 @@ export const useClipboardStore = defineStore('clipboard', () => {
     removeItem,
     clearAll,
     reset,
+    applyRealtimeEvent,
   }
 })
 
