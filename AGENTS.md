@@ -3,7 +3,6 @@
 > 本文件为 AI 编码助手（Claude Code / Cursor / Copilot / Gemini CLI / Codex 等）提供**稳定约定**：
 > 项目上下文、技术栈、目录职责、规范与关键约束。
 > **每次开始工作前先读本文件**；进度、验收记录、已知问题一律看 [`docs/roadmap.md`](docs/roadmap.md)。
-> `README.md` 面向人类访客，按需查即可。
 >
 > 📌 本文件按行业标准命名为 `AGENTS.md`（复数）。历史引用里的「AGENT.md 第 N 节」指的就是本文件。
 
@@ -15,7 +14,7 @@
 
 - 客户端：鸿蒙 App（ArkTS + ArkUI，⬜ 第 7 步）、Web 端（Vue 3 + TS + Vite）
 - 后端：FastAPI + PostgreSQL + WebSocket（Redis 见「技术栈」，本阶段未引入）
-- 当前阶段：**阶段一 · 文字剪贴板 MVP**（第 1～6 步，已完成）
+- 当前阶段：**阶段一（文字剪贴板）已完成**——只处理文字，图片与文件属后续阶段
 
 ---
 
@@ -124,8 +123,8 @@ cloud-clipboard/
 - 模型字段与后端 Schema 严格对齐
 
 **提交规范**：Conventional Commits（`feat:` / `fix:` / `docs:` / `refactor:` / `test:` / `chore:`）。
-**分支策略**：`master` 是稳定分支（`git init` 默认命名，未改名、未配置远程）；
-功能分支 `feature/*`，紧急修复 `hotfix/*`。
+**分支策略**：`master` 是稳定分支（`git init` 默认命名，未改名；远程为
+`git@github.com:50th/cloud-clipboard.git`）；功能分支 `feature/*`，紧急修复 `hotfix/*`。
 
 ---
 
@@ -172,7 +171,7 @@ cloud-clipboard/
 | 7 | 鸿蒙 App |
 | 8 | 联调与测试（含后端 pytest） |
 
-**阶段划分**：阶段一 = 1～6 步（文字 MVP）；阶段二 = 图片 + 对象存储；
+**阶段划分**：阶段一 = 1～6 步（文字）；阶段二 = 图片 + 对象存储；
 阶段三 = 文件 + 体验优化；阶段四 = 端到端加密 + 生产部署。
 
 ---

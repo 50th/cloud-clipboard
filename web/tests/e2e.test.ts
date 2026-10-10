@@ -73,7 +73,7 @@ let sawEmptyList = false
 const SEED_CONTENTS = [
   'https://fastapi.tiangolo.com/tutorial/',
   'pip install fastapi uvicorn[standard]',
-  '云剪贴板 MVP 范围：文字内容的上传、查询、删除 + WebSocket 实时同步 + JWT 认证 + 内容去重。',
+  '云剪贴板阶段一：文字内容的上传、查询、删除 + WebSocket 实时同步 + JWT 认证 + 内容去重。',
   'git commit -m "feat: 新增 WebSocket 广播"',
 ]
 

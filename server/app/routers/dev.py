@@ -25,8 +25,8 @@ SEED_ITEMS: list[tuple[str, str]] = [
     ("FastAPI 官方教程", "https://fastapi.tiangolo.com/tutorial/"),
     ("后端依赖安装命令", "pip install fastapi uvicorn[standard]"),
     (
-        "MVP 范围备忘",
-        "云剪贴板 MVP 范围：文字内容的上传、查询、删除 + WebSocket 实时同步 + JWT 认证 + 内容去重。",
+        "阶段一范围备忘",
+        "云剪贴板阶段一：文字内容的上传、查询、删除 + WebSocket 实时同步 + JWT 认证 + 内容去重。",
     ),
     ("提交规范示例", 'git commit -m "feat: 新增 WebSocket 广播"'),
 ]

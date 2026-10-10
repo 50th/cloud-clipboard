@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = "0.1.0"
     APP_DESCRIPTION: str = (
         "跨平台云剪贴板服务 —— 多设备剪贴板内容实时同步。"
-        "当前为阶段一（文字剪贴板 MVP），数据已持久化到 PostgreSQL。"
+        "阶段一已完成（仅文字），数据持久化在 PostgreSQL。"
     )
     APP_ENV: str = "development"
     # ⚠️ 默认关闭。DEBUG 会影响错误详情暴露，生产务必保持 False。
