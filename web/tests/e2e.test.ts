@@ -319,7 +319,7 @@ describe('Web 端单端闭环（真实后端）', () => {
     assert.equal(first.item.title, '我的自定义标题')
 
     // 再去重提交同一内容且**不传标题**。后端此时会按新时刻算出自动标题，
-    // 但契约要求它不得覆盖用户已有的标题（AGENTS.md 第 4 节）。
+    // 但契约要求它不得覆盖用户已有的标题（见 AGENTS.md 的「数据契约」）。
     await new Promise((resolve) => setTimeout(resolve, 1100))
     const second = await upload(content)
 

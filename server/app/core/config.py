@@ -1,7 +1,7 @@
 """应用配置。
 
 所有配置项均可通过环境变量或 `server/.env` 覆盖。
-**禁止在代码中硬编码密钥**（见 AGENTS.md 第 9 节）。
+**禁止在代码中硬编码密钥**（见 AGENTS.md 的「关键约束 · 安全」）。
 """
 
 from __future__ import annotations

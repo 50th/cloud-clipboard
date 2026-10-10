@@ -1,7 +1,7 @@
 /**
  * HTTP 客户端统一封装（axios）。
  *
- * 规范：组件不直接调用 axios（AGENTS.md 第 8 节），一律走 `src/api/`。
+ * 规范：组件不直接调用 axios（见 AGENTS.md 的「开发规范」），一律走 `src/api/`。
  */
 
 import axios, { AxiosError } from 'axios'

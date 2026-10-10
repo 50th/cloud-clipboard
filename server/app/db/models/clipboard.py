@@ -37,7 +37,7 @@ class ClipboardItem(Base):
     """剪贴板项。
 
     去重靠 `(user_id, content_hash)` 唯一约束：同一用户提交相同内容时
-    命中的是同一条记录，只刷新 `updated_at`（AGENTS.md 第 4 节）。
+    命中的是同一条记录，只刷新 `updated_at`（见 AGENTS.md 的「数据契约」）。
 
     `content_hash` 不对外暴露，仅服务端用于去重。
     """
