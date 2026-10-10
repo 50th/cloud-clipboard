@@ -2,10 +2,19 @@
 
 跨平台云剪贴板：多设备间剪贴板内容实时同步。客户端为 **Web 端**（已跑通）与
 **鸿蒙 App**（未创建）；后端为 **FastAPI + PostgreSQL + WebSocket**。
-当前处于**阶段一 · 文字剪贴板 MVP**（已收尾）。
 
-> 本文面向人类访客，只讲**怎么跑起来**。
-> 项目约定、契约与规范见 [`AGENTS.md`](AGENTS.md)；进度与已知问题见 [`docs/roadmap.md`](docs/roadmap.md)。
+## 项目进度
+
+**阶段一 · 文字剪贴板 MVP 已完成**，可以正常使用。
+
+| 阶段 | 内容 | 状态 |
+|------|------|------|
+| 阶段一 | 文字剪贴板 MVP（上传/查询/删除 + 实时同步 + JWT 认证 + 去重） | ✅ 已完成 |
+| 阶段二 | 图片剪贴板 + 对象存储 | 📋 计划中 |
+| 阶段三 | 文件剪贴板 + 体验优化 | 📋 计划中 |
+| 阶段四 | 端到端加密 + 生产部署 | 📋 计划中 |
+
+细节（含踩坑记录与技术债）见 [`docs/roadmap.md`](docs/roadmap.md)。
 
 ---
 
@@ -108,8 +117,8 @@ pnpm typecheck     # vue-tsc --noEmit
 ```
 
 - ⚠️ 破坏性用例（清空全部）默认**跳过**，需显式 `$env:E2E_ALLOW_DESTRUCTIVE='1'`
-  且 `server/.env` 里 `ENABLE_DEV_ROUTES=true`；**它会清空开发库数据**（见 roadmap 的 P2）
-- 后端 pytest **尚未建立**（依赖未安装，见 roadmap 的下一步行动）
+  且 `server/.env` 里 `ENABLE_DEV_ROUTES=true`；**它会清空开发库数据**
+- 后端 pytest 用例尚未建立（依赖未安装）
 
 ---
 
@@ -124,7 +133,7 @@ pnpm typecheck     # vue-tsc --noEmit
 | [`server/README.md`](server/README.md) | 后端启动、迁移、数据库结构、环境变量 |
 | [`web/README.md`](web/README.md) | Web 端启动、界面结构、配置与验证步骤 |
 
-**环境变量以 `server/.env.example` 与 `web/.env.example` 为准**，本文不重复列出。
+完整环境变量见 `server/.env.example` 与 `web/.env.example`。
 
 ---
 
