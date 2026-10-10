@@ -296,6 +296,62 @@ describe('Web 端单端闭环（真实后端）', () => {
     assert.equal(state().total, totalAfterFirst, '去重不应增加总条数')
   })
 
+  it('去重命中：updated_at 被刷新但 created_at 不变', async () => {
+    const content = `${TAG} 去重时间戳`
+    const first = await upload(content)
+
+    // created_at 代表"内容首次出现"，去重不该改动它；
+    // updated_at 代表"最近一次提交"，必须前进，否则无法按更新时间排序。
+    await new Promise((resolve) => setTimeout(resolve, 1100))
+    const second = await upload(content)
+
+    assert.equal(second.item.id, first.item.id)
+    assert.equal(second.item.created_at, first.item.created_at, 'created_at 不应被去重改写')
+    assert.ok(
+      second.item.updated_at > first.item.updated_at,
+      `updated_at 应被刷新：${first.item.updated_at} -> ${second.item.updated_at}`,
+    )
+  })
+
+  it('去重命中：未显式传 title 时不覆盖已有标题', async () => {
+    const content = `${TAG} 去重保留标题`
+    const first = await upload(content, '我的自定义标题')
+    assert.equal(first.item.title, '我的自定义标题')
+
+    // 再去重提交同一内容且**不传标题**。后端此时会按新时刻算出自动标题，
+    // 但契约要求它不得覆盖用户已有的标题（AGENTS.md 第 4 节）。
+    await new Promise((resolve) => setTimeout(resolve, 1100))
+    const second = await upload(content)
+
+    assert.equal(second.item.id, first.item.id, '应命中同一条记录')
+    assert.equal(
+      second.item.title,
+      '我的自定义标题',
+      '去重且未传 title 时，必须保留原标题，不能被自动标题覆盖',
+    )
+  })
+
+  it('去重命中：显式传 title 时才覆盖标题', async () => {
+    const content = `${TAG} 去重显式改标题`
+    const first = await upload(content, '原标题')
+    const second = await upload(content, '新标题')
+
+    assert.equal(second.item.id, first.item.id, '应命中同一条记录')
+    assert.equal(second.item.title, '新标题', '显式传 title 时应覆盖')
+  })
+
+  it('去重命中：响应里绝不出现 content_hash', async () => {
+    const content = `${TAG} 去重不泄露哈希`
+    const first = await upload(content)
+    const second = await upload(content)
+
+    assert.equal(second.item.id, first.item.id)
+    assert.ok(
+      !('content_hash' in second.item),
+      'content_hash 仅服务端用于去重，任何响应都不得包含它',
+    )
+  })
+
   it('搜索过滤：可命中标题与正文，结果全部匹配，清空后恢复', async () => {
     await upload(`${TAG} 搜索目标`, '搜索命中标题样例')
     await state().setSearch('搜索命中标题样例')

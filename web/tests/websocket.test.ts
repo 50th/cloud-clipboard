@@ -169,6 +169,41 @@ describe('WebSocket 实时同步（真实后端）', () => {
     await tabA.store.removeItem(tabA.store.items.find((i) => i.content === content)!.id)
   })
 
+  it('去重命中也会广播：标签 A 重复上传，标签 B 仍被通知（协议里最易漏的一条）', async () => {
+    const tabA = tabs[0]
+    const tabB = tabs[1]
+    const content = `${TAG} 去重广播`
+
+    // 首次上传：B 收到 created
+    const first = await tabA.store.uploadText(content)
+    assert.ok(
+      await waitFor(() => tabB.store.items.some((entry) => entry.id === first.item.id)),
+      'B 应先看到这条记录',
+    )
+    const totalAfterFirst = tabB.store.total
+
+    // 记录 B 当前看到的 updated_at，等一会儿让去重有时间刷新它
+    const seenBefore = tabB.store.items.find((entry) => entry.id === first.item.id)!.updated_at
+    await new Promise((resolve) => setTimeout(resolve, 1100))
+
+    // 再次上传同一内容 -> 命中服务端去重（不新建），但**必须**广播 updated
+    const second = await tabA.store.uploadText(content)
+    assert.equal(second.item.id, first.item.id, '应命中同一条记录')
+
+    const refreshed = await waitFor(
+      () =>
+        (tabB.store.items.find((entry) => entry.id === first.item.id)?.updated_at ?? '') >
+        seenBefore,
+    )
+    assert.ok(
+      refreshed,
+      '去重分支必须广播 clipboard.updated，否则标签 B 的列表会停在旧时间戳',
+    )
+    assert.equal(tabB.store.total, totalAfterFirst, '去重不应让 B 的总数变化')
+
+    await tabA.store.removeItem(first.item.id)
+  })
+
   it('标签 A 删除：标签 B 也会同步消失', async () => {
     const tabA = tabs[0]
     const tabB = tabs[1]
