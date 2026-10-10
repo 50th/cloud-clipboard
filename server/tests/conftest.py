@@ -39,9 +39,17 @@ from app.db.session import get_db  # noqa: E402
 from app.main import app as fastapi_app  # noqa: E402
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def engine() -> AsyncEngine:
-    """会话级引擎：整个测试会话只建一次表。"""
+    """**函数级**引擎：每个测试建一次表。
+
+    ⚠️ 不能改成 session 级。pytest-asyncio 默认**每个测试用新的事件循环**，
+    而引擎的连接池会把连接绑定在创建它的循环上；session 级引擎在第二个测试里
+    就会失败：`RuntimeError: got Future attached to a different loop`
+    （实测踩过）。改成函数级后，引擎的创建与释放都在同一个循环内。
+
+    代价是每个测试重建一次表；本套件规模下耗时可忽略。
+    """
     engine = create_async_engine(TEST_DATABASE_URL)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)

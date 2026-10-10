@@ -112,14 +112,20 @@ pnpm dev                              # http://127.0.0.1:5273
 ## 测试
 
 ```powershell
+# 后端：150 项（纯函数 + 接口集成，打独立测试库 clipboard_test）
+cd server
+$env:PYTHONUTF8='1'
+.\venv\Scripts\python.exe -m pytest
+
+# Web 端：34 项（端到端 + 多标签页同步 + 提示回归，需后端在跑）
 cd web
-pnpm test          # 34 项：端到端 + WebSocket 多标签页同步 + 提示回归（需后端在跑）
-pnpm typecheck     # vue-tsc --noEmit
+pnpm test
+pnpm typecheck
 ```
 
-- ⚠️ 破坏性用例（清空全部）默认**跳过**，需显式 `$env:E2E_ALLOW_DESTRUCTIVE='1'`
-  且 `server/.env` 里 `ENABLE_DEV_ROUTES=true`；**它会清空开发库数据**
-- 后端 pytest 用例尚未建立（依赖未安装）
+- 后端测试**不会碰开发库**：`tests/conftest.py` 强制指向 `clipboard_test`
+- ⚠️ Web 端的破坏性用例（清空全部）默认**跳过**，需显式 `$env:E2E_ALLOW_DESTRUCTIVE='1'`
+  且 `server/.env` 里 `ENABLE_DEV_ROUTES=true`；**它会清空所连库的数据**
 
 ---
 

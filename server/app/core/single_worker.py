@@ -38,28 +38,35 @@ class MultipleWorkersError(RuntimeError):
     """检测到本机已有另一个实例在运行（多半是多 worker 启动）。"""
 
 
-def lock_single_worker(port: int = LOCK_PORT) -> int:
-    """独占单实例锁端口，返回该端口号。重复调用是幂等的。"""
+def lock_single_worker(port: int | None = None) -> int:
+    """独占单实例锁端口，返回该端口号。重复调用是幂等的。
+
+    `port` 为 None 时使用模块级 `LOCK_PORT`（生产行为）。之所以在函数体内而不是
+    用默认参数读取 `LOCK_PORT`，是为了让测试能 monkeypatch 它——默认参数在函数
+    定义时就求值了，patch 模块属性不会生效。
+    """
     global _locked_port, _lock_socket
 
     if _lock_socket is not None and _locked_port is not None:
         return _locked_port
+
+    target = LOCK_PORT if port is None else port
 
     lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
             # Windows：禁止其他进程用 SO_REUSEADDR 抢绑同一端口
             lock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-        lock.bind(("127.0.0.1", port))
+        lock.bind(("127.0.0.1", target))
     except OSError as exc:
         lock.close()
         raise MultipleWorkersError(
-            f"单实例锁端口 {port} 已被占用，说明本机已有另一个 Cloud Clipboard 实例在运行。"
+            f"单实例锁端口 {target} 已被占用，说明本机已有另一个 Cloud Clipboard 实例在运行。"
         ) from exc
 
     _lock_socket = lock
-    _locked_port = port
-    return port
+    _locked_port = target
+    return target
 
 
 def release_single_worker() -> None:

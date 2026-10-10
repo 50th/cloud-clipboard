@@ -52,10 +52,13 @@ pwdlib[bcrypt]==0.3.1
 # JWT：只用到 HS256 对称签名，不需要 python-jose（已停止维护）的算法矩阵
 PyJWT==2.15.1
 
-# 第 5 步：Redis 广播（多实例）
-# redis
+# --- 测试 ✅ 已启用 ---
+# ⚠️ 测试打独立库 clipboard_test（见 tests/conftest.py），不要指向开发库
+pytest==9.1.1
+pytest-asyncio==1.4.0
+# httpx 同时用于 ASGI 进程内测试（第 4 步起就在用）
+httpx==0.28.1
 
-# 第 8 步：后端测试
-# pytest
-# pytest-asyncio
-# httpx
+# --- 后续步骤依赖 ---
+# Redis 广播（多实例部署时才需要；当前决策是单 worker）
+# redis
