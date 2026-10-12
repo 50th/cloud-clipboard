@@ -3,7 +3,7 @@
 > **本文件只记录动态进度与踩坑。** AGENTS.md 只保存稳定约定（技术栈、契约、规范、开发顺序）。
 > 踩坑记录只留**会导致错误发生的机制**；实现细节看代码，过程看 git log。
 
-**最后更新**：2026-10-09
+**最后更新**：2026-10-12
 **当前进度**：阶段一（第 1～6 步）功能已完成；第 8 步的**后端测试已补**（150 项），
 人工验证与三端联调仍待做 → 见文末「下一步行动」
 
@@ -28,8 +28,8 @@
 | 4 JWT 认证 | ✅ | 踩坑见下 |
 | 5 WebSocket 实时同步 | ✅ | 踩坑见下；**强制单 worker**（P3 已决策） |
 | 6 内容去重 | ✅ | 代码在第 3／5 步已落地，本步骤补齐验收覆盖 |
-| 7 鸿蒙 App | ⬜ | 需先确认 DevEco 环境 |
-| 8 联调与测试 | 🚧 | 后端测试已补（150 项）；**人工验证**与三端联调仍待做 |
+| 7 鸿蒙 App | 🚧 | 代码完成、**编译通过**；已补手动上传/搜索/排序/二次确认与应用内改后端地址；待签名上机验证（踩坑见下） |
+| 8 联调与测试 | 🚧 | 后端 150 项 + Web 34 项已就位；**人工验证与三端联调**待做 |
 
 ---
 
@@ -45,9 +45,29 @@
 `core/single_worker.py` 与 `core/logging_utils.py`、
 auth 与 clipboard 接口（含**跨用户越权隔离**、去重契约、分页校验）。
 
+**鸿蒙端**：见 [`harmony/README.md`](../harmony/README.md) 的「已验证与未验证」。
+编译与打包已验证；**安装运行、联调、`READ_PASTEBOARD` 授权均未验证**。
+
 ---
 
 ## 踩坑记录（永久保留，勿删）
+
+### 第 7 步（鸿蒙 App）
+
+1. **打包阶段报 `spawn java ENOENT`（错误码 00308018）不是签名问题，是缺 `JAVA_HOME`。**
+   hvigor 的 `PackageHap` 需要 Java；报错文案指向"签名配置"极具误导性。
+   指向 DevEco 自带 JBR 即可：`C:\Program Files\Huawei\DevEco Studio\jbr`。
+   已封装进 `harmony/build.ps1`，它同时设置 `DEVECO_SDK_HOME` / `NODE_HOME` / `JAVA_HOME`。
+2. **ArkTS 不允许无类型的对象字面量**（`arkts-no-untyped-obj-literals`）。
+   给函数传 `{ username: x }` 这类匿名字面量**编译不过**，必须为每个请求体
+   声明显式 `interface` 再传变量。空响应体的 `{}` 也一样，需要一个占位接口。
+3. **`abilityAccessCtrl.checkAccessToken` 返回 `Promise`**，同步判断要用
+   `checkAccessTokenSync`。用错会得到"类型无重叠"的编译错误。
+4. **`.hvigor/` 不默认被忽略**：它是构建缓存与日志目录，每次构建都重写。
+   已加入 `.gitignore`（连同 `oh_modules/`、`.idea/` 与 `*.p12`/`*.p7b`/`*.cer`）。
+5. **设备上的 `127.0.0.1` 指向设备自身**，不是开发机。真机联调必须：
+   改 `harmony/.../common/Config.ets` 的后端地址为电脑局域网 IP，
+   并让后端 `--host 0.0.0.0` 启动（当前只监听 `127.0.0.1`，设备连不上）。
 
 ### 第 3 步
 
@@ -180,6 +200,8 @@ auth 与 clipboard 接口（含**跨用户越权隔离**、去重契约、分页
 1. **人工验证**浏览器侧「读取剪贴板 → 上传 → 列表展示 → 点击复制」
    （依赖用户手势，无法自动化）—— 这是第 8 步最后一块没被自动化覆盖的
 2. **P2 剩余项**：让 Web e2e 打测试库而非开发库（后端测试已隔离，Web 端还没有）
-3. **第 7 步鸿蒙 App**：需先确认 DevEco 环境
+3. **第 7 步鸿蒙 App**：代码与界面已就绪；剩下的是**签名 + 上机联调**（需华为开发者账号，
+   在 DevEco 里配置签名）。联调清单见 [`harmony/README.md`](../harmony/README.md)，
+   后端用 [`scripts/start_server_lan.ps1`](../scripts/start_server_lan.ps1) 以 `0.0.0.0` 启动
 4. 之后可考虑：CI（`.github/workflows/`）、LICENSE、GitHub 默认分支设置
 5. 清理测试账号（需要时）：`DELETE FROM users WHERE username LIKE 'ws_e2e_%';`

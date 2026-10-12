@@ -12,7 +12,7 @@
 
 **云剪贴板（Cloud Clipboard）**：跨平台云剪贴板服务，多设备间剪贴板内容实时同步。
 
-- 客户端：鸿蒙 App（ArkTS + ArkUI，⬜ 第 7 步）、Web 端（Vue 3 + TS + Vite）
+- 客户端：鸿蒙 App（ArkTS + ArkUI，✅ 已可编译、待签名上机）、Web 端（Vue 3 + TS + Vite，✅ 可用）
 - 后端：FastAPI + PostgreSQL + WebSocket（Redis 见「技术栈」，本阶段未引入）
 - 当前阶段：**阶段一（文字剪贴板）已完成**——只处理文字，图片与文件属后续阶段
 
@@ -31,7 +31,7 @@
 | 认证 | `pwdlib[bcrypt]` + `PyJWT`（HS256）。**不用 `passlib`**：Python 3.13 移除了它依赖的 `crypt` 模块 |
 | 广播 | 进程内 `ConnectionManager`（按用户隔离）；Redis ⬜ 本阶段不引入 |
 | Web 前端 | Vue 3 + TypeScript + Vite；Pinia（setup store）；Axios |
-| 鸿蒙 | ArkTS + ArkUI，API 12+ —— ⬜ 未创建 |
+| 鸿蒙 | ArkTS + ArkUI，API 12+（Stage 模型）—— ✅ 已创建，构建用 `harmony/build.ps1` |
 
 **Web 端要点**：`pnpm-workspace.yaml` 的 `allowBuilds` 需放行 esbuild 与 vue-demi；
 导入别名两套并存——`.vue` 与 `main.ts` 用 `@/*`，**store / composables / api / utils 必须用
@@ -55,7 +55,7 @@ cloud-clipboard/
 │   └── alembic.ini         # ⚠️ 必须保持纯 ASCII（见「添加/修改数据库模型」）
 ├── web/                    # src/{api,types,utils,stores,composables,components} + tests/*.test.ts
 │   └── pnpm-workspace.yaml # ✅ allowBuilds 放行 esbuild 与 vue-demi
-└── harmony/                # ⬜ 第 7 步：鸿蒙 App
+└── harmony/                # ✅ 鸿蒙 App（ArkTS）；构建用 harmony/build.ps1，见 harmony/README.md
 ```
 
 ---
@@ -81,7 +81,7 @@ cloud-clipboard/
 2. 涉及表结构 → 生成并**逐行检查**迁移（见「添加/修改数据库模型」）
 3. 重启 FastAPI，确认 `/openapi.json` 已更新
 4. `cd web && pnpm run gen:api` 重新生成前端类型
-5. 同步鸿蒙模型（第 7 步落地后）；刷新 `docs/api.md` 摘要
+5. 同步鸿蒙模型（`harmony/entry/src/main/ets/models/Types.ets`）；刷新 `docs/api.md` 摘要
 
 ---
 
@@ -119,8 +119,11 @@ cloud-clipboard/
 - 不用 `v-html` 渲染剪贴板内容；模板用 `{{ }}` 自动转义
 
 **鸿蒙端（ArkTS）**
-- 剪贴板监听隔离在 `services/clipboardMonitor.ets`，网络请求统一在 `services/api.ets`
-- 模型字段与后端 Schema 严格对齐
+- 剪贴板读写与监听隔离在 `services/ClipboardService.ets`，网络请求统一在 `services/ApiClient.ets`
+- 模型字段与后端 Schema 严格对齐（`models/Types.ets`）
+- 后端地址在 `common/Config.ets`；真机调试需改成开发机局域网 IP
+- **构建用 `harmony/build.ps1`**，不要直接调 `hvigorw`（缺 `JAVA_HOME` 会报
+  `spawn java ENOENT`，错误码 00308018，看起来像签名问题）
 
 **提交规范**：Conventional Commits（`feat:` / `fix:` / `docs:` / `refactor:` / `test:` / `chore:`）。
 **分支策略**：`master` 是稳定分支（`git init` 默认命名，未改名；远程为

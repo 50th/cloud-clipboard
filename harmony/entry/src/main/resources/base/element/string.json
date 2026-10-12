@@ -1,0 +1,20 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "云剪贴板主模块"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "云剪贴板：多设备剪贴板内容实时同步"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "云剪贴板"
+    },
+    {
+      "name": "reason_read_pasteboard",
+      "value": "用于把本机剪贴板内容同步到你的其他设备"
+    }
+  ]
+}

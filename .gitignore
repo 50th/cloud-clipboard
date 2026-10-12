@@ -18,3 +18,18 @@ htmlcov/
 *.tsbuildinfo
 .DS_Store
 docs/.openapi.json
+
+# --- 鸿蒙端（DevEco）---
+# 构建缓存与日志：hvigor 会在每次构建时重写，不该入库
+.hvigor/
+# ohpm 安装的依赖
+oh_modules/
+# DevEco 的本地配置（含 SDK 路径、签名信息等机器相关配置）
+.idea/
+# 构建产物（build/ 已在上面统一忽略，这里再显式列出鸿蒙的路径便于阅读）
+harmony/**/build/
+# 签名材料：绝不入库
+*.p12
+*.p7b
+*.cer
+*.keystore
