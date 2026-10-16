@@ -335,6 +335,78 @@ class TestUpdateAndDelete:
         assert detail["content_type"] == "text", "阶段一只有 text 类型"
 
 
+class TestUpdateContentConflict:
+    """把某条内容改成与**另一条**相同：应给 409，而不是撞唯一约束报 500。
+
+    场景来源：界面支持「点历史记录载入编辑」，改完保存会走 PATCH 且带 content，
+    很容易撞上 `(user_id, content_hash)` 唯一约束。
+    """
+
+    async def test_改成与另一条相同的内容返回_409(self, client: AsyncClient) -> None:
+        headers = await make_user(client, "conflict1")
+        first = (
+            await client.post(
+                "/api/v1/clipboard/items", json={"content": "内容甲"}, headers=headers
+            )
+        ).json()
+        second = (
+            await client.post(
+                "/api/v1/clipboard/items", json={"content": "内容乙"}, headers=headers
+            )
+        ).json()
+
+        response = await client.patch(
+            f"/api/v1/clipboard/items/{second['id']}",
+            json={"content": "内容甲"},
+            headers=headers,
+        )
+
+        assert response.status_code == 409, "重复内容应给 409 而不是 500"
+        assert "重复" in response.json()["detail"]
+
+        # 原记录必须保持不变（不能改了一半）
+        unchanged = (
+            await client.get(f"/api/v1/clipboard/items/{second['id']}", headers=headers)
+        ).json()
+        assert unchanged["content"] == "内容乙", "冲突时不应改动原记录"
+        assert first["content"] == "内容甲"
+
+    async def test_把内容改成自己原本的值不算冲突(self, client: AsyncClient) -> None:
+        """同一条记录传相同 content 是幂等的，不能被误判成冲突。"""
+        headers = await make_user(client, "conflict2")
+        item = (
+            await client.post(
+                "/api/v1/clipboard/items", json={"content": "自身内容"}, headers=headers
+            )
+        ).json()
+
+        response = await client.patch(
+            f"/api/v1/clipboard/items/{item['id']}",
+            json={"content": "自身内容", "title": "改标题"},
+            headers=headers,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["title"] == "改标题"
+
+    async def test_换成全新内容可以正常更新(self, client: AsyncClient) -> None:
+        headers = await make_user(client, "conflict3")
+        item = (
+            await client.post(
+                "/api/v1/clipboard/items", json={"content": "旧内容"}, headers=headers
+            )
+        ).json()
+
+        response = await client.patch(
+            f"/api/v1/clipboard/items/{item['id']}",
+            json={"content": "新内容"},
+            headers=headers,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["content"] == "新内容"
+
+
 class TestTimezoneTitle:
     async def test_标题按传入时区展示(self, client: AsyncClient) -> None:
         headers = await make_user(client, "tz_user")

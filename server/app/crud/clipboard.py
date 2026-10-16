@@ -133,6 +133,15 @@ async def get_by_content_hash(
     return result.scalar_one_or_none()
 
 
+class ContentConflictError(RuntimeError):
+    """改后的内容与该用户的**另一条**记录重复。
+
+    库里 `(user_id, content_hash)` 有唯一约束：直接把 `content_hash` 改掉
+    会在 commit 时抛 `IntegrityError`（表现为 500）。这里提前查出来，
+    让上层给出可读的冲突提示。
+    """
+
+
 async def create_item(
     session: AsyncSession,
     user_id: uuid.UUID,
@@ -206,8 +215,17 @@ async def update_item(
     now = utc_now()
 
     if payload.content is not None and payload.content != item.content:
+        digest = content_hash(payload.content)
+        # ⚠️ 先查重再改：`(user_id, content_hash)` 有唯一约束，直接改会让
+        # commit 抛 IntegrityError（500）。编辑已有记录时很容易撞上。
+        other = await get_by_content_hash(session, user_id, digest)
+        if other is not None and other.id != item.id:
+            raise ContentConflictError(
+                "已有另一条相同内容的记录，无法保存为重复内容；"
+                "请修改内容，或直接编辑那一条。"
+            )
         item.content = payload.content
-        item.content_hash = content_hash(payload.content)
+        item.content_hash = digest
         item.preview = payload.preview or make_preview(payload.content)
         # 内容变了但用户没给标题 → 标题跟随内容重新生成（时间取更新时刻）
         if not (payload.title or "").strip():

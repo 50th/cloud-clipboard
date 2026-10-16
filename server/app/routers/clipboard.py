@@ -147,7 +147,10 @@ async def get_item(
         "而不是每个中间态都新建一行。\n\n"
         "内容变化且未传 `title` 时，标题会按更新时刻与 `timezone` 重新生成。"
     ),
-    responses={404: {"description": "剪贴板项不存在或不属于当前用户"}},
+    responses={
+        404: {"description": "剪贴板项不存在或不属于当前用户"},
+        409: {"description": "改后的内容与该用户的另一条记录重复"},
+    },
 )
 async def update_item(
     id: str,
@@ -155,13 +158,20 @@ async def update_item(
     session: DbSession,
     current_user: CurrentUser,
 ) -> ClipboardItemResponse:
-    item = await clipboard_crud.update_item(
-        session,
-        current_user.id,
-        id,
-        payload,
-        username=current_user.username,
-    )
+    try:
+        item = await clipboard_crud.update_item(
+            session,
+            current_user.id,
+            id,
+            payload,
+            username=current_user.username,
+        )
+    except clipboard_crud.ContentConflictError as exc:
+        # 唯一约束冲突给 409 而不是让它冒成 500：编辑已有记录时很容易撞上
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
