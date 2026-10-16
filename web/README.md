@@ -68,6 +68,8 @@ pnpm run gen:api   # 契约变更后重新生成 src/types/api.d.ts
   搜索、排序、删除、清空，以及**安全守卫的回归用例**
 - `websocket.test.ts`：真实 `useWebSocket`，验证「A 上传 → B 出现」「A 删除 → B 消失」、
   去重也会广播、WS 地址跟随 API 地址，以及令牌无效时 4401 不重连
+- `autosave.test.ts`：纯前端。自动保存**倒计时**必须真实递减、到点保存一次、
+  继续输入会重置、`markSaved`/关闭开关会取消，以及「保存过之后再编辑仍应显示待保存」
 - `notice.test.ts`：纯前端，覆盖顶部提示必须**自动消失**
 
 ### 安全守卫（重要）

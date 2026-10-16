@@ -136,12 +136,12 @@ pnpm dev                              # http://127.0.0.1:5273
 ## 测试
 
 ```powershell
-# 后端：150 项（纯函数 + 接口集成，打独立测试库 clipboard_test）
+# 后端：160 项（纯函数 + 接口集成，打独立测试库 clipboard_test）
 cd server
 $env:PYTHONUTF8='1'
 .\venv\Scripts\python.exe -m pytest
 
-# Web 端隔离模式（推荐）：自动起一个指向测试库的独立后端，跑完自动停
+# Web 端隔离模式（推荐，45 项）：自动起一个指向测试库的独立后端，跑完自动停
 .\scripts\run_web_tests.ps1
 
 # Web 端安全模式：打当前后端，不删除任何既有数据

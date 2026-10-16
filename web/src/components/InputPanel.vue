@@ -26,23 +26,24 @@ const autoSave = ref(true)
 
 const contentSize = computed(() => (text.value ? formatBytes(byteSize(text.value)) : '0 B'))
 
-const { saving, error: autoSaveError, lastSaved, markSaved } = useAutoSave({
-  text,
-  extra: title,
-  enabled: autoSave,
-  delay: AUTO_SAVE_DELAY,
-  onSave: async () => {
-    try {
-      // 自动保存复用同一条草稿记录，不会每个中间态都新建一行
-      const { item } = await store.saveDraft(text.value, title.value)
-      const at = new Date().toLocaleTimeString('zh-CN', { hour12: false })
-      emit('notice', { kind: 'ok', text: `已自动保存（${at}）：${item.title}` })
-    } catch (err) {
-      // 抛回给 useAutoSave 记录 error，再由下面的 watch 统一提示
-      throw new Error(getErrorMessage(err))
-    }
-  },
-})
+const { saving, error: autoSaveError, lastSaved, pending, remainingMs, progress, markSaved, saveNow } =
+  useAutoSave({
+    text,
+    extra: title,
+    enabled: autoSave,
+    delay: AUTO_SAVE_DELAY,
+    onSave: async () => {
+      try {
+        // 自动保存复用同一条草稿记录，不会每个中间态都新建一行
+        const { item } = await store.saveDraft(text.value, title.value)
+        const at = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+        emit('notice', { kind: 'ok', text: `已自动保存（${at}）：${item.title}` })
+      } catch (err) {
+        // 抛回给 useAutoSave 记录 error，再由下面的 watch 统一提示
+        throw new Error(getErrorMessage(err))
+      }
+    },
+  })
 
 // 自动保存失败时提示一次
 watch(autoSaveError, (message) => {
@@ -111,30 +112,54 @@ function onKeydown(event: KeyboardEvent) {
   }
 }
 
-/** 未保存（有改动但还没到自动保存时机） */
-const pending = computed(
-  () => autoSave.value && text.value.trim() !== '' && !saving.value && lastSaved.value === null,
-)
+/**
+ * 状态种类。
+ *
+ * ⚠️ `pending` 必须来自 composable，**不能**用 `lastSaved === null` 判断——
+ * 那样首次保存成功后再编辑，状态会一直显示旧的「已自动保存」时间。
+ */
+type StatusKind = 'off' | 'saving' | 'idle' | 'pending' | 'saved'
 
-const statusText = computed(() => {
+const statusKind = computed<StatusKind>(() => {
   if (!autoSave.value) {
-    return '已关闭'
+    return 'off'
   }
   if (saving.value) {
-    return '保存中…'
+    return 'saving'
   }
-  if (text.value.trim() === '') {
-    return '等待输入'
+  if (pending.value) {
+    return 'pending'
   }
-  if (lastSaved.value === null) {
-    return `${AUTO_SAVE_DELAY / 1000} 秒后自动保存`
+  if (text.value.trim() === '' || lastSaved.value === null) {
+    return 'idle'
   }
-  return `已自动保存 ${new Date(lastSaved.value).toLocaleTimeString('zh-CN', {
-    hour12: false,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })}`
+  return 'saved'
+})
+
+/** 剩余秒数。向上取整，避免出现「0 秒后自动保存」却还没保存的尴尬 */
+const remainingSeconds = computed(() => Math.ceil(remainingMs.value / 1000))
+
+/** 倒计时进度条宽度 */
+const progressWidth = computed(() => `${Math.round(progress.value * 100)}%`)
+
+const statusText = computed(() => {
+  switch (statusKind.value) {
+    case 'off':
+      return '已关闭'
+    case 'saving':
+      return '保存中…'
+    case 'pending':
+      return `${remainingSeconds.value} 秒后自动保存`
+    case 'saved':
+      return `已自动保存 ${new Date(lastSaved.value ?? 0).toLocaleTimeString('zh-CN', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })}`
+    default:
+      return '等待输入'
+  }
 })
 </script>
 
@@ -194,17 +219,46 @@ const statusText = computed(() => {
         <input v-model="autoSave" type="checkbox" />
         <span>自动保存（停止输入 {{ AUTO_SAVE_DELAY / 1000 }} 秒后保存到当前草稿）</span>
       </label>
-      <span
-        class="autosave__status"
-        :class="{
-          'autosave__status--saved': autoSave && !saving && lastSaved !== null && text.trim() !== '',
-          'autosave__status--pending': pending,
-        }"
-      >
-        <template v-if="saving">⏳ </template>
-        <template v-else-if="autoSave && !pending && lastSaved !== null && text.trim() !== ''">✓ </template>
-        {{ statusText }}
+
+      <span class="autosave__right">
+        <!--
+          按钮常驻（仅禁用）而不是条件渲染：有条件出现会让这一行宽度跳动。
+        -->
+        <button
+          type="button"
+          class="btn btn--small"
+          :disabled="statusKind !== 'pending'"
+          :title="statusKind === 'pending' ? '跳过剩余等待，立刻保存' : '没有待保存的改动'"
+          @click="saveNow"
+        >
+          立即保存
+        </button>
+        <span
+          class="autosave__status"
+          :class="{
+            'autosave__status--saved': statusKind === 'saved',
+            'autosave__status--pending': statusKind === 'pending',
+          }"
+        >
+          <template v-if="statusKind === 'saving'">⏳ </template>
+          <template v-else-if="statusKind === 'saved'">✓ </template>
+          {{ statusText }}
+        </span>
+      </span>
+
+      <!-- 倒计时进度条：绝对定位，不占布局高度 -->
+      <span v-if="statusKind === 'pending'" class="autosave__progress" aria-hidden="true">
+        <span class="autosave__progress-fill" :style="{ width: progressWidth }" />
       </span>
     </div>
   </section>
 </template>
+
+<style scoped>
+/* 布局与配色在全局 styles.css 里（设计系统集中管理），这里只放组件特有的部分 */
+.autosave__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+</style>

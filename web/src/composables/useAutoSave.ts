@@ -1,11 +1,13 @@
 /**
- * 自动保存 composable。
+ * 自动保存 composable（带**可见倒计时**）。
  *
- * 用户停止输入 `delay` 毫秒后自动保存一次。
+ * 用户停止输入 `delay` 毫秒后自动保存一次。倒计时期间暴露剩余毫秒与进度，
+ * 让界面能真实递减地显示「N 秒后自动保存」——**静态文案会让用户以为卡住了**。
+ *
  * 关闭再打开时通过 `markSaved` 记录已保存内容，避免重复上传。
  */
 
-import { ref, watch, type Ref } from 'vue'
+import { getCurrentScope, onScopeDispose, ref, watch, type Ref } from 'vue'
 
 export interface UseAutoSaveOptions {
   /** 要保存的文本（通常是输入框内容） */
@@ -27,11 +29,26 @@ export interface UseAutoSaveResult {
   saving: Ref<boolean>
   /** 最近一次失败原因 */
   error: Ref<string | null>
+  /**
+   * 是否有**未保存的改动**（倒计时进行中）。
+   *
+   * ⚠️ 不能简单用 `lastSaved === null` 判断：那样首次保存成功后，
+   * 用户继续编辑也永远显示"已保存"，状态是错的。
+   */
+  pending: Ref<boolean>
+  /** 距自动保存还剩多少毫秒；未在计时则为 0 */
+  remainingMs: Ref<number>
+  /** 倒计时进度 0~1（1 = 刚开始计时，0 = 即将保存），便于画进度条 */
+  progress: Ref<number>
   /** 标记某段内容为「已保存」，用于手动上传后避免重复自动保存 */
   markSaved: (text: string) => void
+  /** 跳过剩余等待，立即保存 */
+  saveNow: () => Promise<void>
 }
 
 const DEFAULT_DELAY = 1500
+/** 倒计时刷新间隔：100ms 足够让秒数与进度条看起来连续，又不至于太耗 */
+const TICK_MS = 100
 
 export function useAutoSave(options: UseAutoSaveOptions): UseAutoSaveResult {
   const { text, extra, enabled, onSave, delay = DEFAULT_DELAY } = options
@@ -39,19 +56,38 @@ export function useAutoSave(options: UseAutoSaveOptions): UseAutoSaveResult {
   const lastSaved = ref<number | null>(null)
   const saving = ref(false)
   const error = ref<string | null>(null)
+  const pending = ref(false)
+  const remainingMs = ref(0)
+  const progress = ref(0)
 
   /** 已保存内容的签名（text + extra，与 watch 的判定保持一致） */
   let savedSignature = ''
-  let timer: ReturnType<typeof setTimeout> | undefined
+  let ticker: ReturnType<typeof setInterval> | undefined
   let running = false
 
   function signature(value: string): string {
     return `${value}\u0000${extra?.value ?? ''}`.trim()
   }
 
+  /** 停止倒计时并复位相关状态（不清 savedSignature） */
+  function stopCountdown(): void {
+    if (ticker !== undefined) {
+      clearInterval(ticker)
+      ticker = undefined
+    }
+    pending.value = false
+    remainingMs.value = 0
+    progress.value = 0
+  }
+
+  function hasUnsaved(value: string): boolean {
+    return value.trim() !== '' && signature(value) !== savedSignature
+  }
+
   function markSaved(value: string): void {
     savedSignature = signature(value)
     lastSaved.value = Date.now()
+    stopCountdown()
   }
 
   async function save(): Promise<void> {
@@ -75,24 +111,76 @@ export function useAutoSave(options: UseAutoSaveOptions): UseAutoSaveResult {
     }
   }
 
+  /** 启动倒计时：`delay` 毫秒后保存。用单一 interval 驱动，避免两个计时器不同步。 */
+  function startCountdown(): void {
+    stopCountdown()
+    if (delay <= 0) {
+      void save()
+      return
+    }
+
+    const deadline = Date.now() + delay
+    pending.value = true
+    remainingMs.value = delay
+    progress.value = 1
+
+    ticker = setInterval(() => {
+      const left = deadline - Date.now()
+      if (left > 0) {
+        remainingMs.value = left
+        progress.value = left / delay
+        return
+      }
+      // 到点：先停表（pending 置 false），再保存
+      stopCountdown()
+      void save()
+    }, TICK_MS)
+  }
+
+  /**
+   * 跳过剩余等待立即保存。
+   *
+   * 无未保存改动或未启用时是空操作，调用方不必先判断。
+   */
+  async function saveNow(): Promise<void> {
+    stopCountdown()
+    if (!enabled.value || !hasUnsaved(text.value)) {
+      return
+    }
+    await save()
+  }
+
   watch(
     () => signature(text.value),
     (current) => {
-      if (timer !== undefined) {
-        clearTimeout(timer)
-        timer = undefined
-      }
-      if (!enabled.value || !current || !text.value.trim() || current === savedSignature) {
+      stopCountdown()
+      if (!enabled.value || !hasUnsaved(current)) {
         return
       }
-      timer = setTimeout(() => {
-        // 定时器触发时再判断一次：期间可能已保存或被关闭
-        if (enabled.value && signature(text.value) !== savedSignature) {
-          void save()
-        }
-      }, delay)
+      startCountdown()
     },
   )
 
-  return { lastSaved, saving, error, markSaved }
+  // 关闭自动保存开关时，正在跑的倒计时必须停掉，否则会在关闭后仍然保存一次
+  watch(enabled, (on) => {
+    if (!on) {
+      stopCountdown()
+    }
+  })
+
+  // 组件卸载时清理计时器，避免回调打到已销毁的组件上
+  if (getCurrentScope()) {
+    onScopeDispose(stopCountdown)
+  }
+
+  return {
+    lastSaved,
+    saving,
+    error,
+    pending,
+    remainingMs,
+    progress,
+    markSaved,
+    saveNow,
+  }
 }

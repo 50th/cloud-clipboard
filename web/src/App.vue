@@ -135,9 +135,20 @@ async function handleClearAll() {
       </p>
     </header>
 
-    <p v-if="notice" :class="['notice', notice.kind === 'ok' ? 'notice--ok' : 'notice--err']">
-      {{ notice.text }}
-    </p>
+    <!--
+      提示是**固定悬浮**的（见 styles.css 的 .notice）：不参与文档流，
+      出现与消失都不会顶动下面的输入区。
+    -->
+    <Transition name="notice-fade">
+      <p
+        v-if="notice"
+        :class="['notice', notice.kind === 'ok' ? 'notice--ok' : 'notice--err']"
+        role="status"
+        aria-live="polite"
+      >
+        {{ notice.text }}
+      </p>
+    </Transition>
 
     <!-- 未登录：只显示登录/注册；JWT 未接入前这里曾是"演示用户"兜底入口 -->
     <template v-if="userStore.restoring">

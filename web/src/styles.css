@@ -177,11 +177,27 @@ body {
   font-size: 12px;
 }
 
+/*
+ * 提示：**固定悬浮，不参与文档流**。
+ *
+ * 曾经它是普通块级元素，出现/消失会把下方内容整体顶动——自动保存每次
+ * 成功都弹一次提示，输入框就跟着上下跳，非常影响输入。
+ * 固定定位 + 底部居中：既不占位，也不遮挡上方的输入区。
+ * `pointer-events: none` 保证它永远不会挡住底下的按钮。
+ */
 .notice {
-  margin: 0 0 12px;
-  padding: 8px 12px;
-  border-radius: 8px;
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 100;
+  max-width: min(560px, calc(100vw - 32px));
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: 10px;
   font-size: 13px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+  pointer-events: none;
 }
 
 .notice--ok {
@@ -194,6 +210,20 @@ body {
   background: #fef2f2;
   color: var(--danger);
   border: 1px solid #fecaca;
+}
+
+/* 进出场动画。transform 必须带 translateX(-50%)，否则会丢掉居中 */
+.notice-fade-enter-active,
+.notice-fade-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.notice-fade-enter-from,
+.notice-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(10px);
 }
 
 .field {
@@ -257,6 +287,7 @@ textarea {
 }
 
 .autosave {
+  position: relative; /* 倒计时进度条以此为定位基准 */
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -296,6 +327,30 @@ textarea {
 /* 有改动但还没到保存时机：橙色，提示倒计时中 */
 .autosave__status--pending {
   color: #b45309;
+}
+
+/*
+ * 倒计时进度条。
+ *
+ * 绝对定位贴在分隔线上——**不能占布局高度**，否则倒计时出现/结束时
+ * 整个面板会跟着抖一下。
+ */
+.autosave__progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 1px;
+}
+
+.autosave__progress-fill {
+  display: block;
+  height: 100%;
+  background: #b45309;
+  /* 与 100ms 的刷新间隔对齐，视觉上连续 */
+  transition: width 0.1s linear;
 }
 
 /* ---------- 记录卡片 ---------- */
