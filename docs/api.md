@@ -32,7 +32,7 @@ cd server
 | POST | `/api/v1/clipboard/items` | 创建；`title` 留空时自动生成，按 `timezone` 显示本地时间 |
 | GET | `/api/v1/clipboard/items` | 列表：分页 / 类型筛选 / 按标题或内容搜索 / 排序 |
 | GET | `/api/v1/clipboard/items/{id}` | 详情 |
-| PATCH | `/api/v1/clipboard/items/{id}` | 更新（只改显式传入的字段） |
+| PATCH | `/api/v1/clipboard/items/{id}` | 更新（只改显式传入的字段）。内容与**另一条**重复时返回 `409` |
 | DELETE | `/api/v1/clipboard/items/{id}` | 删除单条 |
 | DELETE | `/api/v1/clipboard/items` | 清空 |
 | POST | `/api/v1/dev/reset` | ⚠️ 删数据并重建种子（仅 `ENABLE_DEV_ROUTES=true` 时注册） |
