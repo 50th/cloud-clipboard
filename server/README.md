@@ -31,7 +31,8 @@ server/
 │       └── events.py        # 事件序列化（与 REST 共用）
 ├── alembic/                 # 迁移（env.py 走异步引擎）
 ├── scripts/init_db.py       # 建表 + 演示账号 + 种子数据
-├── tests/conftest.py        # ⬜ 夹具已写好（打 clipboard_test 库），用例待补
+├── scripts/ensure_database.py  # 按需建库（测试用，幂等）
+├── tests/                   # pytest（打 clipboard_test 库）
 ├── alembic.ini              # ⚠️ 保持纯 ASCII
 └── requirements.txt / .env.example
 ```
@@ -41,8 +42,13 @@ server/
 | 项 | 值 |
 |----|-----|
 | 容器 | `cloud-clipboard-postgres`（`postgres:16`），宿主 `5433` |
-| 开发库 / 测试库 | `clipboard` / `clipboard_test` @ `127.0.0.1:5433` |
+| 开发库 | `clipboard` —— 日常使用 |
+| 后端测试库 | `clipboard_test` —— pytest（每用例 `drop_all` 重建表） |
+| Web 测试库 | `clipboard_web_test` —— `scripts/run_web_tests.ps1` 用（按需自动创建） |
 | 演示账号 | `demo` / `demo1234`（口令由 `DEMO_PASSWORD` 配） |
+
+> 两个测试库分开是必要的：pytest 会反复删表，与 Web 测试共用库时并行会互相干扰。
+> 三个库都可连 `127.0.0.1:5433`。
 
 **表**
 

@@ -50,7 +50,7 @@ cloud-clipboard/
 ├── AGENTS.md / README.md   # 本文件 / 项目说明（面向人类）
 ├── docs/                   # api.md（契约摘要）/ ws-protocol.md / roadmap.md
 ├── infra/                  # ✅ docker-compose.yml（Postgres 容器，宿主 5433）
-├── scripts/                # ✅ verify_postgres.py（宿主侧连通性验证）
+├── scripts/                # ✅ verify_postgres.py（连通性）/ start_server_lan.ps1（0.0.0.0 供真机）/ run_web_tests.ps1（Web 隔离测试）
 ├── server/                 # app/{core,db,schemas,crud,routers,services} + alembic/ + tests/
 │   └── alembic.ini         # ⚠️ 必须保持纯 ASCII（见「添加/修改数据库模型」）
 ├── web/                    # src/{api,types,utils,stores,composables,components} + tests/*.test.ts
@@ -151,6 +151,16 @@ cloud-clipboard/
 **性能与隔离**
 - 图片、文件不要 base64 存数据库（阶段二）；列表查询必须带分页
 - WebSocket 广播**按用户隔离，不群发**
+
+**测试隔离**
+- **测试库名必须含 `test`**：Web 端测试以此判定"这是可丢弃的库"，
+  名字不含 `test` 的库**不允许**执行破坏性用例（`dev/reset`、清空全部）。
+  改名等于解除保护，不要图简洁改成 `clipboard_e2e` 之类
+- **每套测试各用一个库**：`clipboard`（开发）/ `clipboard_test`（pytest）/
+  `clipboard_web_test`（Web 隔离测试）。pytest 每个用例都会 `drop_all` 重建表，
+  共用库会互相删表
+- Web 隔离测试跑 `.\scripts\run_web_tests.ps1`（自动建库 + 起独立后端 + 跑完停掉）；
+  它依赖 `CLIPBOARD_LOCK_PORT` 与开发实例错开锁端口
 
 **平台注意**：Windows 保留了 `5141-5240`（吃掉 5173 → Web 端用 **5273**）与
 `8903-9002`（吃掉 MinIO 的 9000 → 阶段二换端口）。

@@ -141,15 +141,18 @@ cd server
 $env:PYTHONUTF8='1'
 .\venv\Scripts\python.exe -m pytest
 
-# Web 端：34 项（端到端 + 多标签页同步 + 提示回归，需后端在跑）
+# Web 端隔离模式（推荐）：自动起一个指向测试库的独立后端，跑完自动停
+.\scripts\run_web_tests.ps1
+
+# Web 端安全模式：打当前后端，不删除任何既有数据
 cd web
 pnpm test
 pnpm typecheck
 ```
 
-- 后端测试**不会碰开发库**：`tests/conftest.py` 强制指向 `clipboard_test`
-- ⚠️ Web 端的破坏性用例（清空全部）默认**跳过**，需显式 `$env:E2E_ALLOW_DESTRUCTIVE='1'`
-  且 `server/.env` 里 `ENABLE_DEV_ROUTES=true`；**它会清空所连库的数据**
+- 两套测试**各用一个独立的库**（`clipboard_test` / `clipboard_web_test`），
+  可任意并行；开发库 `clipboard` 完全不受影响
+- Web 端有安全守卫：目标库名不含 `test` 时，破坏性操作一律跳过
 
 ---
 

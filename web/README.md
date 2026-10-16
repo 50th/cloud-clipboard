@@ -51,7 +51,12 @@
 ## 测试
 
 ```powershell
-pnpm test          # 34 项（需后端在跑）：e2e + WebSocket 多标签页同步 + 提示回归
+# 隔离模式（推荐）：自动起一个指向测试库的独立后端，跑完自动停。
+# 破坏性用例（清空全部）会被覆盖，且绝不碰开发库。
+.\scripts\run_web_tests.ps1
+
+# 安全模式：打当前后端（默认 8000）。不会删除任何既有数据。
+pnpm test
 pnpm typecheck     # vue-tsc --noEmit
 pnpm build         # 类型检查 + 构建
 pnpm run gen:api   # 契约变更后重新生成 src/types/api.d.ts
@@ -60,18 +65,33 @@ pnpm run gen:api   # 契约变更后重新生成 src/types/api.d.ts
 `pnpm test` 用 Node 内置测试运行器 + 类型擦除**直接跑 `tests/**/*.test.ts`**：
 
 - `e2e.test.ts`：真实 store + 真实后端。含登录/401、列表、上传、去重契约（标题与时间戳）、
-  搜索、排序、删除、清空
-- `websocket.test.ts`：真实 `useWebSocket`，验证「A 上传 → B 出现」「A 删除 → B 消失」，
-  以及令牌无效时 4401 不重连
+  搜索、排序、删除、清空，以及**安全守卫的回归用例**
+- `websocket.test.ts`：真实 `useWebSocket`，验证「A 上传 → B 出现」「A 删除 → B 消失」、
+  去重也会广播、WS 地址跟随 API 地址，以及令牌无效时 4401 不重连
 - `notice.test.ts`：纯前端，覆盖顶部提示必须**自动消失**
 
+### 安全守卫（重要）
+
+破坏性操作（清空全部、`dev/reset`）**必须同时满足**两个条件才执行：
+
+1. 目标库名含 `test`（启动时通过 `GET /api/v1/dev/db` 自动探测）
+2. 显式设置 `E2E_ALLOW_DESTRUCTIVE=1`
+
+探测失败（dev 路由未开启 / 后端不可达）一律按**非测试库**处理。
+因此 `pnpm test` 打在开发库上是安全的：**即使误设了开关也不会删数据**。
+
+### 其他注意
+
 > ⚠️ Node 测试运行器**并行**跑各文件，所以各套件用**独立账号**——共用会让 `total`
-> 断言随机失败（实测踩过）。
+> 断言随机失败（实测踩过）。WebSocket 套件用固定账号 `ws_e2e_account`，
+> **不会**随运行次数增长；如需清理：`DELETE FROM users WHERE username = 'ws_e2e_account'`。
 >
 > ⚠️ **`pnpm test -- <file>` 不会只跑指定文件**（参数被追加到既有 glob 之后）。
 > 要单跑得直接调 node：`node --experimental-strip-types --test tests/notice.test.ts`
 >
-> 破坏性用例（清空全部）默认**跳过**，需 `$env:E2E_ALLOW_DESTRUCTIVE='1'`。
+> ⚠️ 未配置 `VITE_WS_URL` 时，WebSocket 地址**从 `VITE_API_BASE_URL` 推导**。
+> 只改 API 地址即可；若 WS 与 API 不同主机（如走反向代理）才需要单独配 `VITE_WS_URL`。
+>
 > **剪贴板读写依赖浏览器 API，不在自动化范围内**，需按上一节手工验证。
 
 ## 目录结构
