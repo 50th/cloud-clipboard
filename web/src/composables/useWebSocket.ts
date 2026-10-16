@@ -13,7 +13,7 @@
 import { onScopeDispose, ref } from 'vue'
 import type { Ref } from 'vue'
 
-import { getToken } from '#src/api/client.ts'
+import { API_BASE_URL, getToken } from '#src/api/client.ts'
 
 export type WsEventName =
   | 'clipboard.created'
@@ -58,10 +58,28 @@ function readWsUrl(): string | undefined {
   return ((import.meta.env ?? {}) as Record<string, string | undefined>).VITE_WS_URL
 }
 
+/**
+ * 解析 WebSocket 基址。
+ *
+ * 优先 `VITE_WS_URL`（WS 与 API 不在同一主机时用，例如走反向代理）；
+ * **未配置时从 API 基址推导**（`http→ws`）。
+ *
+ * ⚠️ 推导这个兜底很重要：否则只改 `VITE_API_BASE_URL` 时，
+ * 请求会打新后端、WebSocket 却仍连默认的 8000，**两端指向不同后端**，
+ * 表现为"数据写进去了但收不到实时事件"（隔离测试时就踩到过）。
+ */
+function resolveWsBase(): string {
+  const explicit = readWsUrl()
+  if (explicit) {
+    return explicit
+  }
+  const derived = API_BASE_URL.replace(/^http/, 'ws')
+  return derived.length > 0 ? derived : DEFAULT_WS_URL
+}
+
 /** WebSocket 端点地址。 */
 export function getWebSocketUrl(token?: string): string {
-  const base = readWsUrl() ?? DEFAULT_WS_URL
-  const url = `${base}/api/v1/clipboard/ws`
+  const url = `${resolveWsBase()}/api/v1/clipboard/ws`
   return token ? `${url}?token=${encodeURIComponent(token)}` : url
 }
 

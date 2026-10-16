@@ -18,6 +18,12 @@
 实测：`bind(0)` 每次都返回**不同**的端口（同一进程内连续三次得到 13099/13100/13101），
 因此"探测空闲端口再绑定"的写法在并发下**永远不会冲突**，锁形同虚设。
 这一点很容易被后人"优化"错，故特别注明。
+
+## 合法地跑第二个实例
+
+测试用的独立后端（换端口 + 换数据库）是**合法**的第二个实例。
+用 `CLIPBOARD_LOCK_PORT` 给它换个锁端口即可与开发实例并存——
+这不是绕过守卫：同一个实例的多个 worker 仍共用同一锁端口，多 worker 照样被拦下。
 """
 
 from __future__ import annotations
@@ -38,11 +44,37 @@ class MultipleWorkersError(RuntimeError):
     """检测到本机已有另一个实例在运行（多半是多 worker 启动）。"""
 
 
+def default_lock_port() -> int:
+    """解析本次应使用的锁端口。
+
+    优先取环境变量 `CLIPBOARD_LOCK_PORT`，否则用模块常量 `LOCK_PORT`。
+
+    为什么需要这个开关：锁端口的作用是识别"同一个实例的多个副本"。
+    测试用的独立后端（另一个端口、另一个数据库）是**合法的第二个实例**，
+    给它换一个锁端口即可与开发实例并存——**不必削弱守卫**：
+    同一个实例的多个 worker 仍然共用同一个锁端口，多 worker 照样被拦下。
+    """
+    raw = os.environ.get("CLIPBOARD_LOCK_PORT")
+    if raw is None or raw.strip() == "":
+        return LOCK_PORT
+    try:
+        port = int(raw)
+    except ValueError:
+        raise MultipleWorkersError(
+            f"CLIPBOARD_LOCK_PORT 不是合法整数: {raw!r}"
+        ) from None
+    if not (1024 <= port <= 65535):
+        raise MultipleWorkersError(
+            f"CLIPBOARD_LOCK_PORT 超出合理范围（1024-65535）: {port}"
+        )
+    return port
+
+
 def lock_single_worker(port: int | None = None) -> int:
     """独占单实例锁端口，返回该端口号。重复调用是幂等的。
 
-    `port` 为 None 时使用模块级 `LOCK_PORT`（生产行为）。之所以在函数体内而不是
-    用默认参数读取 `LOCK_PORT`，是为了让测试能 monkeypatch 它——默认参数在函数
+    `port` 为 None 时按 `default_lock_port()` 解析。之所以在函数体内而不是
+    用默认参数读取，是为了让测试能 monkeypatch `LOCK_PORT`——默认参数在函数
     定义时就求值了，patch 模块属性不会生效。
     """
     global _locked_port, _lock_socket
@@ -50,7 +82,7 @@ def lock_single_worker(port: int | None = None) -> int:
     if _lock_socket is not None and _locked_port is not None:
         return _locked_port
 
-    target = LOCK_PORT if port is None else port
+    target = default_lock_port() if port is None else port
 
     lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:

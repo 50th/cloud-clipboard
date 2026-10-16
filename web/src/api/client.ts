@@ -237,10 +237,29 @@ export const clipboardApi = {
   },
 }
 
+/** 数据库探测结果（`GET /dev/db`）。 */
+export interface DevDatabaseInfo {
+  database: string
+  version: string
+}
+
 /** 开发/测试辅助接口（仅后端 ENABLE_DEV_ROUTES=true 时注册，见 `docs/api.md` 的「接口摘要」） */
 export const devApi = {
   /** ⚠️ 删除当前用户的剪贴板项并重建种子数据（仅开发路由开启时可用） */
   reset: async (): Promise<void> => {
     await http.post('/dev/reset')
+  },
+
+  /**
+   * 探测后端当前连接的数据库。
+   *
+   * **测试用它做安全守卫**：只有确认目标是测试库时，才允许执行破坏性操作
+   * （`dev/reset`、清空全部），避免误跑一次测试就把开发库数据清掉。
+   *
+   * 开发路由未开启时返回 404，调用方需要处理。
+   */
+  db: async (): Promise<DevDatabaseInfo> => {
+    const { data } = await http.get<DevDatabaseInfo>('/dev/db')
+    return data
   },
 }

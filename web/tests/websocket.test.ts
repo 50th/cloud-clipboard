@@ -28,7 +28,7 @@ const memory = new Map<string, string>()
 
 setActivePinia(createPinia())
 
-const { authApi, setToken } = await import('#src/api/client.ts')
+const { API_BASE_URL, authApi, setToken } = await import('#src/api/client.ts')
 const { useClipboardStore } = await import('#src/stores/clipboardStore.ts')
 const { backoffDelay, getWebSocketUrl, useWebSocket, WS_BACKOFF_MAX_MS } = await import(
   '#src/composables/useWebSocket.ts'
@@ -37,17 +37,34 @@ const { backoffDelay, getWebSocketUrl, useWebSocket, WS_BACKOFF_MAX_MS } = await
 const TAG = `[ws-${Date.now()}]`
 
 /**
- * 本套件**注册并使用自己的账号**，不复用 `e2e.test.ts` 的 demo。
+ * 本套件使用**自己的固定账号**，不复用 `e2e.test.ts` 的 demo。
  *
- * 原因：Node 测试运行器会**并行**跑多个测试文件，而两个套件都在增删剪贴板记录。
- * 共用 demo 会让 `e2e.test.ts` 里"total 应 +1"这类断言随机失败
- * （实测过：e2e 期望 5 实际 6）。各自一个账号后互不干扰。
+ * 原因一（隔离）：Node 测试运行器会**并行**跑多个测试文件，而两个套件都在增删剪贴板记录。
+ * 共用 demo 会让 `e2e.test.ts` 里"total 应 +1"这类断言随机失败（实测过：期望 5 实际 6）。
+ *
+ * 原因二（不留垃圾）：用**固定用户名**而非时间戳。此前每次运行都注册一个新账号，
+ * 在目标库里无限累积（实测跑几次就多出几个 `ws_e2e_*`）。
+ * 现在改为"能注册就注册，已存在就登录"——无论跑多少次都只占一行。
  */
-const WS_USERNAME = `ws_e2e_${Date.now()}`
+const WS_USERNAME = 'ws_e2e_account'
 const WS_PASSWORD = 'ws-e2e-password'
 
-const registered = await authApi.register(WS_USERNAME, `${WS_USERNAME}@example.com`, WS_PASSWORD)
-const TOKEN = registered.token.access_token
+/** 注册；已存在（409）则改为登录。两种情况都能拿到可用令牌。 */
+async function ensureAccount(username: string, password: string): Promise<string> {
+  try {
+    const registered = await authApi.register(username, `${username}@example.com`, password)
+    return registered.token.access_token
+  } catch (error) {
+    const status = (error as { response?: { status?: number } }).response?.status
+    if (status !== 409) {
+      throw error
+    }
+    const loggedIn = await authApi.login(username, password)
+    return loggedIn.token.access_token
+  }
+}
+
+const TOKEN = await ensureAccount(WS_USERNAME, WS_PASSWORD)
 setToken(TOKEN)
 
 /** 等待条件成立，超时则返回 false */
@@ -110,9 +127,9 @@ describe('WebSocket 实时同步（真实后端）', () => {
       }
       tab.close()
     }
-    // 说明：本套件注册的 ws_e2e_* 账号会留在库里（每个只占一行）。
-    // 它每次运行的用户名都带时间戳，所以不会互相干扰；如需清理可执行
-    //   DELETE FROM users WHERE username LIKE 'ws_e2e_%';
+    // 说明：本套件会留下**一个**固定账号 `ws_e2e_account`（不随运行次数增长）。
+    // 它是必需的：两个测试文件并行跑，各用独立账号才不会互相干扰。
+    // 如需清理：DELETE FROM users WHERE username = 'ws_e2e_account';
   })
 
   it('纯函数：端点地址与指数退避符合协议约定', () => {
@@ -136,6 +153,23 @@ describe('WebSocket 实时同步（真实后端）', () => {
     assert.equal(backoffDelay(4), 16000)
     assert.equal(backoffDelay(5), WS_BACKOFF_MAX_MS, '第 5 次应达上限 30s')
     assert.equal(backoffDelay(50), WS_BACKOFF_MAX_MS, '不得超过上限')
+  })
+
+  it('WS 地址跟随 API 地址（未配 VITE_WS_URL 时自动推导）', () => {
+    // 回归保护：若只改 VITE_API_BASE_URL 而 WS 仍连默认的 8000，
+    // 就会出现"HTTP 打到 A 后端、WebSocket 连 B 后端"，收不到实时事件。
+    const wsUrl = getWebSocketUrl()
+    const expectedHost = API_BASE_URL.replace(/^http/, 'ws')
+
+    assert.ok(
+      wsUrl.startsWith(expectedHost),
+      `WS 基址应等于 API 基址推导值。期望以 ${expectedHost} 开头，实际 ${wsUrl}`,
+    )
+    assert.equal(
+      process.env.VITE_WS_URL,
+      undefined,
+      '本用例只在未显式配置 VITE_WS_URL 时才有意义（隔离脚本不设它）',
+    )
   })
 
   it('两个"标签页"都能建立连接', async () => {

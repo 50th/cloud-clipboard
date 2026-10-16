@@ -44,6 +44,57 @@ def free_port(monkeypatch: pytest.MonkeyPatch) -> int:
     return port
 
 
+class TestDefaultLockPort:
+    """锁端口可被 `CLIPBOARD_LOCK_PORT` 覆盖——让测试用独立后端与开发实例并存。"""
+
+    def test_未设置时用模块常量(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("CLIPBOARD_LOCK_PORT", raising=False)
+        monkeypatch.setattr(single_worker, "LOCK_PORT", 49137)
+        assert single_worker.default_lock_port() == 49137
+
+    @pytest.mark.parametrize("value", ["", "   "])
+    def test_空值退回模块常量(
+        self, monkeypatch: pytest.MonkeyPatch, value: str
+    ) -> None:
+        monkeypatch.setattr(single_worker, "LOCK_PORT", 49137)
+        monkeypatch.setenv("CLIPBOARD_LOCK_PORT", value)
+        assert single_worker.default_lock_port() == 49137
+
+    def test_环境变量可覆盖(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CLIPBOARD_LOCK_PORT", "49138")
+        assert single_worker.default_lock_port() == 49138
+
+    def test_非法值被拒(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CLIPBOARD_LOCK_PORT", "abc")
+        with pytest.raises(single_worker.MultipleWorkersError):
+            single_worker.default_lock_port()
+
+    @pytest.mark.parametrize("value", ["80", "70000", "0", "-1"])
+    def test_越界值被拒(
+        self, monkeypatch: pytest.MonkeyPatch, value: str
+    ) -> None:
+        monkeypatch.setenv("CLIPBOARD_LOCK_PORT", value)
+        with pytest.raises(single_worker.MultipleWorkersError):
+            single_worker.default_lock_port()
+
+    def test_不同锁端口的两个实例可以并存(
+        self, monkeypatch: pytest.MonkeyPatch, free_port: int
+    ) -> None:
+        """这正是测试后端能与开发后端同时跑的原因。"""
+        other = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        other.bind(("127.0.0.1", 0))
+        other_port = other.getsockname()[1]
+        other.close()
+
+        monkeypatch.setenv("CLIPBOARD_LOCK_PORT", str(free_port))
+        assert single_worker.lock_single_worker() == free_port
+
+        # 换一个锁端口，同一个进程也能再抢一个（模拟另一个实例用的不同端口）
+        single_worker.release_single_worker()
+        monkeypatch.setenv("CLIPBOARD_LOCK_PORT", str(other_port))
+        assert single_worker.lock_single_worker() == other_port
+
+
 class TestLockSingleWorker:
     def test_首次抢占成功并返回端口(self, free_port: int) -> None:
         port = single_worker.lock_single_worker()

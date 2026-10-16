@@ -5,8 +5,19 @@
  * 覆盖「上传 → 标题 → 列表展示 → 去重 → 搜索 → 排序 → 删除 → 清空」这条链路。
  * 剪贴板读写本身依赖浏览器 API，由浏览器手工验证（见 web/README.md）。
  *
- * 运行（需先启动后端）：
- *   pnpm test
+ * ## 运行方式
+ *
+ * ```powershell
+ * # 1) 安全模式：打当前后端（默认 8000）。不会删除任何既有数据。
+ * cd web; pnpm test
+ *
+ * # 2) 隔离模式（推荐，可覆盖破坏性用例）：自动起一个指向测试库的独立后端
+ * .\scripts\run_web_tests.ps1
+ * ```
+ *
+ * ⚠️ **安全守卫**：破坏性操作（清空全部、`dev/reset`）要求目标库名含 `test`，
+ * 且显式设置 `E2E_ALLOW_DESTRUCTIVE=1`。只满足后者不会执行——
+ * 避免误对开发库跑测试就把数据清掉。
  */
 
 import assert from 'node:assert/strict'
@@ -55,16 +66,39 @@ const state = () => useClipboardStore()
 const TAG = `[e2e-${Date.now()}]`
 
 /**
- * 是否允许执行破坏性用例（清空全部 / dev/reset）。
+ * 探测目标后端连的是哪个数据库。
  *
- * ⚠️ 第 3 步接入数据库后，这两个操作会清空**真实数据**。
- * 因此必须显式设置 `E2E_ALLOW_DESTRUCTIVE=1` 才执行（仅对测试库使用）：
- *
- *   $env:E2E_ALLOW_DESTRUCTIVE = '1'; pnpm test
- *
- * 默认关闭，避免误跑一次测试就把库清空（见 docs/roadmap.md 的 P2）。
+ * 失败时返回 `null`（开发路由未开启 / 后端不可达），并按**非测试库**处理——
+ * 宁可少跑几条用例，也不能误清真实数据（fail-safe）。
  */
-const ALLOW_DESTRUCTIVE = process.env.E2E_ALLOW_DESTRUCTIVE === '1'
+async function detectTargetDatabase(): Promise<string | null> {
+  try {
+    const info = await devApi.db()
+    return info.database
+  } catch {
+    return null
+  }
+}
+
+const TARGET_DATABASE = await detectTargetDatabase()
+
+/** 库名含 `test` 才认为是测试库。与 `server/tests/conftest.py` 的口径一致。 */
+const ON_TEST_DATABASE = TARGET_DATABASE !== null && /test/i.test(TARGET_DATABASE)
+
+/**
+ * 是否允许执行破坏性用例（清空全部、`dev/reset`）。
+ *
+ * ⚠️ **必须同时满足两个条件**：
+ *   1. 目标库名含 `test`（自动判定）
+ *   2. 显式设置 `E2E_ALLOW_DESTRUCTIVE=1`
+ *
+ * 加第 1 个条件是因为：原先只靠环境变量，而**收尾钩子里的 `dev/reset` 是无条件调用的**，
+ * 于是"跑一次测试"就会清掉开发库里 demo 用户的全部剪贴板数据（P2）。
+ * 现在只要目标不是测试库，任何破坏性操作都不会执行。
+ *
+ * 想覆盖破坏性用例请用 `scripts/run_web_tests.ps1`（自动指向测试库并设好该开关）。
+ */
+const ALLOW_DESTRUCTIVE = ON_TEST_DATABASE && process.env.E2E_ALLOW_DESTRUCTIVE === '1'
 
 /** 破坏性用例之间共用的标记：会话开始时列表本就是空的 */
 let sawEmptyList = false
@@ -86,8 +120,16 @@ async function clearAllGuarded(): Promise<void> {
   sawEmptyList = true
 }
 
-/** 恢复初始状态：优先调 dev/reset，失败则手工补回种子数据 */
+/**
+ * 收尾恢复。
+ *
+ * ⚠️ **非测试库上直接返回，绝不调用 `dev/reset`**——那是删数据操作。
+ * 本次测试自己产生的记录由 `after` 钩子按 `TAG` 前缀清理，不需要动别人的数据。
+ */
 async function restoreSeedData(): Promise<void> {
+  if (!ON_TEST_DATABASE) {
+    return
+  }
   try {
     await devApi.reset()
     return
@@ -411,9 +453,29 @@ describe('Web 端单端闭环（真实后端）', () => {
 
   it('破坏性开关状态可被观察（便于排查为何跳过了清空用例）', () => {
     console.log(
-      `  [e2e] E2E_ALLOW_DESTRUCTIVE=${ALLOW_DESTRUCTIVE ? '1（会执行清空用例）' : '未设置（已跳过清空用例）'}`,
+      `  [e2e] 目标数据库=${TARGET_DATABASE ?? '未知（dev 路由未开启或后端不可达）'}` +
+        ` · 判定为测试库=${ON_TEST_DATABASE}` +
+        ` · E2E_ALLOW_DESTRUCTIVE=${process.env.E2E_ALLOW_DESTRUCTIVE === '1' ? '1' : '未设置'}` +
+        ` · 破坏性用例=${ALLOW_DESTRUCTIVE ? '会执行' : '已跳过'}`,
     )
     assert.equal(typeof ALLOW_DESTRUCTIVE, 'boolean')
+  })
+
+  it('安全守卫：非测试库上绝不执行破坏性操作（P2 回归）', () => {
+    // 这是 P2 的回归保护：无论 E2E_ALLOW_DESTRUCTIVE 怎么设，
+    // 只要目标不是测试库，破坏性开关就必须是关的。
+    if (!ON_TEST_DATABASE) {
+      assert.equal(
+        ALLOW_DESTRUCTIVE,
+        false,
+        '目标不是测试库时，破坏性操作必须被强制关闭，否则会清掉真实数据',
+      )
+    }
+    assert.equal(
+      typeof TARGET_DATABASE === 'string' || TARGET_DATABASE === null,
+      true,
+      '目标库探测结果要么是库名，要么是 null',
+    )
   })
 
   it('后端不可达时给出可读错误，而不是抛异常', async () => {
