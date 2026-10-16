@@ -21,7 +21,7 @@
  */
 
 import assert from 'node:assert/strict'
-import { after, describe, it } from 'node:test'
+import { after, afterEach, describe, it } from 'node:test'
 
 import { createPinia, setActivePinia } from 'pinia'
 
@@ -483,5 +483,99 @@ describe('Web 端单端闭环（真实后端）', () => {
     const failure = await fetch('http://127.0.0.1:1/health').catch((error: unknown) => error)
     const message = getErrorMessage(failure)
     assert.ok(typeof message === 'string' && message.length > 0, '应返回非空错误文本')
+  })
+})
+
+/**
+ * 「点历史记录载入右侧编辑」的闭环。
+ *
+ * 核心契约：载入后保存**更新那一条**，而不是新建——
+ * 否则「点开一条 → 改几个字 → 点上传」会莫名其妙多出一行。
+ */
+describe('载入已有记录编辑（真实后端）', () => {
+  // 每条用例后解除编辑关联：editingId / loadedForEdit 是 store 级状态，
+  // 残留会影响后面其它用例的上传行为
+  afterEach(() => {
+    state().startNewDraft()
+  })
+
+  it('requestEdit → applyRequestedEdit 会锁定那一条并暴露 editingId', async () => {
+    const { item } = await upload(`${TAG} 待编辑`)
+    assert.equal(state().editingId, null, '初始不应处于编辑状态')
+
+    const ticketBefore = state().editTicket
+    state().requestEdit(item)
+    assert.ok(state().editTicket > ticketBefore, '请求载入应递增凭证（点同一条也能重新载入）')
+
+    const applied = state().applyRequestedEdit()
+    assert.equal(applied?.id, item.id, '应返回被载入的那一条')
+    assert.equal(state().editingId, item.id, '应记录正在编辑哪一条')
+
+    // 没有待处理请求时是空操作
+    assert.equal(state().applyRequestedEdit(), null)
+  })
+
+  it('载入编辑后改内容：更新原记录，不新建', async () => {
+    const { item } = await upload(`${TAG} 载入前的内容`)
+    const totalBefore = state().total
+
+    state().requestEdit(item)
+    state().applyRequestedEdit()
+
+    const { item: updated } = await upload(`${TAG} 载入后改过的内容`)
+
+    assert.equal(updated.id, item.id, '应更新同一条记录，而不是新建')
+    assert.equal(state().total, totalBefore, '总数不应变化（没有多出一行）')
+    assert.ok(updated.content.includes('载入后改过'), '内容应已更新')
+  })
+
+  it('载入编辑后点「新建」再上传：会另起一条', async () => {
+    const { item } = await upload(`${TAG} 原始`)
+    const totalBefore = state().total
+
+    state().requestEdit(item)
+    state().applyRequestedEdit()
+    assert.equal(state().editingId, item.id)
+
+    // 相当于界面上的「＋ 新建剪贴板」
+    state().startNewDraft()
+    assert.equal(state().editingId, null, '新建后应解除编辑关联')
+
+    const { item: fresh } = await upload(`${TAG} 改为新建的内容`)
+
+    assert.notEqual(fresh.id, item.id, '新建后应产生另一条记录')
+    assert.equal(state().total, totalBefore + 1)
+  })
+
+  it('把内容改成与另一条相同：返回 409 且不破坏原记录', async () => {
+    const first = await upload(`${TAG} 冲突甲`)
+    const second = await upload(`${TAG} 冲突乙`)
+
+    state().requestEdit(second.item)
+    state().applyRequestedEdit()
+
+    // 直接驱动上传：内容与「冲突甲」重复
+    await assert.rejects(
+      () => upload(first.item.content),
+      (error: unknown) => {
+        const status = (error as { response?: { status?: number } }).response?.status
+        assert.equal(status, 409, `应返回 409，实际 ${String(status)}`)
+        return true
+      },
+      '重复内容应给出可读的冲突错误，而不是 500',
+    )
+  })
+
+  it('删除正在编辑的记录后再保存：自动回退为新建，不报错', async () => {
+    const { item } = await upload(`${TAG} 将被删除`)
+
+    state().requestEdit(item)
+    state().applyRequestedEdit()
+
+    await state().removeItem(item.id)
+
+    // 旧实现会在 404 时自动丢掉关联并新建（见 saveDraft）
+    const { item: recreated } = await upload(`${TAG} 删除后重新保存`)
+    assert.notEqual(recreated.id, item.id, '原记录已删，应新建一条')
   })
 })

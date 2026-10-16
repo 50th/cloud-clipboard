@@ -41,11 +41,67 @@ export const useClipboardStore = defineStore('clipboard', () => {
    */
   let draftId: string | null = null
   let draftContent = ''
+  /**
+   * 当前关联是「用户从列表里点开编辑的已有记录」还是「打字时自动建的草稿」。
+   *
+   * 差异体现在手动上传：草稿模式下内容变了要另起一行（用户是在写新东西），
+   * 而从列表点开编辑时内容变了**必须更新那一条**——否则
+   * 「点开一条 → 改几个字 → 点上传」会意外多出一行。
+   */
+  let loadedForEdit = false
+
+  /** 正在编辑的记录 id（null = 新建）；供列表高亮与输入区提示 */
+  const editingId = ref<string | null>(null)
+  /** 每次请求「载入编辑」递增；输入区据此响应（点同一条也能重新载入） */
+  const editTicket = ref(0)
+  /**
+   * 待载入编辑的记录。
+   *
+   * 为什么分两步（request → apply）：载入会切换 `draftId`，
+   * 而输入框里可能还有没到自动保存时机的改动。必须让**输入区先落盘**，
+   * 再切换关联，否则那几个字会跟着旧草稿一起丢。
+   */
+  let pendingEditItem: ClipboardItem | null = null
 
   /** 清空草稿关联（用户清空输入框、或手动上传后另起一行时调用） */
   function resetDraft() {
     draftId = null
     draftContent = ''
+    loadedForEdit = false
+    editingId.value = null
+  }
+
+  /**
+   * 请求把某条已有记录载入右侧输入区编辑。
+   *
+   * 真正的切换发生在输入区调用 `applyRequestedEdit()` 时（见上）。
+   */
+  function requestEdit(item: ClipboardItem) {
+    pendingEditItem = item
+    editTicket.value += 1
+  }
+
+  /**
+   * 取消待处理的载入请求（输入区没有待保存内容、或组件已销毁时用）。
+   */
+  function cancelRequestedEdit() {
+    pendingEditItem = null
+  }
+
+  /**
+   * 由输入区调用：应用待载入的记录，返回它（没有待处理请求时返回 null）。
+   */
+  function applyRequestedEdit(): ClipboardItem | null {
+    const item = pendingEditItem
+    pendingEditItem = null
+    if (!item) {
+      return null
+    }
+    draftId = item.id
+    draftContent = item.content
+    loadedForEdit = true
+    editingId.value = item.id
+    return item
   }
 
   /**
@@ -172,8 +228,10 @@ export const useClipboardStore = defineStore('clipboard', () => {
   /**
    * 手动上传。
    *
-   * 若输入框内容与当前草稿保存的内容一致，则**复用草稿那一行**（只更新标题），
-   * 避免「自动保存已经把内容存进去了，再点上传又冒出一行一模一样的」。
+   * - **从列表点开编辑**（`loadedForEdit`）：无论内容是否改动都更新那一条。
+   * - **打字自动生成的草稿**：仅当内容与草稿已保存内容一致时复用那一行
+   *   （避免「自动保存已经存进去了，再点上传又冒出一行一模一样的」）；
+   *   内容不同则视为用户在写新东西，另起一行。
    */
   async function uploadText(
     text: string,
@@ -182,14 +240,24 @@ export const useClipboardStore = defineStore('clipboard', () => {
     const trimmedTitle = title?.trim() ?? ''
     const content = text.trim()
 
-    if (draftId && draftContent === content) {
-      const item = await clipboardApi.update(draftId, {
-        ...(trimmedTitle ? { title: trimmedTitle } : {}),
-        timezone: LOCAL_TIMEZONE,
-      })
-      draftContent = item.content
-      await fetchItems({ page: 1, silent: true })
-      return { item, deduped: false }
+    if (draftId && (loadedForEdit || draftContent === content)) {
+      try {
+        const item = await clipboardApi.update(draftId, {
+          content,
+          ...(trimmedTitle ? { title: trimmedTitle } : {}),
+          timezone: LOCAL_TIMEZONE,
+        })
+        draftContent = item.content
+        await fetchItems({ page: 1, silent: true })
+        return { item, deduped: false }
+      } catch (err) {
+        // 正在编辑的记录被删了（本机或别的设备）→ 丢掉关联，走新建。
+        // 与 saveDraft 的处理保持一致，否则用户会看到一个莫名的 404。
+        if (!isNotFound(err)) {
+          throw err
+        }
+        resetDraft()
+      }
     }
 
     // 手动上传但内容与草稿不同：视为另一条独立记录，草稿保留为独立行
@@ -258,6 +326,8 @@ export const useClipboardStore = defineStore('clipboard', () => {
     error,
     search,
     order,
+    editingId,
+    editTicket,
     fetchItems,
     setPage,
     setSearch,
@@ -265,6 +335,9 @@ export const useClipboardStore = defineStore('clipboard', () => {
     saveDraft,
     uploadText,
     startNewDraft,
+    requestEdit,
+    applyRequestedEdit,
+    cancelRequestedEdit,
     removeItem,
     clearAll,
     reset,

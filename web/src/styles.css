@@ -226,6 +226,22 @@ body {
   transform: translateX(-50%) translateY(10px);
 }
 
+/*
+ * 面板内的**内联**错误提示。
+ *
+ * ⚠️ 不要复用 `.notice`：那是固定悬浮的全局 toast，用在这里会让
+ * 面板内的错误飘到屏幕底部（曾经踩过）。
+ */
+.inline-error {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #fef2f2;
+  color: var(--danger);
+  border: 1px solid #fecaca;
+}
+
 .field {
   display: block;
   margin-bottom: 10px;
@@ -365,6 +381,55 @@ textarea {
   border-radius: 10px;
   padding: 10px 12px;
   background: #fff;
+  /* 整卡可点击 → 载入到右侧编辑 */
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s,
+    background 0.15s;
+}
+
+.item:hover {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+}
+
+.item:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+/* 当前正在编辑的那一条：左侧色条 + 淡蓝底，和 hover 区分开 */
+.item--editing {
+  border-color: var(--primary);
+  background: #eff6ff;
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+/* 输入区的「正在编辑已有记录」提示条 */
+.editing-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  font-size: 12px;
+  color: #1e40af;
+}
+
+.editing-banner__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editing-banner__sub {
+  color: #3b6fd4;
 }
 
 .item__head {

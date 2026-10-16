@@ -8,10 +8,14 @@ import { formatBytes, formatRelative } from '@/utils/format'
 const props = defineProps<{
   item: ClipboardItem
   deleting: boolean
+  /** 是否是当前正在编辑的那一条（用于高亮） */
+  editing?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'delete', id: string): void
+  /** 点整卡进入右侧编辑 */
+  (e: 'edit', item: ClipboardItem): void
 }>()
 
 const { copied, error: copyError, copy } = useCopy()
@@ -25,10 +29,31 @@ const shownContent = computed(() =>
 
 const size = computed(() => props.item.metadata?.size)
 const updated = computed(() => props.item.updated_at !== props.item.created_at)
+
+function requestEdit() {
+  emit('edit', props.item)
+}
+
+/** 键盘可达：整卡可点击，就得能用 Enter / 空格触发 */
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    requestEdit()
+  }
+}
 </script>
 
 <template>
-  <article class="item">
+  <article
+    class="item"
+    :class="{ 'item--editing': editing }"
+    role="button"
+    tabindex="0"
+    :aria-pressed="editing ? 'true' : 'false'"
+    :title="editing ? '正在编辑这一条' : '点击载入到右侧编辑'"
+    @click="requestEdit"
+    @keydown="onKeydown"
+  >
     <header class="item__head">
       <h3 class="item__title" :title="item.title">{{ item.title }}</h3>
       <span class="item__time" :title="item.created_at">
@@ -38,11 +63,15 @@ const updated = computed(() => props.item.updated_at !== props.item.created_at)
 
     <pre class="item__content">{{ shownContent }}</pre>
 
+    <!--
+      卡片级点击会触发编辑，所以卡片内的按钮必须 `.stop`，
+      否则点「复制」会同时把内容载入输入区。
+    -->
     <div class="item__actions">
       <button
         type="button"
         class="btn btn--small btn--primary"
-        @click="copy(item.content)"
+        @click.stop="copy(item.content)"
       >
         {{ copied ? '✓ 已复制' : '复制' }}
       </button>
@@ -50,7 +79,7 @@ const updated = computed(() => props.item.updated_at !== props.item.created_at)
         v-if="collapsible"
         type="button"
         class="btn btn--small"
-        @click="expanded = !expanded"
+        @click.stop="expanded = !expanded"
       >
         {{ expanded ? '收起' : '展开' }}
       </button>
@@ -58,11 +87,12 @@ const updated = computed(() => props.item.updated_at !== props.item.created_at)
         type="button"
         class="btn btn--small btn--danger"
         :disabled="deleting"
-        @click="emit('delete', item.id)"
+        @click.stop="emit('delete', item.id)"
       >
         {{ deleting ? '删除中…' : '删除' }}
       </button>
       <span class="item__meta">
+        <template v-if="editing">● 编辑中 · </template>
         {{ item.content_type }}
         <template v-if="typeof size === 'number'"> · {{ formatBytes(size) }}</template>
         <template v-if="updated"> · 已更新</template>

@@ -3,6 +3,7 @@ import { storeToRefs } from 'pinia'
 import { ref } from 'vue'
 
 import ClipboardItemCard from '@/components/ClipboardItemCard.vue'
+import type { ClipboardItem } from '@/api/client'
 import { useClipboardStore } from '@/stores/clipboardStore'
 
 const store = useClipboardStore()
@@ -33,6 +34,16 @@ async function handleDelete(id: string) {
   } finally {
     deletingId.value = null
   }
+}
+
+/**
+ * 点条目载入右侧编辑。
+ *
+ * 只**请求**，真正的切换由输入区在落盘当前未保存内容之后执行
+ * （见 clipboardStore 的 requestEdit / applyRequestedEdit）。
+ */
+function handleEdit(item: ClipboardItem) {
+  store.requestEdit(item)
 }
 </script>
 
@@ -79,7 +90,7 @@ async function handleDelete(id: string) {
     </div>
 
     <p v-if="search" class="count">正在按「{{ search }}」筛选，共 {{ total }} 条命中</p>
-    <p v-if="error" class="notice notice--err">{{ error }}</p>
+    <p v-if="error" class="inline-error">{{ error }}</p>
 
     <div class="history-scroll">
       <p v-if="loading" class="loading">加载中…</p>
@@ -92,7 +103,9 @@ async function handleDelete(id: string) {
           :key="item.id"
           :item="item"
           :deleting="deletingId === item.id"
+          :editing="store.editingId === item.id"
           @delete="handleDelete"
+          @edit="handleEdit"
         />
       </div>
     </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 import { getErrorMessage } from '@/api/client'
 import { useAutoSave } from '@/composables/useAutoSave'
@@ -52,6 +52,41 @@ watch(autoSaveError, (message) => {
   }
 })
 
+/** 正文编辑框的 DOM 引用：载入记录后聚焦，方便直接改 */
+const editorRef = ref<HTMLTextAreaElement | null>(null)
+
+/** 正在编辑的那条记录的标题（仅用于提示"在改哪一条"） */
+const editingTitle = ref('')
+
+/**
+ * 响应「从列表点开一条记录来编辑」。
+ *
+ * ⚠️ 顺序很关键：**先把当前未保存的内容落盘，再切换编辑目标**。
+ * 反过来会让输入框里那几个还没到自动保存时机的字，跟着旧草稿一起丢掉。
+ */
+watch(
+  () => store.editTicket,
+  async () => {
+    if (pending.value) {
+      await saveNow()
+    }
+
+    const item = store.applyRequestedEdit()
+    if (!item) {
+      return
+    }
+
+    title.value = item.title
+    text.value = item.content
+    editingTitle.value = item.title
+    // 内容与库里一致，标记为已保存，否则会立刻触发一次无意义的自动保存
+    markSaved(item.content)
+
+    await nextTick()
+    editorRef.value?.focus()
+  },
+)
+
 /**
  * 清空输入框。
  *
@@ -76,6 +111,7 @@ function handleStartNew() {
   markSaved('')
   title.value = ''
   text.value = ''
+  editingTitle.value = ''
   emit('notice', { kind: 'ok', text: '已开启新剪贴板，接下来输入的内容会另起一条记录' })
 }
 
@@ -170,6 +206,18 @@ const statusText = computed(() => {
       <span class="hint">Ctrl+Enter 快速上传</span>
     </div>
 
+    <!--
+      正在编辑已有记录时给出明确提示：否则用户不知道"上传"会更新那一条
+      而不是新建，容易误改历史记录。
+    -->
+    <div v-if="store.editingId" class="editing-banner">
+      <span class="editing-banner__text">
+        ✎ 正在编辑已有记录<template v-if="editingTitle">：{{ editingTitle }}</template>
+        <span class="editing-banner__sub">（保存会更新这一条，不会新建）</span>
+      </span>
+      <button type="button" class="btn btn--small" @click="handleStartNew">改为新建</button>
+    </div>
+
     <label class="field field--tight">
       <span>标题（留空将自动生成，如「demo · 10-05 21:56」，按本机时区）</span>
       <input
@@ -182,9 +230,10 @@ const statusText = computed(() => {
     <label class="field field--grow">
       <span>内容（{{ contentSize }}）</span>
       <textarea
+        ref="editorRef"
         v-model="text"
         class="editor"
-        placeholder="在这里输入或粘贴内容，也可以点下面的「同步剪贴板」直接抓取系统剪贴板"
+        placeholder="在这里输入或粘贴内容，也可以点下面的「同步剪贴板」直接抓取系统剪贴板；点左侧历史记录可载入编辑"
         @keydown="onKeydown"
       />
     </label>
