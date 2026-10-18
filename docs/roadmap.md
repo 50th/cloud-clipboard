@@ -94,6 +94,12 @@ auth 与 clipboard 接口（含**跨用户越权隔离**、去重契约、分页
     列表刷新、剪贴板监听、搜索都会干扰同一份状态。现为
     `pages/ClipboardPage`（浏览）+ `pages/EditPage`（编辑），路由常量集中在
     `common/Routes.ets`。
+13. **`aboutToAppear` 里订阅是不够的**：页面被 `pushUrl` 覆盖时若触发了
+    `aboutToDisappear`，监听会被退订；而返回时 `aboutToAppear` **不会**再执行，
+    列表就永远收不到更新（表现为"从编辑页返回后列表还是旧的"）。
+    订阅要抽成幂等方法，在 `aboutToAppear` 与 `onPageShow` 都调用一次。
+14. **保存失败不要放行返回**：编辑页的「返回」若先保存再跳转，
+    失败时必须停在本页提示错误，否则一返回刚编辑的内容就丢了。
 
 ### 第 3 步
 

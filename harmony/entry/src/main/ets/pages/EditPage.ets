@@ -236,6 +236,10 @@ struct EditPage {
   private async saveAndBack(): Promise<void> {
     if (this.store !== null && this.store.hasUnsavedChanges(this.draftContent, this.draftTitle)) {
       await this.saveNow();
+      // 保存失败就停在本页：否则一返回，刚编辑的内容就丢了
+      if (this.store !== null && this.store.hasUnsavedChanges(this.draftContent, this.draftTitle)) {
+        return;
+      }
     } else {
       this.stopCountdown();
     }

@@ -58,10 +58,7 @@ struct ClipboardPage {
     const store = this.store;
     this.search = store.search;
     this.order = store.order;
-    this.listener = () => {
-      this.syncFromStore();
-    };
-    store.subscribe(this.listener);
+    this.listen();
 
     store.restoreSession().then(() => {
       this.startMonitor();
@@ -69,15 +66,38 @@ struct ClipboardPage {
   }
 
   /**
+   * 订阅 store 的状态变化（**幂等**）。
+   *
+   * ⚠️ 为什么不只在 `aboutToAppear` 里订阅：
+   * 页面被 `pushUrl` 覆盖时若触发了 `aboutToDisappear`，监听会被退订，
+   * 而返回时 `aboutToAppear` **不会**再执行 —— 于是列表永远收不到更新，
+   * 表现为"从编辑页返回后列表还是旧的"。所以每次显示都重新订阅一次。
+   */
+  private listen(): void {
+    if (this.store === null) {
+      return;
+    }
+    if (this.listener !== null) {
+      this.store.unsubscribe(this.listener);
+    }
+    this.listener = () => {
+      this.syncFromStore();
+    };
+    this.store.subscribe(this.listener);
+  }
+
+  /**
    * 每次本页显示时刷新列表。
    *
-   * 从编辑页返回后需要这个：那边可能新建/修改了记录，
-   * 否则列表会停在旧数据上（虽然 WebSocket 也会推，但断线时就不灵了）。
+   * 从编辑页返回时必然触发：那边可能新建/修改了记录。
+   * 这里重新订阅 + 主动拉一次，两条路都走，不依赖某一条一定生效。
    */
   onPageShow(): void {
-    if (this.store !== null && this.store.isLoggedIn) {
-      this.store.refreshItems(true).then(() => this.syncFromStore());
+    if (this.store === null || !this.store.isLoggedIn) {
+      return;
     }
+    this.listen();
+    this.store.refreshItems(true).then(() => this.syncFromStore());
   }
 
   aboutToDisappear(): void {
@@ -174,6 +194,16 @@ struct ClipboardPage {
     await this.store.setOrder(next);
     this.setMessage(next === SortOrder.DESC ? '已切换为最新优先' : '已切换为最早优先');
     this.syncFromStore();
+  }
+
+  /** 手动刷新当前页（静默拉取，不闪加载态）。 */
+  private async manualRefresh(): Promise<void> {
+    if (this.store === null) {
+      return;
+    }
+    await this.store.refreshItems(true);
+    this.syncFromStore();
+    this.setMessage(`已刷新，共 ${this.store.total} 条`);
   }
 
   // ---- 列表项操作 ----
@@ -478,6 +508,15 @@ struct ClipboardPage {
           .layoutWeight(1)
           .onClick(() => {
             this.toggleOrder();
+          })
+        Button('刷新')
+          .fontSize(13)
+          .height(34)
+          .backgroundColor('#EEEEEE')
+          .fontColor('#333333')
+          .layoutWeight(1)
+          .onClick(() => {
+            this.manualRefresh();
           })
         Button('清空全部')
           .fontSize(13)
