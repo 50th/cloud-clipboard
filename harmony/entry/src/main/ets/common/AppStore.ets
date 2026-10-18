@@ -65,15 +65,12 @@ export class AppStore {
   /**
    * 保存时**更新**哪一条记录（null 表示新建）。
    *
-   * 与 `editingId` 的区别很重要：
-   * - `saveTargetId` 包含「自动保存刚建出来的草稿」——后续保存复用同一条，
-   *   否则打一段字就会在列表里冒出好几行；
-   * - `editingId` 只在**用户从列表点开某条**时才有值，用于显示"正在编辑"提示。
-   * 两者相同点：都指向"保存要更新哪一条"。
+   * 它包含「自动保存刚建出来的记录」——后续保存复用同一条，
+   * 否则打一段字就会在列表里冒出好几行。
+   * 「当前是不是在编辑某个已有记录」由编辑页自己的状态表示，不放在这里：
+   * 那是界面关注点，混进 store 只会让两边各存一份、迟早不一致。
    */
   private saveTargetId: string | null = null;
-  /** 正在编辑的已有记录 id（用户从列表点开的）；null 表示不是显式编辑 */
-  editingId: string | null = null;
   /** 已保存内容的签名，用于判断"有没有未保存的改动" */
   private savedContent: string = '';
   private savedTitle: string = '';
@@ -201,7 +198,6 @@ export class AppStore {
     this.order = SortOrder.DESC;
     this.errorMessage = '';
     this.saveTargetId = null;
-    this.editingId = null;
     this.savedContent = '';
     this.savedTitle = '';
     this.notify();
@@ -294,7 +290,6 @@ export class AppStore {
    */
   loadForEdit(item: ClipboardItem): void {
     this.saveTargetId = item.id;
-    this.editingId = item.id;
     // 与 hasUnsavedChanges 的归一化保持一致（都按 trim 后比较）
     this.savedContent = item.content.trim();
     this.savedTitle = item.title.trim();
@@ -309,7 +304,6 @@ export class AppStore {
    */
   startNew(): void {
     this.saveTargetId = null;
-    this.editingId = null;
     this.savedContent = '';
     this.savedTitle = '';
     this.notify();
@@ -370,7 +364,6 @@ export class AppStore {
           return null;
         }
         this.saveTargetId = null;
-        this.editingId = null;
       }
     }
 
@@ -383,7 +376,7 @@ export class AppStore {
         payload.title = trimmedTitle;
       }
       const item = await this.api.createItem(payload);
-      // 后续保存复用这一条（但不设 editingId：它不是"从列表点开"的编辑）
+      // 后续保存复用这一条，避免打字过程中冒出多行
       this.saveTargetId = item.id;
       this.markSaved(trimmedContent, trimmedTitle);
       this.errorMessage = '';
@@ -408,7 +401,6 @@ export class AppStore {
       // 删掉的正是保存目标 → 丢掉关联，下次保存会新建
       if (this.saveTargetId === itemId) {
         this.saveTargetId = null;
-        this.editingId = null;
       }
       await this.refreshItems(true);
     } catch (error) {
@@ -423,7 +415,6 @@ export class AppStore {
       await this.api.clearItems();
       this.page = 1;
       this.saveTargetId = null;
-      this.editingId = null;
       this.savedContent = '';
       this.savedTitle = '';
       await this.refreshItems(true);
