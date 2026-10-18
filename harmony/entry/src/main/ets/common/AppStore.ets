@@ -14,6 +14,7 @@ import {
   AuthResponse,
   ClipboardItem,
   ClipboardItemCreate,
+  ClipboardItemUpdate,
   SortOrder,
   UserInfo,
   WsEnvelope,
@@ -60,6 +61,22 @@ export class AppStore {
 
   private socket: WebSocketService | null = null;
   private pageListeners: (() => void)[] = [];
+
+  /**
+   * 保存时**更新**哪一条记录（null 表示新建）。
+   *
+   * 与 `editingId` 的区别很重要：
+   * - `saveTargetId` 包含「自动保存刚建出来的草稿」——后续保存复用同一条，
+   *   否则打一段字就会在列表里冒出好几行；
+   * - `editingId` 只在**用户从列表点开某条**时才有值，用于显示"正在编辑"提示。
+   * 两者相同点：都指向"保存要更新哪一条"。
+   */
+  private saveTargetId: string | null = null;
+  /** 正在编辑的已有记录 id（用户从列表点开的）；null 表示不是显式编辑 */
+  editingId: string | null = null;
+  /** 已保存内容的签名，用于判断"有没有未保存的改动" */
+  private savedContent: string = '';
+  private savedTitle: string = '';
 
   private constructor(context: common.UIAbilityContext) {
     this.context = context;
@@ -183,6 +200,10 @@ export class AppStore {
     this.search = '';
     this.order = SortOrder.DESC;
     this.errorMessage = '';
+    this.saveTargetId = null;
+    this.editingId = null;
+    this.savedContent = '';
+    this.savedTitle = '';
     this.notify();
   }
 
@@ -230,7 +251,10 @@ export class AppStore {
   // ---- 写操作 ----
 
   /**
-   * 上传一段文字。
+   * 上传一段文字（**总是新建**）。
+   *
+   * 用于「同步剪贴板」与剪贴板监听：那些是独立的一条新记录，
+   * 不应该覆盖用户正在编辑的内容。要保存编辑用 `saveEdits`。
    *
    * 服务端**内置去重**：相同内容不会新建记录，只刷新时间戳。
    */
@@ -260,10 +284,132 @@ export class AppStore {
     }
   }
 
+  // ---- 编辑与自动保存 ----
+
+  /**
+   * 把一条已有记录载入编辑。
+   *
+   * 之后调用 `saveEdits` 会**更新这一条**，而不是新建——
+   * 否则「点开一条 → 改几个字 → 保存」会多出一行。
+   */
+  loadForEdit(item: ClipboardItem): void {
+    this.saveTargetId = item.id;
+    this.editingId = item.id;
+    // 与 hasUnsavedChanges 的归一化保持一致（都按 trim 后比较）
+    this.savedContent = item.content.trim();
+    this.savedTitle = item.title.trim();
+    this.errorMessage = '';
+    this.notify();
+  }
+
+  /**
+   * 解除编辑/草稿关联：之后保存会新建一条。
+   *
+   * 用户点「新建」或想放弃当前编辑对象时调用。
+   */
+  startNew(): void {
+    this.saveTargetId = null;
+    this.editingId = null;
+    this.savedContent = '';
+    this.savedTitle = '';
+    this.notify();
+  }
+
+  /**
+   * 当前输入相对上次保存是否有改动（空内容也算无改动）。
+   *
+   * ⚠️ 必须用**与保存时相同的归一化方式**（trim）比较：保存送出的是 trim 后的值，
+   * 若这里比较原始值，用户输入带尾随空格时会被永远判成"未保存"，
+   * 导致每 2 秒保存一次、无限循环。
+   */
+  hasUnsavedChanges(content: string, title: string): boolean {
+    const trimmedContent = content.trim();
+    if (trimmedContent.length === 0) {
+      return false;
+    }
+    return trimmedContent !== this.savedContent || title.trim() !== this.savedTitle;
+  }
+
+  /**
+   * 保存当前输入（自动保存与手动保存共用）。
+   *
+   * - 已有保存目标 → `PATCH` 更新那一条
+   * - 没有 → 新建一条，并把后续保存指向它（避免打字过程中冒出多行）
+   *
+   * 记录若已被别处删除（404），自动回退为新建，用户无感知。
+   */
+  async saveEdits(content: string, title: string): Promise<ClipboardItem | null> {
+    const trimmedContent = content.trim();
+    if (trimmedContent.length === 0) {
+      this.errorMessage = '内容为空，未保存';
+      this.notify();
+      return null;
+    }
+    const trimmedTitle = title.trim();
+
+    if (this.saveTargetId !== null) {
+      const targetId = this.saveTargetId;
+      try {
+        const payload: ClipboardItemUpdate = {
+          content: trimmedContent,
+          timezone: localTimezone(),
+        };
+        if (trimmedTitle.length > 0) {
+          payload.title = trimmedTitle;
+        }
+        const item = await this.api.updateItem(targetId, payload);
+        this.markSaved(trimmedContent, trimmedTitle);
+        this.errorMessage = '';
+        await this.refreshItems(true);
+        return item;
+      } catch (error) {
+        // 记录已被删除（本机或别的设备）→ 丢掉关联，走下面的新建分支
+        if (!(error instanceof ApiError) || error.status !== 404) {
+          this.errorMessage = this.describe(error);
+          this.notify();
+          return null;
+        }
+        this.saveTargetId = null;
+        this.editingId = null;
+      }
+    }
+
+    try {
+      const payload: ClipboardItemCreate = {
+        content: trimmedContent,
+        timezone: localTimezone(),
+      };
+      if (trimmedTitle.length > 0) {
+        payload.title = trimmedTitle;
+      }
+      const item = await this.api.createItem(payload);
+      // 后续保存复用这一条（但不设 editingId：它不是"从列表点开"的编辑）
+      this.saveTargetId = item.id;
+      this.markSaved(trimmedContent, trimmedTitle);
+      this.errorMessage = '';
+      await this.refreshItems(true);
+      return item;
+    } catch (error) {
+      this.errorMessage = this.describe(error);
+      this.notify();
+      return null;
+    }
+  }
+
+  private markSaved(content: string, title: string): void {
+    this.savedContent = content;
+    this.savedTitle = title;
+  }
+
   /** 删除一条记录。 */
   async remove(itemId: string): Promise<void> {
     try {
       await this.api.deleteItem(itemId);
+      // 删掉的正是保存目标 → 丢掉关联，下次保存会新建
+      if (this.saveTargetId === itemId) {
+        this.saveTargetId = null;
+        this.editingId = null;
+      }
       await this.refreshItems(true);
     } catch (error) {
       this.errorMessage = this.describe(error);
@@ -276,6 +422,10 @@ export class AppStore {
     try {
       await this.api.clearItems();
       this.page = 1;
+      this.saveTargetId = null;
+      this.editingId = null;
+      this.savedContent = '';
+      this.savedTitle = '';
       await this.refreshItems(true);
     } catch (error) {
       this.errorMessage = this.describe(error);

@@ -17,6 +17,11 @@ import { ClipboardItem, SortOrder } from '../models/Types';
 /** 超过该长度的内容在卡片里折叠显示。与 Web 端 `ClipboardItemCard.vue` 一致。 */
 const COLLAPSE_LENGTH: number = 160;
 
+/** 自动保存：停止输入多久后保存（毫秒）。与 Web 端保持一致的 2 秒。 */
+const AUTO_SAVE_DELAY_MS: number = 2000;
+/** 倒计时刷新间隔（毫秒）。200ms 足够让秒数看起来连续，又不至于太耗电。 */
+const AUTO_SAVE_TICK_MS: number = 200;
+
 @Entry
 @Component
 struct ClipboardPage {
@@ -39,9 +44,24 @@ struct ClipboardPage {
 
   // ---- 手动输入上传 ----
   @State showInput: boolean = false;
-  @State draftTitle: string = '';
-  @State draftContent: string = '';
-  @State uploading: boolean = false;
+  @State @Watch('onDraftChanged') draftTitle: string = '';
+  @State @Watch('onDraftChanged') draftContent: string = '';
+
+  // ---- 自动保存 ----
+  /** 自动保存开关 */
+  @State autoSave: boolean = true;
+  /** 倒计时剩余毫秒（0 表示未在计时） */
+  @State remainingMs: number = 0;
+  /** 是否有未保存改动（倒计时进行中） */
+  @State pending: boolean = false;
+  /** 是否正在保存 */
+  @State saving: boolean = false;
+
+  // ---- 正在编辑的已有记录 ----
+  /** 正在编辑的记录 id；空串表示不是显式编辑 */
+  @State editingId: string = '';
+  /** 正在编辑的记录标题（仅用于提示"在改哪一条"） */
+  @State editingTitle: string = '';
 
   /** 已展开的长内容 id 列表（ArkUI 无法逐项维护状态，统一在此记录） */
   @State expandedIds: string[] = [];
@@ -49,6 +69,8 @@ struct ClipboardPage {
   private store: AppStore | null = null;
   /** 保存监听回调引用，页面销毁时才能正确取消注册 */
   private listener: (() => void) | null = null;
+  /** 自动保存倒计时计时器句柄 */
+  private countdownTimer: number = -1;
 
   aboutToAppear(): void {
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -74,7 +96,8 @@ struct ClipboardPage {
   }
 
   aboutToDisappear(): void {
-    // 必须清理：否则监听与 WebSocket 会在页面销毁后继续跑
+    // 必须清理：否则监听、WebSocket 与倒计时会在页面销毁后继续跑
+    this.stopCountdown();
     if (this.store !== null) {
       if (this.listener !== null) {
         this.store.unsubscribe(this.listener);
@@ -99,6 +122,7 @@ struct ClipboardPage {
     this.realtimeConnected = this.store.realtimeConnected;
     this.monitoring = this.store.isMonitoring;
     this.username = this.store.user?.username ?? '';
+    this.editingId = this.store.editingId ?? '';
     const error = this.store.errorMessage;
     if (error.length > 0) {
       this.message = error;
@@ -127,33 +151,173 @@ struct ClipboardPage {
     this.syncFromStore();
   }
 
-  // ---- 手动输入上传 ----
+  // ---- 自动保存倒计时 ----
 
-  private async submitDraft(): Promise<void> {
-    if (this.store === null || this.uploading) {
+  /** 输入变化时重启倒计时（`@Watch` 回调）。 */
+  private onDraftChanged(): void {
+    this.restartCountdown();
+  }
+
+  /** 停止倒计时并复位状态。 */
+  private stopCountdown(): void {
+    if (this.countdownTimer !== -1) {
+      clearInterval(this.countdownTimer);
+      this.countdownTimer = -1;
+    }
+    this.pending = false;
+    this.remainingMs = 0;
+  }
+
+  /**
+   * 重启倒计时。
+   *
+   * 只有**确实有未保存改动**时才计时：载入一条记录、或刚保存完，
+   * 内容与已保存的一致，不该再触发一次保存。
+   */
+  private restartCountdown(): void {
+    this.stopCountdown();
+    if (!this.autoSave || this.store === null || this.saving) {
       return;
     }
-    if (this.draftContent.trim().length === 0) {
-      this.setMessage('内容为空，未上传', true);
+    if (!this.store.hasUnsavedChanges(this.draftContent, this.draftTitle)) {
+      return;
+    }
+
+    const deadline = Date.now() + AUTO_SAVE_DELAY_MS;
+    this.pending = true;
+    this.remainingMs = AUTO_SAVE_DELAY_MS;
+    this.countdownTimer = setInterval(() => {
+      const left = deadline - Date.now();
+      if (left > 0) {
+        this.remainingMs = left;
+        return;
+      }
+      this.stopCountdown();
+      this.performAutoSave();
+    }, AUTO_SAVE_TICK_MS);
+  }
+
+  /** 倒计时到点：保存当前输入。 */
+  private async performAutoSave(): Promise<void> {
+    if (this.store === null || this.saving) {
       return;
     }
     const store = this.store;
-    this.uploading = true;
-    const title = this.draftTitle;
-    const item = await store.upload(this.draftContent, title);
-    this.uploading = false;
+    if (!store.hasUnsavedChanges(this.draftContent, this.draftTitle)) {
+      return;
+    }
+    this.saving = true;
+    const item = await store.saveEdits(this.draftContent, this.draftTitle);
+    this.saving = false;
     if (item !== null) {
+      this.setMessage(`已自动保存：${item.title}`);
+      this.syncFromStore();
+      // 保存期间用户可能又改了内容——那期间的 @Watch 因 saving=true 被跳过，
+      // 这里补一次：仍有未保存改动就重新计时。
+      this.restartCountdown();
+    } else {
+      // ⚠️ 失败后**不**重启计时：否则服务端不可用时会每 2 秒重试一次，无限刷屏。
+      // 用户继续输入会自然重新计时，或点「保存」手动重试。
+      this.setMessage(store.errorMessage, true);
+      this.syncFromStore();
+    }
+  }
+
+  /** 倒计时状态的文字说明。 */
+  private autoSaveStatusText(): string {
+    if (!this.autoSave) {
+      return '自动保存已关闭';
+    }
+    if (this.saving) {
+      return '保存中…';
+    }
+    if (this.draftContent.trim().length === 0) {
+      return '等待输入';
+    }
+    if (this.pending) {
+      return `${Math.ceil(this.remainingMs / 1000)} 秒后自动保存`;
+    }
+    if (this.store !== null && this.store.hasUnsavedChanges(this.draftContent, this.draftTitle)) {
+      return '待保存';
+    }
+    return '已保存';
+  }
+
+  // ---- 保存 / 编辑 ----
+
+  /** 手动保存（「保存」按钮 / 收起输入）。 */
+  private async submitDraft(): Promise<void> {
+    if (this.store === null || this.saving) {
+      return;
+    }
+    if (this.draftContent.trim().length === 0) {
+      this.setMessage('内容为空，未保存', true);
+      return;
+    }
+    const store = this.store;
+    this.stopCountdown();
+    this.saving = true;
+    const item = await store.saveEdits(this.draftContent, this.draftTitle);
+    this.saving = false;
+    if (item !== null) {
+      this.setMessage(`已保存：${item.title}`);
       this.draftContent = '';
       this.draftTitle = '';
       this.showInput = false;
-      this.setMessage('已上传');
+      // 显式保存后解除关联，下次输入另起一条
+      store.startNew();
+      this.editingId = '';
+      this.editingTitle = '';
     } else {
       this.setMessage(store.errorMessage, true);
     }
     this.syncFromStore();
   }
 
+  /**
+   * 点列表项 → 载入到输入区编辑。
+   *
+   * ⚠️ 顺序：先把当前未保存的输入落盘，再切换编辑目标。
+   * 否则输入框里那几个还没到自动保存时机的字会丢掉。
+   */
+  private async startEditing(item: ClipboardItem): Promise<void> {
+    if (this.store === null) {
+      return;
+    }
+    const store = this.store;
+    this.stopCountdown();
+
+    if (store.hasUnsavedChanges(this.draftContent, this.draftTitle)) {
+      await store.saveEdits(this.draftContent, this.draftTitle);
+    }
+
+    // 先让 store 记录"已保存内容"，再填输入框，
+    // 这样 @Watch 触发时 hasUnsavedChanges 为 false，不会立刻倒计时
+    store.loadForEdit(item);
+    this.editingId = item.id;
+    this.editingTitle = item.title;
+    this.draftTitle = item.title;
+    this.draftContent = item.content;
+    this.showInput = true;
+    this.setMessage(`正在编辑：${item.title}`);
+    this.syncFromStore();
+  }
+
+  /** 解除编辑关联，改为新建。 */
+  private handleStartNew(): void {
+    this.stopCountdown();
+    if (this.store !== null) {
+      this.store.startNew();
+    }
+    this.draftTitle = '';
+    this.draftContent = '';
+    this.editingId = '';
+    this.editingTitle = '';
+    this.setMessage('已开启新记录，之后输入的内容会另起一条');
+  }
+
   private clearDraft(): void {
+    this.stopCountdown();
     this.draftTitle = '';
     this.draftContent = '';
     this.setMessage('已清空输入');
@@ -309,6 +473,7 @@ struct ClipboardPage {
     if (this.store === null) {
       return;
     }
+    this.stopCountdown();
     this.store.logout();
     this.searchInput = '';
     this.search = '';
@@ -317,6 +482,8 @@ struct ClipboardPage {
     this.draftTitle = '';
     this.draftContent = '';
     this.showInput = false;
+    this.editingId = '';
+    this.editingTitle = '';
     router.replaceUrl({ url: 'pages/LoginPage' }).catch(() => {});
   }
 
@@ -334,25 +501,34 @@ struct ClipboardPage {
   @Builder
   itemCard(item: ClipboardItem) {
     Column({ space: 6 }) {
-      Row() {
-        Text(item.title)
-          .fontSize(14)
-          .fontWeight(FontWeight.Bold)
-          .layoutWeight(1)
-          .maxLines(1)
+      // 可点击区域：标题 + 内容 → 载入右侧编辑。
+      // 只让这一块可点，操作按钮留在外面，避免点「复制」也触发编辑。
+      Column({ space: 6 }) {
+        Row() {
+          Text(this.editingId === item.id ? `● ${item.title}` : item.title)
+            .fontSize(14)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.editingId === item.id ? '#1A6FEE' : '#1F2328')
+            .layoutWeight(1)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(this.formatTime(item.updated_at))
+            .fontSize(11)
+            .fontColor('#999999')
+        }
+        .width('100%')
+
+        Text(this.shownContent(item))
+          .fontSize(12)
+          .fontColor('#444444')
+          .maxLines(this.isExpanded(item.id) ? 50 : 4)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(this.formatTime(item.updated_at))
-          .fontSize(11)
-          .fontColor('#999999')
+          .width('100%')
       }
       .width('100%')
-
-      Text(this.shownContent(item))
-        .fontSize(12)
-        .fontColor('#444444')
-        .maxLines(this.isExpanded(item.id) ? 50 : 4)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('100%')
+      .onClick(() => {
+        this.startEditing(item);
+      })
 
       Row({ space: 10 }) {
         Button('复制')
@@ -385,35 +561,93 @@ struct ClipboardPage {
     }
     .width('100%')
     .padding(12)
-    .backgroundColor(Color.White)
+    .backgroundColor(this.editingId === item.id ? '#EFF6FF' : Color.White)
     .borderRadius(8)
-    .border({ width: 1, color: '#EEEEEE' })
+    .border({
+      width: this.editingId === item.id ? 2 : 1,
+      color: this.editingId === item.id ? '#1A6FEE' : '#EEEEEE',
+    })
   }
 
   @Builder
   inputPanel() {
     Column({ space: 8 }) {
+      // 正在编辑已有记录：必须明确提示，否则用户不知道保存会改掉历史记录
+      if (this.editingId.length > 0) {
+        Row({ space: 8 }) {
+          Text(`✎ 正在编辑：${this.editingTitle}`)
+            .fontSize(11)
+            .fontColor('#1E40AF')
+            .layoutWeight(1)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Button('改为新建')
+            .fontSize(11)
+            .height(26)
+            .backgroundColor('#FFFFFF')
+            .fontColor('#1E40AF')
+            .onClick(() => {
+              this.handleStartNew();
+            })
+        }
+        .width('100%')
+        .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+        .backgroundColor('#EFF6FF')
+        .borderRadius(6)
+        .border({ width: 1, color: '#BFDBFE' })
+      }
+
       TextInput({ placeholder: '标题（可留空，服务端会自动生成）', text: this.draftTitle })
         .fontSize(13)
-        .enabled(!this.uploading)
+        .enabled(!this.saving)
         .onChange((value: string) => {
           this.draftTitle = value;
         })
-      TextArea({ placeholder: '在这里输入或粘贴内容，点「上传」同步到云端', text: this.draftContent })
+      TextArea({ placeholder: '在这里输入或粘贴内容，停止输入后会自动保存', text: this.draftContent })
         .fontSize(13)
         .height(110)
-        .enabled(!this.uploading)
+        .enabled(!this.saving)
         .onChange((value: string) => {
           this.draftContent = value;
         })
+
+      // 自动保存开关 + 倒计时
       Row({ space: 8 }) {
-        Button(this.uploading ? '上传中…' : '上传')
+        Toggle({ type: ToggleType.Switch, isOn: this.autoSave })
+          .onChange((isOn: boolean) => {
+            this.autoSave = isOn;
+            if (isOn) {
+              this.restartCountdown();
+            } else {
+              this.stopCountdown();
+            }
+          })
+        Text(`自动保存（停止输入 ${AUTO_SAVE_DELAY_MS / 1000} 秒后）`)
+          .fontSize(11)
+          .fontColor('#666666')
+          .layoutWeight(1)
+        Text(this.autoSaveStatusText())
+          .fontSize(11)
+          .fontColor(this.pending || this.saving ? '#B45309' : '#0A8F4D')
+      }
+      .width('100%')
+
+      Row({ space: 8 }) {
+        Button(this.saving ? '保存中…' : '保存')
           .fontSize(13)
           .height(34)
           .layoutWeight(1)
-          .enabled(!this.uploading && this.draftContent.trim().length > 0)
+          .enabled(!this.saving && this.draftContent.trim().length > 0)
           .onClick(() => {
             this.submitDraft();
+          })
+        Button('新建')
+          .fontSize(13)
+          .height(34)
+          .backgroundColor('#EEEEEE')
+          .fontColor('#333333')
+          .onClick(() => {
+            this.handleStartNew();
           })
         Button('清空输入')
           .fontSize(13)
@@ -546,7 +780,7 @@ struct ClipboardPage {
           .padding({ top: 8 })
       }
 
-      Text(`共 ${this.total} 条 · 监听${this.monitoring ? '已开启' : '未开启'}`)
+      Text(`共 ${this.total} 条 · 监听${this.monitoring ? '已开启' : '未开启'} · 点条目内容可载入编辑`)
         .fontSize(11)
         .fontColor('#888888')
         .width('100%')
@@ -559,7 +793,7 @@ struct ClipboardPage {
         Text(
           this.search.length > 0
             ? `没有匹配「${this.search}」的记录`
-            : '暂无记录：点「＋ 新建 / 粘贴上传」输入内容，或复制一段文字后点「同步剪贴板」',
+            : '暂无记录：点「＋ 新建 / 粘贴上传」输入内容（停止输入会自动保存），或复制一段文字后点「同步剪贴板」',
         )
           .fontSize(13)
           .fontColor('#888888')
