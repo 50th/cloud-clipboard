@@ -192,7 +192,7 @@ struct ClipboardPage {
     }
     const next: SortOrder = this.order === SortOrder.DESC ? SortOrder.ASC : SortOrder.DESC;
     await this.store.setOrder(next);
-    this.setMessage(next === SortOrder.DESC ? '已切换为最新优先' : '已切换为最早优先');
+    this.setMessage(next === SortOrder.DESC ? '已切换为最近修改在前' : '已切换为最早修改在前');
     this.syncFromStore();
   }
 
@@ -500,7 +500,7 @@ struct ClipboardPage {
 
       // ---- 操作区 ----
       Row({ space: 8 }) {
-        Button(this.order === SortOrder.DESC ? '最新优先' : '最早优先')
+        Button(this.order === SortOrder.DESC ? '最近修改' : '最早修改')
           .fontSize(13)
           .height(34)
           .backgroundColor('#EEEEEE')

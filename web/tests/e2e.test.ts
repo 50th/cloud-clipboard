@@ -428,6 +428,28 @@ describe('Web 端单端闭环（真实后端）', () => {
     assert.notEqual(ascFirst, descFirst, '升序与降序首条应不同')
   })
 
+  it('按修改时间排序：编辑旧记录后它应上移到最前（回归：不能按创建时间）', async () => {
+    const older = await upload(`${TAG} 排序甲`)
+    const newer = await upload(`${TAG} 排序乙`)
+
+    await state().fetchItems({ page: 1 })
+    const ids = state().items.map((entry) => entry.id)
+    assert.ok(
+      ids.indexOf(newer.item.id) < ids.indexOf(older.item.id),
+      '刚创建时，后建的应排在前',
+    )
+
+    // 只改标题（不动内容）→ 后端会刷新 updated_at
+    await clipboardApi.update(older.item.id, { title: `${TAG} 排序甲（改过）` })
+    await state().fetchItems({ page: 1 })
+
+    assert.equal(
+      state().items[0]?.id,
+      older.item.id,
+      '编辑过的旧记录应排到最前；若仍按创建时间排则它不会上移',
+    )
+  })
+
   it('删除单条：total -1 且该记录不再出现在列表', async () => {
     const { item } = await upload(`${TAG} 待删除`)
     const before = state().total

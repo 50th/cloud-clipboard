@@ -23,6 +23,7 @@ import {
   ClipboardItemList,
   ClipboardItemUpdate,
   MessageResponse,
+  SortBy,
   SortOrder,
   UserInfo,
 } from '../models/Types';
@@ -201,14 +202,18 @@ export class ApiClient {
 
   // ---- 剪贴板 ----
 
-  /** 列表：分页 / 搜索 / 排序。 */
+  /** 列表：分页 / 搜索 / 排序（固定按**修改时间**排序，见下方注释）。 */
   async listItems(
     page: number = 1,
     size: number = 20,
     order: SortOrder = SortOrder.DESC,
     search?: string,
   ): Promise<ClipboardItemList> {
-    let path = `/clipboard/items?page=${page}&size=${size}&order=${order}`;
+    // 必须显式传 sort_by：后端默认按 created_at 排，而产品要求"最近修改"在前。
+    // 不传的话，编辑一条旧记录后它不会上移，看起来像"没保存成功"。
+    let path =
+      `/clipboard/items?page=${page}&size=${size}` +
+      `&sort_by=${SortBy.UPDATED_AT}&order=${order}`;
     if (search !== undefined && search.length > 0) {
       path += `&search=${encodeURIComponent(search)}`;
     }

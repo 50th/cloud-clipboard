@@ -76,8 +76,8 @@ function handleEdit(item: ClipboardItem) {
         aria-label="排序"
         @change="store.setOrder(($event.target as HTMLSelectElement).value as 'asc' | 'desc')"
       >
-        <option value="desc">最新优先</option>
-        <option value="asc">最早优先</option>
+        <option value="desc">最近修改</option>
+        <option value="asc">最早修改</option>
       </select>
       <button
         type="button"

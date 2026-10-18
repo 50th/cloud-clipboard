@@ -138,6 +138,10 @@ export const useClipboardStore = defineStore('clipboard', () => {
         page: target,
         size: PAGE_SIZE,
         search: search.value || undefined,
+        // 按**修改时间**排序（不是创建时间）：云剪贴板的主要动作是编辑/同步内容，
+        // 用户关心"我最近动过什么"。后端默认是 created_at，所以这里必须显式传，
+        // 否则编辑一条旧记录后它不会上移，看起来像"没保存成功"。
+        sort_by: 'updated_at',
         order: order.value,
       })
       for (const item of data.items) {
