@@ -74,6 +74,9 @@ cloud-clipboard/
 - **去重**：同一用户提交相同 `content` → 只刷新 `updated_at`、不新建记录，
   **不覆盖已有标题**（除非显式传了 `title`）；去重分支**也必须广播** `clipboard.updated`（易漏）
 - **搜索**同时匹配 `title` 与 `content`；**分页** `page` 从 1 开始、`size` 默认 20、最大 100
+- **列表按修改时间排序**：后端 `sort_by` 默认是 `created_at`，**两个客户端必须显式传
+  `updated_at`**。否则编辑一条旧记录后它不会上移，用户会以为"没保存成功"
+  （`web/tests/e2e.test.ts` 与 `harmony` 的 `ApiClient.listItems` 各有对应实现/用例）
 
 ### 改接口必须做的事
 

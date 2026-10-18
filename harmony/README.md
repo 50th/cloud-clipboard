@@ -115,6 +115,10 @@ harmony/
 拆开是因为编辑页有自己的输入状态与倒计时，混在列表页里时列表刷新、剪贴板监听、
 搜索都会干扰同一份状态。
 
+**列表按「修改时间」排序**（按钮可切「最近修改 / 最早修改」），编辑过的记录会立刻上移。
+⚠️ 后端 `sort_by` 默认是 `created_at`，所以 `ApiClient.listItems` **必须显式传
+`sort_by=updated_at`**——不传的话编辑旧记录后它不会上移，看起来像"没保存成功"。
+
 **从编辑页返回时列表会刷新**：列表页在 `onPageShow` 里**重新订阅** store 并主动拉一次。
 ⚠️ 只靠 `aboutToAppear` 订阅是不够的——页面被 `pushUrl` 覆盖时若触发了
 `aboutToDisappear`，监听会被退订，而返回时 `aboutToAppear` 不会再执行，

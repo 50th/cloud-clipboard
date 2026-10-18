@@ -30,7 +30,7 @@ cd server
 | POST | `/api/v1/auth/login` | 登录：`username` 支持用户名或邮箱，凭证错误统一 401 |
 | GET | `/api/v1/auth/me` | 当前用户，依据 `Authorization: Bearer <token>` |
 | POST | `/api/v1/clipboard/items` | 创建；`title` 留空时自动生成，按 `timezone` 显示本地时间 |
-| GET | `/api/v1/clipboard/items` | 列表：分页 / 类型筛选 / 按标题或内容搜索 / 排序 |
+| GET | `/api/v1/clipboard/items` | 列表：分页 / 类型筛选 / 按标题或内容搜索 / 排序。`sort_by` 默认 `created_at`；**两个客户端都显式传 `updated_at`**（按修改时间排，编辑后会上移） |
 | GET | `/api/v1/clipboard/items/{id}` | 详情 |
 | PATCH | `/api/v1/clipboard/items/{id}` | 更新（只改显式传入的字段）。内容与**另一条**重复时返回 `409` |
 | DELETE | `/api/v1/clipboard/items/{id}` | 删除单条 |
