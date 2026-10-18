@@ -80,8 +80,19 @@ export function useAutoSave(options: UseAutoSaveOptions): UseAutoSaveResult {
     progress.value = 0
   }
 
-  function hasUnsaved(value: string): boolean {
-    return value.trim() !== '' && signature(value) !== savedSignature
+  /**
+   * 当前输入相对已保存内容是否有改动。
+   *
+   * ⚠️ **不接受参数**，直接用 `text.value` 计算签名。
+   * 原先它收一个 `value` 参数，而 watcher 里把**已经是签名**的 `current` 传了进来，
+   * 于是签名被套了两层（`内容\0标题\0标题`），与 `savedSignature` 永不相等——
+   * 结果"永远有改动"：点开一条记录**不做任何修改**也会触发一次自动保存。
+   */
+  function hasUnsavedChanges(): boolean {
+    if (text.value.trim() === '') {
+      return false
+    }
+    return signature(text.value) !== savedSignature
   }
 
   function markSaved(value: string): void {
@@ -144,7 +155,7 @@ export function useAutoSave(options: UseAutoSaveOptions): UseAutoSaveResult {
    */
   async function saveNow(): Promise<void> {
     stopCountdown()
-    if (!enabled.value || !hasUnsaved(text.value)) {
+    if (!enabled.value || !hasUnsavedChanges()) {
       return
     }
     await save()
@@ -152,9 +163,9 @@ export function useAutoSave(options: UseAutoSaveOptions): UseAutoSaveResult {
 
   watch(
     () => signature(text.value),
-    (current) => {
+    () => {
       stopCountdown()
-      if (!enabled.value || !hasUnsaved(current)) {
+      if (!enabled.value || !hasUnsavedChanges()) {
         return
       }
       startCountdown()

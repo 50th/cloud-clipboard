@@ -44,6 +44,8 @@ struct ClipboardPage {
   private store: AppStore | null = null;
   /** 保存监听回调引用，页面销毁时才能正确取消注册 */
   private listener: (() => void) | null = null;
+  /** 当前是否已订阅（`onPageShow` 会高频触发，靠它保证订阅是幂等的） */
+  private subscribed: boolean = false;
 
   aboutToAppear(): void {
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -70,34 +72,36 @@ struct ClipboardPage {
    *
    * ⚠️ 为什么不只在 `aboutToAppear` 里订阅：
    * 页面被 `pushUrl` 覆盖时若触发了 `aboutToDisappear`，监听会被退订，
-   * 而返回时 `aboutToAppear` **不会**再执行 —— 于是列表永远收不到更新，
-   * 表现为"从编辑页返回后列表还是旧的"。所以每次显示都重新订阅一次。
+   * 而返回时 `aboutToAppear` **不会**再执行 —— 于是列表永远收不到更新。
+   * 所以每次显示都调用一次（已订阅则直接返回，不做任何事）。
    */
   private listen(): void {
-    if (this.store === null) {
+    if (this.store === null || this.subscribed) {
       return;
-    }
-    if (this.listener !== null) {
-      this.store.unsubscribe(this.listener);
     }
     this.listener = () => {
       this.syncFromStore();
     };
     this.store.subscribe(this.listener);
+    this.subscribed = true;
   }
 
   /**
-   * 每次本页显示时刷新列表。
+   * 每次显示时确保订阅还在。
    *
-   * 从编辑页返回时必然触发：那边可能新建/修改了记录。
-   * 这里重新订阅 + 主动拉一次，两条路都走，不依赖某一条一定生效。
+   * ⚠️ **这里不发网络请求。** 曾经在 `onPageShow` 里调 `refreshItems`，
+   * 结果在 DevEco 预览器里 `onPageShow` 会**高频反复触发**，
+   * 后端日志里出现了上万次 `GET /items` 的 1 次/秒请求风暴。
+   * 列表的新鲜度由另外两条路保证：
+   * - 编辑页保存后 `store.saveEdits` 会自己刷新并通知（本页已订阅）
+   * - 其它设备的改动由 WebSocket 事件驱动刷新
+   * 需要强制刷新时，页面上有「刷新」按钮。
    */
   onPageShow(): void {
     if (this.store === null || !this.store.isLoggedIn) {
       return;
     }
     this.listen();
-    this.store.refreshItems(true).then(() => this.syncFromStore());
   }
 
   aboutToDisappear(): void {
@@ -107,6 +111,7 @@ struct ClipboardPage {
         this.store.unsubscribe(this.listener);
         this.listener = null;
       }
+      this.subscribed = false;
       this.store.stopClipboardMonitor();
     }
   }
@@ -563,7 +568,10 @@ struct ClipboardPage {
             ListItem() {
               this.itemCard(item)
             }
-          }, (item: ClipboardItem) => item.id)
+            // ⚠️ key 不能只用 `item.id`：刷新后同一个 id 的记录内容变了（例如改了标题），
+            // ArkUI 会按 key 复用旧组件而**不重绘**，界面就停在旧标题上。
+            // 把 updated_at 拼进 key，内容一变 key 就变，强制重建该行。
+          }, (item: ClipboardItem) => `${item.id}_${item.updated_at}`)
         }
         .layoutWeight(1)
         .width('100%')

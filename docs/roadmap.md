@@ -100,6 +100,15 @@ auth 与 clipboard 接口（含**跨用户越权隔离**、去重契约、分页
     订阅要抽成幂等方法，在 `aboutToAppear` 与 `onPageShow` 都调用一次。
 14. **保存失败不要放行返回**：编辑页的「返回」若先保存再跳转，
     失败时必须停在本页提示错误，否则一返回刚编辑的内容就丢了。
+15. **`ForEach` 的 key 不能只用 `item.id`**：刷新后同一个 id 的记录内容变了
+    （例如改了标题），ArkUI 会按 key 复用旧组件而**不重绘**——数据是新的，
+    界面却停在旧标题上。key 里必须带上会变的字段（这里用
+    `${item.id}_${item.updated_at}`）。
+16. **`onPageShow` 里不要发网络请求**：DevEco 预览器里 `onPageShow` 会**高频反复触发**，
+    实测后端出现 **12,000+ 次、稳定 1 次/秒**的 `GET /items` 请求风暴
+    （用 `netstat` 定位到请求方是 `Previewer` 进程，不是浏览器）。
+    现在 `onPageShow` 只做**幂等重订阅**（有 `subscribed` 标志），不发请求；
+    列表新鲜度由「保存后 store 通知」与「WebSocket 事件」保证，另有「刷新」按钮兜底。
 
 ### 第 3 步
 
@@ -164,6 +173,12 @@ auth 与 clipboard 接口（含**跨用户越权隔离**、去重契约、分页
    用户会以为没保存成功（这个困惑真的发生过）。
    两个客户端都改了；`web/tests/e2e.test.ts` 有回归用例，且已验证
    把 `sort_by` 改回 `created_at` 时该用例**确实会失败**。
+8. **`hasUnsaved` 不能收参数、更不能传"签名"进去**：它内部会 `signature(value)`，
+   若调用方传入的已经是签名（例如 watcher 的 `current`），签名就被套了两层
+   （`内容\0标题\0标题`），与 `savedSignature` **永不相等** → 永远判定为"有改动"。
+   表现：**点开一条记录不做任何修改，2 秒后也会自动保存一次**。
+   已改成无参的 `hasUnsavedChanges()`，直接用 `text.value` 算签名，杜绝传错。
+   `web/tests/autosave.test.ts` 有回归用例，且已验证还原 bug 时它会失败。
 
 ### 第 4 步
 

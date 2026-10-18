@@ -198,4 +198,42 @@ describe('自动保存倒计时', () => {
     assert.equal(h.saves, 0, '失败的保存不应计入成功次数')
     assert.equal(h.api.pending.value, false, '失败后也应退出倒计时')
   })
+
+  it('载入已保存内容后不应触发保存（回归：hasUnsaved 曾把签名又包了一层）', async () => {
+    const h = setup()
+
+    // 模拟「点历史记录载入编辑」：先赋值，紧接着 markSaved 建立基线
+    // （组件的 watch 回调在下一个 tick 才跑，那时基线已经设好）
+    h.text.value = '载入的内容'
+    h.api.markSaved('载入的内容')
+    await nextTick()
+
+    assert.equal(h.api.pending.value, false, '内容与基线一致，不应进入倒计时')
+
+    await sleep(DELAY + SETTLE)
+    assert.equal(h.saves, 0, '没有改动就绝不能自动保存')
+  })
+
+  it('载入后只改标题也算改动，应触发保存', async () => {
+    const title = ref('原标题')
+    const text = ref('内容')
+    let saves = 0
+    const api = useAutoSave({
+      text,
+      extra: title,
+      enabled: ref(true),
+      delay: DELAY,
+      onSave: async () => {
+        saves += 1
+      },
+    })
+    api.markSaved('内容')
+
+    title.value = '新标题'
+    await nextTick()
+    assert.equal(api.pending.value, true, '标题变了就是未保存改动')
+
+    await sleep(DELAY + SETTLE)
+    assert.equal(saves, 1)
+  })
 })
