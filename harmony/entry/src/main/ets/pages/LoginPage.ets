@@ -83,6 +83,19 @@ struct LoginPage {
     return true;
   }
 
+  /**
+   * 提交按钮文案。
+   *
+   * 提交中要说明**正在做什么**：登录就说「登录中」，注册就说「注册中」。
+   * 笼统的「提交中」会让用户不确定自己点的是登录还是注册。
+   */
+  private submitLabel(): string {
+    if (this.submitting) {
+      return this.isRegister ? '注册中…' : '登录中…';
+    }
+    return this.isRegister ? '注册并登录' : '登录';
+  }
+
   private async submit(): Promise<void> {
     if (!this.canSubmit() || this.store === null) {
       return;
@@ -150,7 +163,7 @@ struct LoginPage {
         })
         .enabled(!this.submitting)
 
-      Button(this.submitting ? '提交中…' : (this.isRegister ? '注册并登录' : '登录'))
+      Button(this.submitLabel())
         .width('100%')
         .enabled(this.canSubmit())
         .onClick(() => {
