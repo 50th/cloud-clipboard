@@ -1,6 +1,7 @@
 {
   "src": [
     "pages/LoginPage",
-    "pages/ClipboardPage"
+    "pages/ClipboardPage",
+    "pages/EditPage"
   ]
 }

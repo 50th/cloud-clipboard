@@ -9,6 +9,7 @@ import { router } from '@kit.ArkUI';
 
 import { AppStore } from '../common/AppStore';
 import { loadApiBaseUrl } from '../common/Config';
+import { ROUTE_LIST } from '../common/Routes';
 
 @Entry
 @Component
@@ -41,7 +42,7 @@ struct LoginPage {
   }
 
   private goToList(): void {
-    router.replaceUrl({ url: 'pages/ClipboardPage' }).catch(() => {
+    router.replaceUrl({ url: ROUTE_LIST }).catch(() => {
       this.errorMessage = '页面跳转失败';
     });
   }

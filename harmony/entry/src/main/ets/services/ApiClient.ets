@@ -215,6 +215,11 @@ export class ApiClient {
     return await this.send<ClipboardItemList>(http.RequestMethod.GET, path);
   }
 
+  /** 详情：按 id 取单条（编辑页据此载入**最新**内容，而不是列表里的旧快照）。 */
+  async getItem(id: string): Promise<ClipboardItem> {
+    return await this.send<ClipboardItem>(http.RequestMethod.GET, `/clipboard/items/${id}`);
+  }
+
   /**
    * 创建。
    *
