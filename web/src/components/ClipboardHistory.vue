@@ -37,7 +37,7 @@ async function handleDelete(id: string) {
 }
 
 /**
- * 点条目载入右侧编辑。
+ * 点条目载入输入区编辑。
  *
  * 只**请求**，真正的切换由输入区在落盘当前未保存内容之后执行
  * （见 clipboardStore 的 requestEdit / applyRequestedEdit）。
@@ -67,7 +67,7 @@ function handleEdit(item: ClipboardItem) {
       />
     </label>
 
-    <!-- 历史相关操作：全部集中在左栏 -->
+    <!-- 历史相关操作：全部集中在历史面板 -->
     <div class="actions actions--wrap history-actions">
       <button type="button" class="btn btn--small" @click="store.fetchItems()">刷新</button>
       <select
@@ -95,7 +95,7 @@ function handleEdit(item: ClipboardItem) {
     <div class="history-scroll">
       <p v-if="loading" class="loading">加载中…</p>
       <p v-else-if="items.length === 0" class="empty">
-        还没有记录。在右侧输入内容，或点「同步剪贴板」。
+        还没有记录。在输入区输入或粘贴内容后点「保存」。
       </p>
       <div v-else class="items">
         <ClipboardItemCard

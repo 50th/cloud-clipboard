@@ -42,6 +42,13 @@ export const useClipboardStore = defineStore('clipboard', () => {
   let draftId: string | null = null
   let draftContent = ''
   /**
+   * 正在提交中的内容。
+   *
+   * 服务端在保存成功后也会广播 `clipboard.updated`，那条回显可能**比 HTTP 响应先到**；
+   * 不记录在途内容的话，会把自己的保存误判成"其他设备改了这一条"。
+   */
+  let inFlightContent = ''
+  /**
    * 当前关联是「用户从列表里点开编辑的已有记录」还是「打字时自动建的草稿」。
    *
    * 差异体现在手动上传：草稿模式下内容变了要另起一行（用户是在写新东西），
@@ -52,6 +59,13 @@ export const useClipboardStore = defineStore('clipboard', () => {
 
   /** 正在编辑的记录 id（null = 新建）；供列表高亮与输入区提示 */
   const editingId = ref<string | null>(null)
+  /**
+   * 正在编辑的记录被**其他设备**更新时存放的最新版本（null = 没有待确认的冲突）。
+   *
+   * 本机没有版本号校验（保存是后写覆盖），所以至少要让用户知道
+   * "别处已经改过这一条"，并提供载入最新/忽略两个选择，避免静默覆盖。
+   */
+  const remoteUpdate = ref<ClipboardItem | null>(null)
   /** 每次请求「载入编辑」递增；输入区据此响应（点同一条也能重新载入） */
   const editTicket = ref(0)
   /**
@@ -69,10 +83,11 @@ export const useClipboardStore = defineStore('clipboard', () => {
     draftContent = ''
     loadedForEdit = false
     editingId.value = null
+    remoteUpdate.value = null
   }
 
   /**
-   * 请求把某条已有记录载入右侧输入区编辑。
+   * 请求把某条已有记录载入输入区编辑。
    *
    * 真正的切换发生在输入区调用 `applyRequestedEdit()` 时（见上）。
    */
@@ -89,6 +104,39 @@ export const useClipboardStore = defineStore('clipboard', () => {
   }
 
   /**
+   * 拉取待载入记录的**最新内容**。
+   *
+   * 列表里的条目可能是几秒前的快照。用户点开后如果直接用快照，
+   * 别处刚改过的内容就会被本地编辑静默覆盖——进入编辑前重新取一次详情，
+   * 代价只有一次轻量请求。
+   *
+   * 返回 `false` 表示已没有可载入的记录（被取消，或记录已在别处删除）；
+   * 网络失败时保留快照并返回 `true`，至少还能继续编辑。
+   */
+  async function refreshRequestedEdit(): Promise<boolean> {
+    const item = pendingEditItem
+    if (!item) {
+      return false
+    }
+    const ticket = editTicket.value
+    try {
+      const fresh = await clipboardApi.detail(item.id)
+      if (ticket === editTicket.value) {
+        pendingEditItem = fresh
+      }
+    } catch (err) {
+      // 记录已被删除：清掉请求，并刷新列表让这一行消失
+      if (ticket === editTicket.value && isNotFound(err)) {
+        pendingEditItem = null
+        await fetchItems({ page: page.value, silent: true })
+        return false
+      }
+      // 其它错误（断网等）保留列表快照，用户仍可编辑
+    }
+    return pendingEditItem !== null
+  }
+
+  /**
    * 由输入区调用：应用待载入的记录，返回它（没有待处理请求时返回 null）。
    */
   function applyRequestedEdit(): ClipboardItem | null {
@@ -101,6 +149,8 @@ export const useClipboardStore = defineStore('clipboard', () => {
     draftContent = item.content
     loadedForEdit = true
     editingId.value = item.id
+    // 换了编辑目标，上一条记录的远端更新提示已无意义
+    remoteUpdate.value = null
     return item
   }
 
@@ -187,6 +237,7 @@ export const useClipboardStore = defineStore('clipboard', () => {
     const trimmedTitle = title?.trim() ?? ''
 
     if (draftId) {
+      inFlightContent = text.trim()
       try {
         const item = await clipboardApi.update(draftId, {
           content: text,
@@ -194,6 +245,8 @@ export const useClipboardStore = defineStore('clipboard', () => {
           timezone: LOCAL_TIMEZONE,
         })
         draftContent = item.content
+        // 已经用本地版本覆盖，冲突提示不再需要
+        remoteUpdate.value = null
         await fetchItems({ page: 1, silent: true })
         return { item, deduped: false }
       } catch (err) {
@@ -202,6 +255,8 @@ export const useClipboardStore = defineStore('clipboard', () => {
           throw err
         }
         resetDraft()
+      } finally {
+        inFlightContent = ''
       }
     }
 
@@ -245,6 +300,7 @@ export const useClipboardStore = defineStore('clipboard', () => {
     const content = text.trim()
 
     if (draftId && (loadedForEdit || draftContent === content)) {
+      inFlightContent = content
       try {
         const item = await clipboardApi.update(draftId, {
           content,
@@ -252,6 +308,8 @@ export const useClipboardStore = defineStore('clipboard', () => {
           timezone: LOCAL_TIMEZONE,
         })
         draftContent = item.content
+        // 已经用本地版本覆盖，冲突提示不再需要
+        remoteUpdate.value = null
         await fetchItems({ page: 1, silent: true })
         return { item, deduped: false }
       } catch (err) {
@@ -261,6 +319,8 @@ export const useClipboardStore = defineStore('clipboard', () => {
           throw err
         }
         resetDraft()
+      } finally {
+        inFlightContent = ''
       }
     }
 
@@ -280,6 +340,9 @@ export const useClipboardStore = defineStore('clipboard', () => {
 
   async function removeItem(id: string) {
     await clipboardApi.remove(id)
+    if (remoteUpdate.value?.id === id) {
+      remoteUpdate.value = null
+    }
     // 注意：即使删的是当前草稿，也**不解除关联**——
     // 下次保存会因 404 自动回退为新建，用户无感知（见 saveDraft）
     // 删除当前页最后一条时回退一页，避免停在空页
@@ -307,6 +370,9 @@ export const useClipboardStore = defineStore('clipboard', () => {
    * 注意：**不重置草稿关联**。别的设备改了数据不该让本机正在编辑的草稿断开。
    */
   async function applyRealtimeEvent(envelope: WsEnvelope): Promise<void> {
+    if (envelope.event === 'clipboard.updated') {
+      markRemoteUpdate(envelope.data)
+    }
     switch (envelope.event) {
       case 'clipboard.created':
       case 'clipboard.updated':
@@ -320,6 +386,48 @@ export const useClipboardStore = defineStore('clipboard', () => {
     }
   }
 
+  /**
+   * 判断一条 `clipboard.updated` 是否来自**其他设备**改动了当前编辑的记录。
+   *
+   * 自己保存也会收到同一条广播，所以必须排除回显：内容与已保存内容
+   * （或正在提交的内容）一致时不算远端修改。
+   */
+  function markRemoteUpdate(data: unknown): void {
+    if (typeof data !== 'object' || data === null || draftId === null) {
+      return
+    }
+    const payload = data as Partial<ClipboardItem>
+    if (payload.id !== draftId || typeof payload.content !== 'string') {
+      return
+    }
+    const content = payload.content.trim()
+    if (content === draftContent.trim() || content === inFlightContent) {
+      return
+    }
+    remoteUpdate.value = data as ClipboardItem
+  }
+
+  /**
+   * 载入其他设备的最新版本（丢弃本地未保存的改动），并返回它。
+   */
+  function applyRemoteUpdate(): ClipboardItem | null {
+    const item = remoteUpdate.value
+    if (!item) {
+      return null
+    }
+    remoteUpdate.value = null
+    draftId = item.id
+    draftContent = item.content
+    loadedForEdit = true
+    editingId.value = item.id
+    return item
+  }
+
+  /** 忽略远端更新提示，继续用本地版本编辑/保存 */
+  function dismissRemoteUpdate(): void {
+    remoteUpdate.value = null
+  }
+
   return {
     items,
     total,
@@ -331,6 +439,7 @@ export const useClipboardStore = defineStore('clipboard', () => {
     search,
     order,
     editingId,
+    remoteUpdate,
     editTicket,
     fetchItems,
     setPage,
@@ -340,7 +449,10 @@ export const useClipboardStore = defineStore('clipboard', () => {
     uploadText,
     startNewDraft,
     requestEdit,
+    refreshRequestedEdit,
     applyRequestedEdit,
+    applyRemoteUpdate,
+    dismissRemoteUpdate,
     cancelRequestedEdit,
     removeItem,
     clearAll,

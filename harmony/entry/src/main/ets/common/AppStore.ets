@@ -58,6 +58,12 @@ export class AppStore {
   errorMessage: string = '';
   /** WebSocket 是否在线 */
   realtimeConnected: boolean = false;
+  /**
+   * 正在编辑的记录被**其他设备**更新时的最新版本（null 表示没有待确认的更新）。
+   *
+   * 保存是后写覆盖、没有版本号校验，所以至少要让用户知道"别处已经改过这一条"。
+   */
+  remoteUpdate: ClipboardItem | null = null;
 
   private socket: WebSocketService | null = null;
   private pageListeners: (() => void)[] = [];
@@ -74,6 +80,13 @@ export class AppStore {
   /** 已保存内容的签名，用于判断"有没有未保存的改动" */
   private savedContent: string = '';
   private savedTitle: string = '';
+  /**
+   * 正在提交中的内容。
+   *
+   * 服务端保存成功后也会广播 `clipboard.updated`，回显可能比 HTTP 响应先到；
+   * 不记录在途内容的话，会把自己的保存误判成"其他设备改了这一条"。
+   */
+  private inFlightContent: string = '';
 
   private constructor(context: common.UIAbilityContext) {
     this.context = context;
@@ -200,6 +213,7 @@ export class AppStore {
     this.saveTargetId = null;
     this.savedContent = '';
     this.savedTitle = '';
+    this.remoteUpdate = null;
     this.notify();
   }
 
@@ -293,6 +307,7 @@ export class AppStore {
     // 与 hasUnsavedChanges 的归一化保持一致（都按 trim 后比较）
     this.savedContent = item.content.trim();
     this.savedTitle = item.title.trim();
+    this.remoteUpdate = null;
     this.errorMessage = '';
     this.notify();
   }
@@ -306,6 +321,7 @@ export class AppStore {
     this.saveTargetId = null;
     this.savedContent = '';
     this.savedTitle = '';
+    this.remoteUpdate = null;
     this.notify();
   }
 
@@ -343,6 +359,7 @@ export class AppStore {
 
     if (this.saveTargetId !== null) {
       const targetId = this.saveTargetId;
+      this.inFlightContent = trimmedContent;
       try {
         const payload: ClipboardItemUpdate = {
           content: trimmedContent,
@@ -353,6 +370,8 @@ export class AppStore {
         }
         const item = await this.api.updateItem(targetId, payload);
         this.markSaved(trimmedContent, trimmedTitle);
+        // 已经用本地版本覆盖，提示不再需要
+        this.remoteUpdate = null;
         this.errorMessage = '';
         await this.refreshItems(true);
         return item;
@@ -364,6 +383,8 @@ export class AppStore {
           return null;
         }
         this.saveTargetId = null;
+      } finally {
+        this.inFlightContent = '';
       }
     }
 
@@ -394,6 +415,28 @@ export class AppStore {
     this.savedTitle = title;
   }
 
+  /**
+   * 载入其他设备的最新版本（会丢弃本地未保存的改动），并返回它。
+   *
+   * 编辑页拿到返回值后更新输入框；之后保存仍更新同一条记录。
+   */
+  applyRemoteUpdate(): ClipboardItem | null {
+    const item = this.remoteUpdate;
+    if (item === null) {
+      return null;
+    }
+    this.remoteUpdate = null;
+    this.saveTargetId = item.id;
+    this.savedContent = item.content.trim();
+    this.savedTitle = item.title.trim();
+    return item;
+  }
+
+  /** 忽略远端更新提示，继续用本地版本编辑/保存。 */
+  dismissRemoteUpdate(): void {
+    this.remoteUpdate = null;
+  }
+
   /** 删除一条记录。 */
   async remove(itemId: string): Promise<void> {
     try {
@@ -401,6 +444,9 @@ export class AppStore {
       // 删掉的正是保存目标 → 丢掉关联，下次保存会新建
       if (this.saveTargetId === itemId) {
         this.saveTargetId = null;
+      }
+      if (this.remoteUpdate !== null && this.remoteUpdate.id === itemId) {
+        this.remoteUpdate = null;
       }
       await this.refreshItems(true);
     } catch (error) {
@@ -417,6 +463,7 @@ export class AppStore {
       this.saveTargetId = null;
       this.savedContent = '';
       this.savedTitle = '';
+      this.remoteUpdate = null;
       await this.refreshItems(true);
     } catch (error) {
       this.errorMessage = this.describe(error);
@@ -470,6 +517,7 @@ export class AppStore {
         this.notify();
       },
       (envelope: WsEnvelope) => {
+        this.handleRealtimeEvent(envelope);
         // 收到任何剪贴板事件都静默刷新当前页：
         // 排序、分页都会影响"该出现哪些记录"，本地合并容易与后端规则不一致
         this.refreshItems(true).catch(() => {});
@@ -487,6 +535,28 @@ export class AppStore {
       this.socket = null;
     }
     this.realtimeConnected = false;
+  }
+
+  /**
+   * 处理实时事件：只关心「正在编辑的那条记录被**其他设备**更新」。
+   *
+   * 自己保存也会收到同一条广播，因此内容与已保存内容/在途内容一致时不算远端修改。
+   * 命中时只记录并通知页面，不直接改页面上的输入内容——先由用户决定怎么处理。
+   */
+  private handleRealtimeEvent(envelope: WsEnvelope): void {
+    if (envelope.event !== 'clipboard.updated' || this.saveTargetId === null) {
+      return;
+    }
+    const item = envelope.data as ClipboardItem;
+    if (item === undefined || item === null || item.id !== this.saveTargetId) {
+      return;
+    }
+    const content = item.content.trim();
+    if (content === this.savedContent || content === this.inFlightContent) {
+      return;
+    }
+    this.remoteUpdate = item;
+    this.notify();
   }
 
   /** 把异常转成可读提示。 */

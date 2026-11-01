@@ -39,8 +39,12 @@ struct EditPage {
   @State editingId: string = '';
   /** 正在编辑的记录标题（仅用于提示） */
   @State editingTitle: string = '';
+  /** 其他设备更新了正在编辑的记录时的提示标题（空串表示不显示横幅） */
+  @State remoteUpdateTitle: string = '';
 
   private store: AppStore | null = null;
+  /** 保存订阅回调引用，页面销毁时才能正确取消注册 */
+  private listener: (() => void) | null = null;
   /** 倒计时计时器句柄 */
   private countdownTimer: number = -1;
 
@@ -52,6 +56,11 @@ struct EditPage {
       router.replaceUrl({ url: ROUTE_LOGIN }).catch(() => {});
       return;
     }
+
+    this.listener = () => {
+      this.syncRemoteUpdate();
+    };
+    this.store.subscribe(this.listener);
 
     const params = router.getParams() as EditRouteParams;
     const itemId: string = params !== undefined && params !== null ? (params.id ?? '') : '';
@@ -69,6 +78,10 @@ struct EditPage {
 
   aboutToDisappear(): void {
     this.stopCountdown();
+    if (this.store !== null && this.listener !== null) {
+      this.store.unsubscribe(this.listener);
+      this.listener = null;
+    }
     // 兜底：用系统返回手势离开时也尽量把未保存内容落盘。
     // 这里不能 await（页面正在销毁），但 store 是单例，请求会继续完成。
     if (this.store !== null && this.store.hasUnsavedChanges(this.draftContent, this.draftTitle)) {
@@ -106,6 +119,59 @@ struct EditPage {
     } finally {
       this.loading = false;
     }
+  }
+
+  // ---- 其他设备更新提示 ----
+
+  /**
+   * 同步 store 里的「远端更新」状态到页面。
+   *
+   * 只在提示的正是当前这条记录时显示；若远端内容与本机草稿完全一致，
+   * 说明没有覆盖风险，直接收起提示。
+   */
+  private syncRemoteUpdate(): void {
+    if (this.store === null) {
+      this.remoteUpdateTitle = '';
+      return;
+    }
+    const item = this.store.remoteUpdate;
+    if (item === null || item.id !== this.editingId) {
+      this.remoteUpdateTitle = '';
+      return;
+    }
+    if (item.content.trim() === this.draftContent.trim() &&
+      item.title.trim() === this.draftTitle.trim()) {
+      this.store.dismissRemoteUpdate();
+      this.remoteUpdateTitle = '';
+      return;
+    }
+    this.remoteUpdateTitle = item.title;
+  }
+
+  /** 载入其他设备的最新版本（会丢弃本页未保存的改动） */
+  private handleLoadRemote(): void {
+    if (this.store === null) {
+      return;
+    }
+    const item = this.store.applyRemoteUpdate();
+    if (item === null) {
+      return;
+    }
+    this.editingId = item.id;
+    this.editingTitle = item.title;
+    this.draftTitle = item.title;
+    this.draftContent = item.content;
+    this.remoteUpdateTitle = '';
+    this.stopCountdown();
+    this.setMessage('已载入其他设备的最新内容');
+  }
+
+  /** 忽略远端更新提示，继续用本页内容保存 */
+  private handleDismissRemote(): void {
+    if (this.store !== null) {
+      this.store.dismissRemoteUpdate();
+    }
+    this.remoteUpdateTitle = '';
   }
 
   // ---- 自动保存倒计时 ----
@@ -304,6 +370,39 @@ struct EditPage {
       }
       .width('100%')
       .padding({ bottom: 12 })
+
+      // 其他设备改过这一条：本机保存会直接覆盖，必须先让用户知道
+      if (this.remoteUpdateTitle.length > 0) {
+        Column({ space: 8 }) {
+          Text('⚠ 这条记录已在其他设备更新，继续保存会覆盖对方的内容')
+            .fontSize(12)
+            .fontColor('#B45309')
+            .width('100%')
+          Row({ space: 8 }) {
+            Button('载入最新')
+              .fontSize(12)
+              .height(30)
+              .backgroundColor('#B45309')
+              .onClick(() => {
+                this.handleLoadRemote();
+              })
+            Button('忽略')
+              .fontSize(12)
+              .height(30)
+              .backgroundColor('#EEEEEE')
+              .fontColor('#333333')
+              .onClick(() => {
+                this.handleDismissRemote();
+              })
+          }
+          .width('100%')
+        }
+        .width('100%')
+        .padding(10)
+        .backgroundColor('#FFFBEB')
+        .borderRadius(8)
+        .margin({ bottom: 10 })
+      }
 
       if (this.loading) {
         Text('载入中…').fontSize(13).fontColor('#888888').padding(20)

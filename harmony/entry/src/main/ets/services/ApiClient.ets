@@ -28,6 +28,16 @@ import {
   UserInfo,
 } from '../models/Types';
 
+/**
+ * PATCH 方法的兼容写法。
+ *
+ * ⚠️ `http.RequestMethod.PATCH` 是 **API 26** 才新增的枚举成员，而本应用
+ * `compatibleSdkVersion` 是 5.0.0(12)：直接引用该成员时编译只会告警，
+ * 但在 API 12 设备上运行时会取到 `undefined`，导致「更新记录」请求失败。
+ * 底层实现接受字符串，故用字符串断言绕开枚举缺失。
+ */
+const HTTP_METHOD_PATCH: http.RequestMethod = 'PATCH' as http.RequestMethod;
+
 /** 接口调用失败时抛出，`status` 便于上层分支处理（如 401 跳登录）。 */
 export class ApiError extends Error {
   status: number;
@@ -238,7 +248,7 @@ export class ApiClient {
   /** 更新已有记录（只传要改的字段）。 */
   async updateItem(id: string, payload: ClipboardItemUpdate): Promise<ClipboardItem> {
     return await this.send<ClipboardItem>(
-      http.RequestMethod.PATCH,
+      HTTP_METHOD_PATCH,
       `/clipboard/items/${id}`,
       payload,
     );

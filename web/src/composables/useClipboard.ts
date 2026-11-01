@@ -39,7 +39,7 @@ export function useClipboard() {
     error.value = null
     try {
       const { item, deduped } = await store.uploadText(content, title)
-      const prefix = source === 'clipboard' ? '已同步剪贴板' : '已上传'
+      const prefix = source === 'clipboard' ? '已同步剪贴板' : '已保存'
       const detail = deduped
         ? '（内容已存在，已刷新时间戳）'
         : `（新记录 ${item.id.slice(0, 8)}）`
@@ -54,8 +54,9 @@ export function useClipboard() {
   }
 
   /**
-   * 读取系统剪贴板并上传。
+   * 读取系统剪贴板并保存。
    * ⚠️ 必须由用户手势触发（点击事件），浏览器才允许读取。
+   * 当前 Web UI 未接入该能力，保留给未来桌面端或恢复读取时使用。
    * 调用方从返回值的 `needsManualInput` 判断是否要引导用户手动粘贴。
    */
   async function syncFromClipboard(): Promise<UploadOutcome> {
@@ -71,10 +72,12 @@ export function useClipboard() {
       needsManualInput.value = needsManual
       return { ok: false, needsManualInput: needsManual, message }
     }
+    // 之前失败过、这次读成功：收起"请手动粘贴"提示
+    needsManualInput.value = false
     return upload(text, 'clipboard')
   }
 
-  /** 手动输入内容上传（用于输入面板的「上传」按钮）。 */
+  /** 手动输入内容保存（当前 Web UI 未使用）。 */
   async function uploadManual(text: string, title?: string): Promise<UploadOutcome> {
     const result = await upload(text, 'manual', title)
     if (result.ok) {

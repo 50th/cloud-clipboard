@@ -509,10 +509,10 @@ describe('Web 端单端闭环（真实后端）', () => {
 })
 
 /**
- * 「点历史记录载入右侧编辑」的闭环。
+ * 「点历史记录载入输入区编辑」的闭环。
  *
  * 核心契约：载入后保存**更新那一条**，而不是新建——
- * 否则「点开一条 → 改几个字 → 点上传」会莫名其妙多出一行。
+ * 否则「点开一条 → 改几个字 → 点保存」会莫名其妙多出一行。
  */
 describe('载入已有记录编辑（真实后端）', () => {
   // 每条用例后解除编辑关联：editingId / loadedForEdit 是 store 级状态，
@@ -586,6 +586,52 @@ describe('载入已有记录编辑（真实后端）', () => {
       },
       '重复内容应给出可读的冲突错误，而不是 500',
     )
+  })
+
+  it('载入编辑前会重取最新内容：列表旧快照不会覆盖别处刚改的内容', async () => {
+    const { item } = await upload(`${TAG} 快照甲`)
+
+    // 模拟另一台设备直接改（不经过本 store，因此本地列表仍是旧快照）
+    await clipboardApi.update(item.id, {
+      content: `${TAG} 快照乙`,
+      timezone: 'Asia/Shanghai',
+    })
+
+    state().requestEdit(item) // 传入的是旧快照
+    const hasRequest = await state().refreshRequestedEdit()
+    assert.equal(hasRequest, true)
+
+    const applied = state().applyRequestedEdit()
+    assert.equal(applied?.content, `${TAG} 快照乙`, '载入的应是详情接口返回的最新内容')
+    assert.equal(state().editingId, item.id)
+
+    await clipboardApi.remove(item.id).catch(() => undefined)
+  })
+
+  it('其他设备更新正在编辑的记录：给出提示且可载入最新内容', async () => {
+    const { item } = await upload(`${TAG} 远端冲突甲`)
+    state().requestEdit(item)
+    await state().refreshRequestedEdit()
+    state().applyRequestedEdit()
+
+    // 自己的保存回显（内容与本地一致）不应被当成远端修改
+    await state().applyRealtimeEvent({ event: 'clipboard.updated', data: item })
+    assert.equal(state().remoteUpdate, null, '自己的回显不应触发冲突提示')
+
+    // 其他设备改了内容
+    const remote = await clipboardApi.update(item.id, {
+      content: `${TAG} 远端冲突乙`,
+      timezone: 'Asia/Shanghai',
+    })
+    await state().applyRealtimeEvent({ event: 'clipboard.updated', data: remote })
+
+    assert.equal(state().remoteUpdate?.content, `${TAG} 远端冲突乙`)
+
+    const applied = state().applyRemoteUpdate()
+    assert.equal(applied?.content, `${TAG} 远端冲突乙`)
+    assert.equal(state().remoteUpdate, null, '载入后应清空提示')
+
+    await clipboardApi.remove(item.id).catch(() => undefined)
   })
 
   it('删除正在编辑的记录后再保存：自动回退为新建，不报错', async () => {

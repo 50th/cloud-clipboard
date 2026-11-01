@@ -5,7 +5,6 @@ import LoginPanel from '@/components/LoginPanel.vue'
 import ClipboardHistory from '@/components/ClipboardHistory.vue'
 import InputPanel from '@/components/InputPanel.vue'
 import { API_BASE_URL, getErrorMessage } from '@/api/client'
-import { useClipboard } from '@/composables/useClipboard'
 import { useNotice } from '@/composables/useNotice'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useClipboardStore } from '@/stores/clipboardStore'
@@ -17,8 +16,27 @@ const { notice, showNotice, clearNotice } = useNotice()
 
 const searchInput = ref('')
 
-// 单实例：剪贴板能力探测与「同步剪贴板」都由这一个 composable 提供
-const { supported, needsManualInput, syncFromClipboard } = useClipboard()
+/**
+ * 当前可见的视图。
+ *
+ * 桌面端两栏同时可见，本状态不参与布局；
+ * 移动端（≤900px）通过顶部页签只显示其中一栏，默认停在「历史记录」。
+ * 两栏组件始终挂载（用 CSS 隐藏），所以草稿、分页、滚动位置都不会丢。
+ */
+type Pane = 'input' | 'history'
+const activePane = ref<Pane>('history')
+
+function switchPane(next: Pane) {
+  if (activePane.value === next) {
+    return
+  }
+  activePane.value = next
+  // 切页时清掉旧焦点：既收起软键盘，也避免焦点留在被隐藏的面板上
+  const active = document.activeElement
+  if (active instanceof HTMLElement) {
+    active.blur()
+  }
+}
 
 const store = useClipboardStore()
 const userStore = useUserStore()
@@ -63,8 +81,20 @@ watch(isAuthenticated, async (loggedIn) => {
     disconnect()
     store.reset()
     searchInput.value = ''
+    activePane.value = 'history'
   }
 })
+
+// 点历史记录 → 载入输入区；移动端同时切到「剪贴板输入」页签。
+// 桌面两栏都可见，切换状态不会改变布局。
+watch(
+  () => store.editTicket,
+  (ticket, previous) => {
+    if (ticket !== previous) {
+      switchPane('input')
+    }
+  },
+)
 
 // 搜索防抖：停止输入 300ms 后查后端
 let searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -80,12 +110,6 @@ watch(searchInput, (value) => {
 function handleLogout() {
   userStore.logout()
   showNotice({ kind: 'ok', text: '已退出登录' })
-}
-
-async function handleSync() {
-  const result = await syncFromClipboard()
-  showNotice({ kind: result.ok ? 'ok' : 'err', text: result.message })
-  return result
 }
 
 function handleNotice(next: { kind: 'ok' | 'err'; text: string }) {
@@ -123,9 +147,10 @@ async function handleClearAll() {
         </button>
       </div>
       <p class="app__subtitle">
-        后端 {{ API_BASE_URL }}
-        <template v-if="user"> · 当前用户 {{ user.username }}</template>
-        <template v-else> · 未登录</template>
+        <!-- 后端地址是开发信息，移动端隐藏，避免把状态行挤成两行 -->
+        <span class="app__backend">后端 {{ API_BASE_URL }} · </span>
+        <template v-if="user">当前用户 {{ user.username }}</template>
+        <template v-else>未登录</template>
         <template v-if="isAuthenticated">
           ·
           <span :class="['realtime', realtimeConnected ? 'realtime--on' : 'realtime--off']">
@@ -158,26 +183,56 @@ async function handleClearAll() {
     <LoginPanel v-else-if="!isAuthenticated" @notice="handleNotice" />
 
     <template v-else>
-      <p v-if="!supported" class="warn">
-        当前页面无法读取系统剪贴板（浏览器要求 https 或 localhost + 用户点击），
-        可直接在右侧输入框粘贴内容。
-      </p>
-      <p v-else-if="needsManualInput" class="warn">
-        读取剪贴板被拒绝，请检查浏览器权限，或在右侧输入框手动粘贴。
-      </p>
+      <!--
+        移动端页签：桌面端由 CSS 隐藏，两栏同时可见。
+        两个面板始终挂载，切换只是显示/隐藏，不会重建输入区或列表。
+      -->
+      <nav class="pane-tabs" role="tablist" aria-label="视图切换">
+        <button
+          type="button"
+          class="pane-tabs__tab"
+          :class="{ 'pane-tabs__tab--active': activePane === 'history' }"
+          role="tab"
+          :aria-selected="activePane === 'history'"
+          @click="switchPane('history')"
+        >
+          历史记录
+          <span v-if="total > 0" class="pane-tabs__badge">{{ total }}</span>
+        </button>
+        <button
+          type="button"
+          class="pane-tabs__tab"
+          :class="{ 'pane-tabs__tab--active': activePane === 'input' }"
+          role="tab"
+          :aria-selected="activePane === 'input'"
+          @click="switchPane('input')"
+        >
+          剪贴板输入
+        </button>
+      </nav>
 
-      <!-- 左：历史记录（含搜索/排序/刷新/清空）  右：剪贴板输入 -->
+      <!-- 桌面：左历史 右输入；移动：由顶部页签一次显示一栏 -->
       <div class="layout">
-        <ClipboardHistory
-          v-model:search-input="searchInput"
-          @clear-all="handleClearAll"
-        />
-        <InputPanel :on-sync-clipboard="handleSync" @notice="handleNotice" />
+        <div
+          class="layout__pane"
+          :class="{ 'layout__pane--active': activePane === 'history' }"
+        >
+          <ClipboardHistory
+            v-model:search-input="searchInput"
+            @clear-all="handleClearAll"
+          />
+        </div>
+        <div
+          class="layout__pane"
+          :class="{ 'layout__pane--active': activePane === 'input' }"
+        >
+          <InputPanel @notice="handleNotice" />
+        </div>
       </div>
 
       <footer class="footer">
         <template v-if="search">筛选：{{ search }} · </template>
-        阶段一 · 第 4 步：JWT 认证已接入（未登录请求返回 401）
+        文字剪贴板 v1.0.0
       </footer>
     </template>
   </div>

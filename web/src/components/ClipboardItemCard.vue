@@ -14,7 +14,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'delete', id: string): void
-  /** 点整卡进入右侧编辑 */
+  /** 点整卡载入输入区编辑 */
   (e: 'edit', item: ClipboardItem): void
 }>()
 
@@ -50,7 +50,7 @@ function onKeydown(event: KeyboardEvent) {
     role="button"
     tabindex="0"
     :aria-pressed="editing ? 'true' : 'false'"
-    :title="editing ? '正在编辑这一条' : '点击载入到右侧编辑'"
+    :title="editing ? '正在编辑这一条' : '点击载入到输入区编辑'"
     @click="requestEdit"
     @keydown="onKeydown"
   >

@@ -24,10 +24,10 @@ class Settings(BaseSettings):
 
     # --- 应用 ---
     APP_NAME: str = "Cloud Clipboard"
-    APP_VERSION: str = "0.1.0"
+    APP_VERSION: str = "1.0.0"
     APP_DESCRIPTION: str = (
         "跨平台云剪贴板服务 —— 多设备剪贴板内容实时同步。"
-        "阶段一已完成（仅文字），数据持久化在 PostgreSQL。"
+        "v1.0.0 提供文字剪贴板，数据持久化在 PostgreSQL。"
     )
     APP_ENV: str = "development"
     # ⚠️ 默认关闭。DEBUG 会影响错误详情暴露，生产务必保持 False。
