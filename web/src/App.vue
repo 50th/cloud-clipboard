@@ -9,6 +9,7 @@ import { useNotice } from '@/composables/useNotice'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useClipboardStore } from '@/stores/clipboardStore'
 import { useUserStore } from '@/stores/userStore'
+import { logger } from '@/utils/logger'
 
 // 提示带自动消失：登出后停在登录页，没有后续操作能覆盖它，
 // 否则"已退出登录"会一直挂着（错误提示同理）。
@@ -127,6 +128,7 @@ async function handleClearAll() {
     const removed = await store.clearAll()
     showNotice({ kind: 'ok', text: `已清空 ${removed} 条记录` })
   } catch (error) {
+    logger.error('清空剪贴板失败', error)
     showNotice({ kind: 'err', text: getErrorMessage(error) })
   }
 }

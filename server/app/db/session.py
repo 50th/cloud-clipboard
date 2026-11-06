@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -20,6 +21,8 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
@@ -63,7 +66,10 @@ async def get_db() -> AsyncIterator[AsyncSession]:
     async with factory() as session:
         try:
             yield session
-        except Exception:
+        except Exception as exc:
+            # 回滚本身不改变响应，但它解释了"为什么这次写没有生效"。
+            # 用 DEBUG：401/404 这类业务异常也会走到这里，WARNING 会刷屏。
+            logger.debug("数据库会话回滚: %s", type(exc).__name__)
             await session.rollback()
             raise
 

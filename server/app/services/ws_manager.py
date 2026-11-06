@@ -11,10 +11,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from typing import Any
 
 from fastapi import WebSocket
+
+logger = logging.getLogger(__name__)
 
 # 单条消息的发送超时。慢客户端不能拖住整个广播。
 SEND_TIMEOUT_SECONDS = 5.0
@@ -91,6 +94,15 @@ class ConnectionManager:
                         sockets.discard(socket)
                     if not sockets:
                         self._connections.pop(key, None)
+            # 发送失败在 `_safe_send` 里被吞掉了，这里是唯一可见的落点：
+            # 不记的话"推送丢了"在日志里完全看不出来。
+            logger.warning(
+                "ws 广播部分失败: user=%s event=%s delivered=%d dropped=%d",
+                key,
+                event,
+                delivered,
+                len(dead),
+            )
         return delivered
 
     @staticmethod
@@ -99,7 +111,14 @@ class ConnectionManager:
         try:
             await asyncio.wait_for(socket.send_json(payload), timeout=SEND_TIMEOUT_SECONDS)
             return True
-        except Exception:  # noqa: BLE001 - 断连/超时都按"这条连接不可用"处理
+        except Exception as exc:  # noqa: BLE001 - 断连/超时都按"这条连接不可用"处理
+            # 断线是常态，用 DEBUG 避免刷屏；排查推送丢失时再调高日志级别。
+            logger.debug(
+                "ws 发送失败: event=%s reason=%s: %s",
+                payload.get("event"),
+                type(exc).__name__,
+                exc,
+            )
             return False
 
     async def send_personal(self, websocket: WebSocket, event: str, data: Any) -> bool:

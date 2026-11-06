@@ -12,18 +12,24 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.core.config import assert_production_secret, settings
+from app.core.logging_config import configure_logging
 from app.core.logging_utils import install_log_redaction
+from app.core.request_context import RequestIdMiddleware
 from app.core.single_worker import assert_single_worker, release_single_worker
 from app.db.session import dispose_engine, ping
 from app.routers import auth, clipboard, dev, ws
+
+logger = logging.getLogger(__name__)
 
 TAGS_METADATA: list[dict[str, Any]] = [
     {
@@ -49,32 +55,46 @@ TAGS_METADATA: list[dict[str, Any]] = [
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """应用生命周期：启动时探测数据库，退出时释放连接池。
+    """应用生命周期：配置日志、探测数据库，退出时释放连接池。
 
     第 5 步将在此初始化 Redis 订阅。
     """
-    print(f"[startup] {settings.APP_NAME} v{settings.APP_VERSION} ({settings.APP_ENV})")
+    # 必须最先做：root 默认没有 handler、级别是 WARNING，不先配日志的话
+    # 下面所有 logger.info 都会被静默丢弃。
+    log_path = configure_logging()
+    # 脱敏要紧跟日志配置：此时 uvicorn 的 access handler 与刚装上的 file handler
+    # 都已存在，才能一起包上（WS 的 token 在 query string 里）。
+    install_log_redaction()
+
+    logger.info(
+        "%s v%s (%s) 启动", settings.APP_NAME, settings.APP_VERSION, settings.APP_ENV
+    )
+    if log_path is None:
+        logger.info("日志输出: 终端（LOG_FILE 为空或不可写）")
+    else:
+        logger.info("日志文件: %s（级别 %s）", log_path, settings.LOG_LEVEL)
+
     # 生产环境若仍用开发默认密钥，直接拒绝启动（宁可起不来，也不要弱密钥上线）
     assert_production_secret()
     # WebSocket 广播是进程内实现：多 worker 会导致"数据一致但推送丢事件"。
     # 用单实例锁端口检测，CLI 的 --workers 与环境变量两条路径都能拦下。
     lock_port = assert_single_worker()
-    print(f"[startup] 单实例守卫已生效（锁端口 {lock_port}）；WebSocket 广播依赖单 worker")
-    # WS 的 token 走 query string，会被访问日志明文记录，必须脱敏。
-    # 主防线是端点里的 scrub_scope_token（日志里压根不出现 token），
-    # 这里再包一层 formatter 兜住其他 logger。
-    install_log_redaction()
+    logger.info(
+        "单实例守卫已生效（锁端口 %s）；WebSocket 广播依赖单 worker", lock_port
+    )
     try:
         info = await ping()
-        print(f"[startup] 数据库已连接: {info['database']} · {info['version']}")
+        logger.info("数据库已连接: %s · %s", info["database"], info["version"])
     except Exception as exc:  # noqa: BLE001 - 启动阶段要把原因打清楚
-        print(f"[startup] ⚠️ 数据库连接失败: {type(exc).__name__}: {exc}")
-        print("[startup] 请确认容器已启动: docker compose -f infra/docker-compose.yml up -d")
-    print("[startup] Swagger UI: http://127.0.0.1:8000/docs")
+        logger.warning("数据库连接失败: %s: %s", type(exc).__name__, exc)
+        logger.warning(
+            "请确认容器已启动: docker compose -f infra/docker-compose.yml up -d"
+        )
+    logger.info("Swagger UI: http://127.0.0.1:8000/docs")
     yield
     await dispose_engine()
     release_single_worker()
-    print("[shutdown] bye")
+    logger.info("服务已停止")
 
 
 def create_app() -> FastAPI:
@@ -98,6 +118,20 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # 请求 id 放在最外层（最后注册）：这样被 CORS 与异常处理器提前返回的响应
+    # 也会带上 X-Request-ID，日志里的 request_id 才不会缺口。
+    application.add_middleware(RequestIdMiddleware)
+
+    @application.exception_handler(Exception)
+    async def unhandled_exception(request: Request, exc: Exception) -> JSONResponse:
+        """兜底 5xx：把方法、路径与堆栈记下来，响应体不暴露内部细节。
+
+        request_id 由日志格式统一带出，是客户端反馈问题时唯一的对齐线索。
+        """
+        logger.exception(
+            "未捕获异常: %s %s (%s)", request.method, request.url.path, type(exc).__name__
+        )
+        return JSONResponse(status_code=500, content={"detail": "服务器内部错误"})
 
     # 业务路由统一挂在 /api/v1 下
     application.include_router(auth.router, prefix=settings.API_V1_PREFIX)

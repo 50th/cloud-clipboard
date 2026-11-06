@@ -14,6 +14,7 @@ import { onScopeDispose, ref } from 'vue'
 import type { Ref } from 'vue'
 
 import { API_BASE_URL, getToken } from '#src/api/client.ts'
+import { logger } from '#src/utils/logger.ts'
 
 export type WsEventName =
   | 'clipboard.created'
@@ -124,6 +125,8 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
 
   function appendLog(message: string) {
     log.value = [...log.value.slice(-19), `${new Date().toLocaleTimeString()} ${message}`]
+    // 同时进统一日志出口：界面只保留 20 条，排查断线原因时往往需要更早的记录。
+    logger.debug(`[ws] ${message}`)
   }
 
   function clearTimers() {

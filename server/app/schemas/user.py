@@ -5,12 +5,26 @@
 
 from __future__ import annotations
 
+import unicodedata
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # bcrypt 只处理密码的前 72 **字节**（5.x 起超出直接抛错，不再静默截断）。
 MAX_PASSWORD_BYTES = 72
+
+
+def _check_no_log_control_chars(value: str) -> str:
+    """拒绝换行等控制字符。
+
+    这些字符会直接破坏日志行的结构（用户名被原样写进审计日志），
+    即“日志注入”：一条输入可以伪造出多行日志。
+    """
+    if "\u2028" in value or "\u2029" in value:
+        raise ValueError("用户名不能包含换行或其他控制字符")
+    if any(unicodedata.category(ch) == "Cc" for ch in value):
+        raise ValueError("用户名不能包含换行或其他控制字符")
+    return value
 
 
 def _check_password_bytes(value: str) -> str:
@@ -36,6 +50,12 @@ class UserRegisterRequest(BaseModel):
         description="密码，至少 6 字符，且不超过 72 字节（bcrypt 上限）",
     )
 
+    @field_validator("username")
+    @classmethod
+    def _validate_username(cls, value: str) -> str:
+        """用户名会写进日志，必须拒绝换行等控制字符。"""
+        return _check_no_log_control_chars(value)
+
     @field_validator("password")
     @classmethod
     def _validate_password_bytes(cls, value: str) -> str:
@@ -46,8 +66,18 @@ class UserRegisterRequest(BaseModel):
 class UserLoginRequest(BaseModel):
     """登录请求。"""
 
-    username: str = Field(..., description="用户名或邮箱")
+    # 上限按邮箱长度（254）：登录框允许用邮箱代替用户名；
+    # 同时避免超长输入把失败审计日志撑爆。
+    username: str = Field(
+        ..., min_length=1, max_length=254, description="用户名或邮箱"
+    )
     password: str = Field(..., description="密码")
+
+    @field_validator("username")
+    @classmethod
+    def _validate_username(cls, value: str) -> str:
+        """用户名会写进失败审计日志，必须拒绝换行等控制字符。"""
+        return _check_no_log_control_chars(value)
 
 
 class UserResponse(BaseModel):

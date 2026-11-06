@@ -12,7 +12,8 @@
 1. `scrub_scope_token()` —— 在端点到手后立刻把 token 从 ASGI scope 里删掉。
    日志里**根本不会出现** token，最干净。
 2. `install_log_redaction()` —— 包一层 formatter，对最终格式化出来的文本再脱敏。
-   用于兜住第 1 层覆盖不到的地方（其他 logger、异常堆栈等）。
+   用于兜住第 1 层覆盖不到的地方（其他 logger、异常堆栈等）；同时覆盖
+   `search=` 这类会携带用户输入的查询参数。
 
 ⚠️ **不要用 logging.Filter 去改写 `record.args`**：uvicorn 的 `AccessFormatter`
 依赖 args 里的 5 个字段（client、method、path、status、时间），
@@ -27,15 +28,33 @@ import re
 from typing import Any
 from urllib.parse import parse_qsl
 
-# 匹配 `token=<值>`，值到下一个 `&`、空白或引号为止
-_TOKEN_PATTERN = re.compile(r"(token=)[^&\s\"']+", re.IGNORECASE)
+# 匹配敏感查询参数（token / search），值到下一个 `&`、空白或引号为止。
+# `search` 会携带用户搜索词，同样不应落盘。
+_SENSITIVE_PARAM_PATTERN = re.compile(
+    r"((?:token|search)=)[^&\s\"']+", re.IGNORECASE
+)
 
 REDACTED = "***"
 
+# 单条日志字段的最大展示长度：不可信输入（用户名等）不能无限撑大日志行。
+LOG_VALUE_MAX_LEN = 64
 
-def redact_tokens(text: str) -> str:
-    """把文本里所有 `token=...` 的值替换成 `***`。"""
-    return _TOKEN_PATTERN.sub(rf"\1{REDACTED}", text)
+
+def redact_sensitive_params(text: str) -> str:
+    """把文本里所有 `token=...` / `search=...` 的值替换成 `***`。"""
+    return _SENSITIVE_PARAM_PATTERN.sub(rf"\1{REDACTED}", text)
+
+
+def safe_log_value(value: object, *, limit: int = LOG_VALUE_MAX_LEN) -> str:
+    """把不可信输入转义并截断后再进日志。
+
+    为什么要 `repr`：用户名等字段来自用户，若含 `\\r` / `\\n` 可以直接
+    伪造日志行（日志注入）；`repr` 会把控制字符转义成可见的 `\\n` 文本。
+    """
+    text = str(value)
+    if len(text) > limit:
+        text = f"{text[:limit]}…"
+    return repr(text)
 
 
 def scrub_scope_token(scope: dict[str, Any]) -> None:
@@ -78,7 +97,7 @@ class _RedactingFormatter(logging.Formatter):
         self._inner = inner
 
     def format(self, record: logging.LogRecord) -> str:
-        return redact_tokens(self._inner.format(record))
+        return redact_sensitive_params(self._inner.format(record))
 
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         return self._inner.formatTime(record, datefmt)
@@ -97,8 +116,19 @@ def _wrap_handler(handler: logging.Handler) -> bool:
     return True
 
 
-def install_log_redaction(logger_names: tuple[str, ...] = ("uvicorn.access",)) -> int:
+def install_log_redaction(
+    logger_names: tuple[str, ...] = ("", "uvicorn", "uvicorn.access"),
+) -> int:
     """给指定 logger 的 handler 套上脱敏 formatter，返回被包装的 handler 数。
+
+    默认覆盖三个出口：
+
+    - root（`""`）：`app.*` 的全部业务日志，以及 `LOG_FILE` 为空时的纯终端模式
+    - `uvicorn.access`：访问日志，token / search 出现概率最高
+    - `uvicorn`：error / 启动日志
+
+    `core/logging_config.py` 加的 file handler 同时挂在 root 与 uvicorn 上，
+    因此只会被包装一次（幂等）——**必须在 `configure_logging()` 之后调用**。
 
     幂等：重复调用不会重复包装。
     """

@@ -38,6 +38,18 @@ class Settings(BaseSettings):
     ENABLE_DEV_ROUTES: bool = False
     API_V1_PREFIX: str = "/api/v1"
 
+    # --- 日志（详细说明见 core/logging_config.py）---
+    # 级别：DEBUG / INFO / WARNING / ERROR / CRITICAL；非法值按 INFO 处理
+    LOG_LEVEL: str = "INFO"
+    # 默认写入 RotatingFileHandler；相对路径按 `server/` 解析。
+    # 置空则只输出到终端（容器里交给 stdout 采集时用）。
+    LOG_FILE: str = "logs/app.log"
+    # 单个日志文件上限（字节）与保留份数；LOG_MAX_BYTES=0 表示不轮转
+    LOG_MAX_BYTES: int = 10 * 1024 * 1024
+    LOG_BACKUP_COUNT: int = 5
+    # 是否额外输出到终端。默认只写文件
+    LOG_CONSOLE: bool = False
+
     # --- 数据库 ---
     # 本地容器：宿主 5433（5432 被本机原生 PostgreSQL 18 占用）
     DATABASE_URL: str = (

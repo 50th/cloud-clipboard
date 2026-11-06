@@ -11,6 +11,7 @@ import { ref } from 'vue'
 import { LOCAL_TIMEZONE, clipboardApi, getErrorMessage } from '#src/api/client.ts'
 import type { ClipboardItem, SortOrder } from '#src/api/client.ts'
 import type { WsEnvelope } from '#src/composables/useWebSocket.ts'
+import { logger } from '#src/utils/logger.ts'
 
 export const PAGE_SIZE = 20
 
@@ -203,6 +204,8 @@ export const useClipboardStore = defineStore('clipboard', () => {
       page.value = data.page
     } catch (err) {
       error.value = getErrorMessage(err)
+      // 列表刷新失败界面上只有一行提示，日志里保留原始异常便于定位（断网/401/后端报错）。
+      logger.warn('剪贴板列表加载失败', err)
     } finally {
       loading.value = false
       refreshing.value = false

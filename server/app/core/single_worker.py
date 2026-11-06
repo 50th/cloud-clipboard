@@ -28,8 +28,11 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import socket
+
+logger = logging.getLogger(__name__)
 
 # 锁端口必须固定。取一个不常用的高位端口，降低与其他软件撞车的概率。
 LOCK_PORT = 49_137
@@ -147,19 +150,22 @@ def assert_single_worker() -> int:
 
 
 def _banner(reason: str) -> None:
-    """打印醒目横幅。
+    """记录醒目横幅。
 
     uvicorn 的 supervisor 会**反复重启**崩溃的 worker，只抛异常的话报错很容易被
-    淹没在重复日志里，所以额外打一条显眼的横幅。
+    淹没在重复日志里，所以额外记一条显眼的 ERROR。走 logger 而不是 `print`，
+    这样它能带上时间戳、进入日志文件（`core/logging_config.py`），也能被采集。
     """
-    print(
-        f"\n{'=' * 68}\n"
-        f"[致命] 检测到多 worker / 多实例：{reason}\n"
+    logger.error(
+        "\n%s\n"
+        "[致命] 检测到多 worker / 多实例：%s\n"
         "  WebSocket 广播是**进程内**实现：多 worker 时 A 连 worker 1、\n"
         "  B 连 worker 2，事件永远送不到；而数据库是共享的，所以\n"
         "  **数据一致、推送不一致**，现象隐蔽且极难排查。\n"
         "  请用 --workers 1 启动。确需多副本时，先给广播加上\n"
         "  Redis Pub/Sub（见 docs/ws-protocol.md 的「多实例问题」）。\n"
-        f"{'=' * 68}",
-        flush=True,
+        "%s",
+        "=" * 68,
+        reason,
+        "=" * 68,
     )

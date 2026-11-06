@@ -59,6 +59,7 @@ Authorization: Bearer <JWT>
 - 令牌为 HS256 JWT，`sub` 是用户 UUID，有效期由 `JWT_EXPIRE_MINUTES` 控制（默认 7 天）
 - 密码用 **bcrypt** 哈希（`pwdlib`）入库；`password_hash` **绝不出现在任何响应里**
 - `password` 上限是 **72 字节**（不是字符数）：24 个汉字即达上限，超出返回 `422`
+- `username` 不允许换行等控制字符（避免日志注入）；注册为 3-32 字符，登录（用户名或邮箱）上限 254
 - 登录失败时"用户不存在"与"密码错误"返回**同一条提示**，避免枚举出已注册用户名
 
 ---
@@ -91,5 +92,7 @@ class ClipboardItemResponse(BaseModel):
 - 搜索同时匹配 `title` 与 `content`；分页 `page` 从 1 开始、`size` 默认 20、最大 100
 - 阶段一仅支持 `content_type = text`；`image` / `file` 属阶段二、阶段三
 - 实时同步：写操作成功后向**同用户**的 WebSocket 连接广播事件（见 [`ws-protocol.md`](ws-protocol.md)）
+- 每个响应都带 `X-Request-ID`（12 位十六进制）；反馈问题时提供它即可定位到服务端日志。
+  上游若已传同名请求头且格式合法（`[A-Za-z0-9._-]{1,64}`）则沿用
 
 逐字段定义请读运行中的 `/openapi.json` 或 `server/app/schemas/`。

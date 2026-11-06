@@ -3,9 +3,9 @@
 > **本文件只记录动态进度与踩坑。** AGENTS.md 只保存稳定约定（技术栈、契约、规范、开发顺序）。
 > 踩坑记录只留**会导致错误发生的机制**；实现细节看代码，过程看 git log。
 
-**最后更新**：2026-11-01
+**最后更新**：2026-11-04
 **当前进度**：**v1.0.0（仅文字剪贴板）功能已完成**，版本号已统一，Web 生产构建通过；
-第 8 步测试已补齐并完成隔离（2026-10-25 实测：后端 163 + Web 55）。
+第 8 步测试已补齐并完成隔离（2026-11-04 实测：后端 183 + Web 55）。
 移动端 Web 适配已完成（2026-11-01，复用同一 SPA，见下），仍属 v1.0.0 范围。
 剩余：发版收尾（Web 人工验收、生产部署/备案、打 tag）→ 见文末「下一步行动」
 
@@ -31,7 +31,7 @@
 | 5 WebSocket 实时同步 | ✅ | 踩坑见下；**强制单 worker**（P3 已决策） |
 | 6 内容去重 | ✅ | 代码在第 3／5 步已落地，本步骤补齐验收覆盖 |
 | 7 鸿蒙 App | ⏸️ 暂停 | 移动端交付改走 Web；代码完成、**编译通过**，暂不签名上机（踩坑见下） |
-| 8 联调与测试 | 🚧 | 后端 163 项 + Web 55 项已就位；**Web 桌面/移动人工验收**待做，鸿蒙联调暂缓 |
+| 8 联调与测试 | 🚧 | 后端 183 项 + Web 55 项已就位；**Web 桌面/移动人工验收**待做，鸿蒙联调暂缓 |
 
 ---
 
@@ -39,7 +39,7 @@
 
 | 套件 | 数量 | 目标库 | 怎么跑 |
 |------|------|--------|--------|
-| 后端 pytest | **163** | `clipboard_test` | `cd server; python -m pytest` |
+| 后端 pytest | **183** | `clipboard_test` | `cd server; python -m pytest` |
 | Web 端（隔离模式，推荐） | **55** | `clipboard_web_test` | `.\scripts\run_web_tests.ps1` |
 | Web 端（安全模式） | **55** | 当前后端所连的库 | `cd web; pnpm test` |
 
@@ -52,6 +52,30 @@
 `core/security.py`（哈希、JWT 及伪造/篡改/alg=none 降级攻击）、
 `core/single_worker.py` 与 `core/logging_utils.py`、
 auth 与 clipboard 接口（含**跨用户越权隔离**、去重契约、分页校验）。
+
+**后端日志（2026-11-04）**：统一走 `app/core/logging_config.py`，默认写
+`server/logs/app.log`（`RotatingFileHandler`，10MB × 5 份，UTF-8），
+`LOG_LEVEL` / `LOG_FILE` / `LOG_MAX_BYTES` / `LOG_BACKUP_COUNT` / `LOG_CONSOLE` 可调；
+uvicorn 的 access/error 日志也追加进同一文件，WS token 落盘前脱敏（`token=***`）。
+补齐的事件：WS 连接/断开/鉴权失败、登录成功/失败、注册成功、广播失败。
+
+**P1 日志加固（2026-11-05）**：剪贴板创建/更新/删除/清空补审计日志（只记
+`user/item/字节数/送达数`，不记正文）；WS 失效连接被摘除时记 warning；
+登录用户名做转义与长度限制（防日志注入/刷屏）；访问日志同时脱敏 `search=`。
+
+**P2 日志加固（2026-11-05）**：每行日志带 `request_id`（`X-Request-ID` 回写响应头，
+上游合法值沿用）；时间戳改为「毫秒 + 时区偏移」；脱敏覆盖 root 与纯终端模式；
+统一异常入口（5xx 兜底堆栈、401 原因、会话回滚 DEBUG 轨迹）；`/dev/reset` 记审计；
+Web 端新增 `utils/logger.ts`（开发 `debug`、生产 `warn`，可用 `VITE_LOG_LEVEL` 覆盖），
+接入 401 自动登出、WS 连接日志与列表加载失败。
+
+- 踩坑：**uvicorn 只配置 `uvicorn*` logger，不动 root**。root 没有 handler 且级别是
+  WARNING，业务代码 `logger.info` 会被静默丢弃（实测 WS 连上了日志里什么都没有）；
+  启动日志原先用 `print()`，stdout 被重定向时还有块缓冲，日志迟迟不落盘。
+- 注意：`RotatingFileHandler` 不能多进程写同一文件，`run_web_tests.ps1` 的隔离后端
+  已把 `LOG_FILE` 指到 `%TEMP%`。
+- 文件不可写时自动退回终端（记 warning），不阻断启动。⚠️ `dictConfig` 会把打不开
+  文件的 `PermissionError` 包成 `ValueError`，只捕 `OSError` 会漏掉这条降级路径。
 
 **鸿蒙端（暂停上架）**：见 [`harmony/README.md`](../harmony/README.md)。
 编译与打包已验证；安装运行、联调、`READ_PASTEBOARD` 授权未验证，恢复上架时再补做。

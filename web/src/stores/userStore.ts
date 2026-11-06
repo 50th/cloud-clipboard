@@ -5,6 +5,7 @@ import { computed, ref } from 'vue'
 
 import { authApi, getToken, setToken } from '#src/api/client.ts'
 import type { User } from '#src/api/client.ts'
+import { logger } from '#src/utils/logger.ts'
 
 export const useUserStore = defineStore('user', () => {
   const user = ref<User | null>(null)
@@ -29,6 +30,9 @@ export const useUserStore = defineStore('user', () => {
     try {
       user.value = await authApi.me()
     } catch {
+      // 首屏静默失败是正常的（令牌过期），但要留下轨迹，便于区分
+      // "本地没有令牌" 与 "令牌被服务端拒绝"。
+      logger.debug('恢复会话失败，已清除本地令牌')
       setToken(null)
       user.value = null
     } finally {

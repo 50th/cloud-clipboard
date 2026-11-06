@@ -5,6 +5,9 @@
 
 from __future__ import annotations
 
+import logging
+
+import pytest
 from httpx import AsyncClient
 
 PASSWORD = "clipboard-test-pw"
@@ -405,6 +408,67 @@ class TestUpdateContentConflict:
 
         assert response.status_code == 200
         assert response.json()["content"] == "新内容"
+
+
+class TestWriteAuditLogging:
+    """写操作必须可审计，但正文绝不能进日志。"""
+
+    async def test_创建与删除会留痕且不记录正文(
+        self, client: AsyncClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        headers = await make_user(client, "audit1")
+        secret = "audit-secret-content-xyz"
+
+        with caplog.at_level(logging.INFO, logger="app.routers.clipboard"):
+            created = (
+                await client.post(
+                    "/api/v1/clipboard/items",
+                    json={"content": secret},
+                    headers=headers,
+                )
+            ).json()
+            await client.delete(
+                f"/api/v1/clipboard/items/{created['id']}", headers=headers
+            )
+
+        assert "clipboard create" in caplog.text
+        assert "clipboard delete" in caplog.text
+        assert "created=True" in caplog.text
+        assert secret not in caplog.text, "正文属于用户隐私，不得写进日志"
+
+    async def test_清空会记录删除条数(
+        self, client: AsyncClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        headers = await make_user(client, "audit2")
+        for index in range(2):
+            await client.post(
+                "/api/v1/clipboard/items",
+                json={"content": f"clear-{index}"},
+                headers=headers,
+            )
+
+        with caplog.at_level(logging.WARNING, logger="app.routers.clipboard"):
+            await client.delete("/api/v1/clipboard/items", headers=headers)
+
+        assert "clipboard clear" in caplog.text
+        assert "removed=2" in caplog.text
+
+
+class TestDevResetAudit:
+    """会删数据的接口必须留审计痕迹。"""
+
+    async def test_重置记录删除数量(
+        self, session, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        from app.routers.dev import SEED_ITEMS, reset_store
+
+        with caplog.at_level(logging.WARNING, logger="app.routers.dev"):
+            result = await reset_store(session)
+
+        assert result.success is True
+        assert "dev reset" in caplog.text
+        assert f"seeded={len(SEED_ITEMS)}" in caplog.text
+        assert "removed=" in caplog.text
 
 
 class TestTimezoneTitle:

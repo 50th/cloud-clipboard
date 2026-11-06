@@ -14,8 +14,10 @@ import pytest
 
 from app.core import single_worker
 from app.core.logging_utils import (
+    LOG_VALUE_MAX_LEN,
     REDACTED,
-    redact_tokens,
+    redact_sensitive_params,
+    safe_log_value,
     scrub_scope_token,
 )
 
@@ -165,48 +167,71 @@ class TestAssertSingleWorker:
         with pytest.raises(single_worker.MultipleWorkersError):
             single_worker.assert_single_worker()
 
-    def test_被拦下时打印醒目横幅(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    def test_被拦下时记录醒目横幅(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         """uvicorn supervisor 会反复重启崩溃的 worker，报错容易被淹没。"""
         monkeypatch.setenv("WEB_CONCURRENCY", "2")
-        with pytest.raises(single_worker.MultipleWorkersError):
-            single_worker.assert_single_worker()
-        output = capsys.readouterr().out
-        assert "致命" in output
-        assert "WebSocket" in output
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(single_worker.MultipleWorkersError):
+                single_worker.assert_single_worker()
+        assert "致命" in caplog.text
+        assert "WebSocket" in caplog.text
 
 
-class TestRedactTokens:
+class TestRedactSensitiveParams:
     def test_抹掉令牌值(self) -> None:
         secret = "eyJhbGciOiJIUzI1NiJ9.PAYLOAD.SIGNATURE"
-        result = redact_tokens(f"/ws?token={secret}")
+        result = redact_sensitive_params(f"/ws?token={secret}")
         assert secret not in result
         assert f"token={REDACTED}" in result
 
     def test_只抹_token_保留其他参数(self) -> None:
-        assert redact_tokens("/ws?token=abc&foo=bar") == f"/ws?token={REDACTED}&foo=bar"
+        assert redact_sensitive_params("/ws?token=abc&foo=bar") == f"/ws?token={REDACTED}&foo=bar"
 
     def test_保留_token_之前的其他参数(self) -> None:
-        assert redact_tokens("/ws?foo=bar&token=abc") == f"/ws?foo=bar&token={REDACTED}"
+        assert redact_sensitive_params("/ws?foo=bar&token=abc") == f"/ws?foo=bar&token={REDACTED}"
 
     def test_无_token_时原样返回(self) -> None:
-        assert redact_tokens("/health") == "/health"
+        assert redact_sensitive_params("/health") == "/health"
 
     def test_空字符串(self) -> None:
-        assert redact_tokens("") == ""
+        assert redact_sensitive_params("") == ""
 
     def test_大小写不敏感(self) -> None:
-        assert "secret" not in redact_tokens("/ws?Token=secret")
+        assert "secret" not in redact_sensitive_params("/ws?Token=secret")
 
     def test_多个_token_都被抹掉(self) -> None:
-        result = redact_tokens("?token=aaa&x=1&token=bbb")
+        result = redact_sensitive_params("?token=aaa&x=1&token=bbb")
         assert "aaa" not in result and "bbb" not in result
 
     def test_令牌后紧跟引号时正确截断(self) -> None:
-        result = redact_tokens('"WebSocket /ws?token=secret" [accepted]')
+        result = redact_sensitive_params('"WebSocket /ws?token=secret" [accepted]')
         assert "secret" not in result
         assert "[accepted]" in result
+
+    def test_search_参数也被抹掉(self) -> None:
+        """搜索词会带用户输入，不该随访问日志落盘。"""
+        result = redact_sensitive_params("/items?search=secret%20word&page=1")
+        assert "secret" not in result
+        assert f"search={REDACTED}" in result
+        assert "page=1" in result
+
+
+class TestSafeLogValue:
+    def test_换行被转义(self) -> None:
+        """`\\n` 原样进日志可以伪造新日志行（日志注入）。"""
+        result = safe_log_value("evil\nname")
+        assert "\n" not in result
+        assert "\\n" in result
+
+    def test_超长输入被截断(self) -> None:
+        result = safe_log_value("x" * (LOG_VALUE_MAX_LEN + 50))
+        assert "…" in result
+        assert len(result) <= LOG_VALUE_MAX_LEN + 3  # 截断标记 + 两边的引号
+
+    def test_普通值带引号返回(self) -> None:
+        assert safe_log_value("demo") == "'demo'"
 
 
 class TestScrubScopeToken:
@@ -276,6 +301,23 @@ class TestFormatterRedaction:
         output = formatter.format(record)
         assert "secret" not in output
         assert REDACTED in output
+
+    def test_search_参数也会被脱敏(self) -> None:
+        from app.core.logging_utils import _RedactingFormatter
+
+        formatter = _RedactingFormatter(logging.Formatter("%(message)s"))
+        record = logging.LogRecord(
+            "uvicorn.access",
+            logging.INFO,
+            __file__,
+            1,
+            "GET /items?search=secret-word done",
+            None,
+            None,
+        )
+        output = formatter.format(record)
+        assert "secret-word" not in output
+        assert f"search={REDACTED}" in output
 
     def test_无_formatter_的_handler_被跳过(self) -> None:
         """没有 formatter 就没什么可脱敏的，跳过而不是报错。"""

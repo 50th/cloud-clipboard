@@ -41,15 +41,18 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 to_item_response = events.to_item_response
 
 
-async def _broadcast(user_id: object, event: str, data: object) -> None:
+async def _broadcast(user_id: object, event: str, data: object) -> int:
     """把事件推给该用户的所有连接（按用户隔离，不群发）。
+
+    返回成功送达的连接数（0 可能表示没有在线连接，或全部发送失败）。
 
     刻意吞掉异常：广播失败（如连接刚断开）不该让一次成功的写操作变成 500。
     """
     try:
-        await manager.send_to_user(str(user_id), event, data)
+        return await manager.send_to_user(str(user_id), event, data)
     except Exception:  # noqa: BLE001 - 推送是尽力而为，失败只记日志
         logger.exception("广播失败: event=%s user=%s", event, user_id)
+        return 0
 
 
 async def _get_owned_item(
@@ -91,7 +94,17 @@ async def create_item(
     )
     # ⚠️ 去重命中的分支必须发 `updated`——最容易漏的一条（见 docs/ws-protocol.md）
     event = events.EVENT_CREATED if created else events.EVENT_UPDATED
-    await _broadcast(current_user.id, event, events.item_payload(item))
+    delivered = await _broadcast(current_user.id, event, events.item_payload(item))
+    # 审计日志只记元数据：正文/标题可能包含用户隐私，绝不进日志。
+    logger.info(
+        "clipboard create: user=%s item=%s created=%s bytes=%d event=%s delivered=%d",
+        current_user.id,
+        item.id,
+        created,
+        len(payload.content.encode("utf-8")),
+        event,
+        delivered,
+    )
     return to_item_response(item)
 
 
@@ -177,7 +190,17 @@ async def update_item(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"剪贴板项不存在: {id}",
         )
-    await _broadcast(current_user.id, events.EVENT_UPDATED, events.item_payload(item))
+    delivered = await _broadcast(
+        current_user.id, events.EVENT_UPDATED, events.item_payload(item)
+    )
+    logger.info(
+        "clipboard update: user=%s item=%s content_bytes=%d event=%s delivered=%d",
+        current_user.id,
+        item.id,
+        len(payload.content.encode("utf-8")) if payload.content is not None else 0,
+        events.EVENT_UPDATED,
+        delivered,
+    )
     return to_item_response(item)
 
 
@@ -192,7 +215,15 @@ async def delete_item(
 ) -> ClipboardDeleteResponse:
     await _get_owned_item(session, current_user.id, id)
     await clipboard_crud.delete_item(session, current_user.id, id)
-    await _broadcast(current_user.id, events.EVENT_DELETED, events.deleted_payload(id))
+    delivered = await _broadcast(
+        current_user.id, events.EVENT_DELETED, events.deleted_payload(id)
+    )
+    logger.warning(
+        "clipboard delete: user=%s item=%s delivered=%d",
+        current_user.id,
+        id,
+        delivered,
+    )
     return ClipboardDeleteResponse(success=True, message="删除成功", id=id)
 
 
@@ -204,5 +235,11 @@ async def delete_item(
 )
 async def clear_items(session: DbSession, current_user: CurrentUser) -> MessageResponse:
     removed = await clipboard_crud.clear_items(session, current_user.id)
-    await _broadcast(current_user.id, events.EVENT_CLEARED, {})
+    delivered = await _broadcast(current_user.id, events.EVENT_CLEARED, {})
+    logger.warning(
+        "clipboard clear: user=%s removed=%d delivered=%d",
+        current_user.id,
+        removed,
+        delivered,
+    )
     return MessageResponse(success=True, message=f"已清空 {removed} 条记录")

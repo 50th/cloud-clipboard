@@ -6,13 +6,15 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
+from app.core.logging_utils import safe_log_value
 from app.crud import user as user_crud
 from app.db.models.user import User
 from app.db.session import get_db
@@ -23,6 +25,8 @@ from app.schemas.user import (
     UserRegisterRequest,
     UserResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
@@ -41,6 +45,26 @@ def _unauthorized(detail: str) -> HTTPException:
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail=detail,
         headers=_UNAUTHORIZED_HEADERS,
+    )
+
+
+def _client_ip(request: Request) -> str:
+    """客户端 IP，仅用于审计日志；`request.client` 可能为 None。"""
+    client = request.client
+    return client.host if client is not None else "unknown"
+
+
+def _log_auth_failure(request: Request, reason: str) -> None:
+    """记录 401 的具体原因。
+
+    只到 INFO：令牌过期是常态，WARNING 会淹没真正的异常；但也必须留痕，
+    否则"页面上突然掉线"在日志里没有任何线索。**绝不记录令牌本身**。
+    """
+    logger.info(
+        "鉴权失败: reason=%s path=%s client=%s",
+        reason,
+        request.url.path,
+        _client_ip(request),
     )
 
 
@@ -67,6 +91,7 @@ def issue_token(user: User) -> TokenResponse:
 
 
 async def get_current_user(
+    request: Request,
     session: DbSession,
     credentials: Annotated[
         HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)
@@ -83,14 +108,17 @@ async def get_current_user(
     `sub` 是唯一事实来源。
     """
     if credentials is None or not credentials.credentials:
+        _log_auth_failure(request, "missing token")
         raise _unauthorized("未提供访问令牌，请在 Authorization 头中携带 Bearer token")
 
     subject = security.get_token_subject(credentials.credentials)
     if subject is None:
+        _log_auth_failure(request, "invalid token")
         raise _unauthorized("访问令牌无效或已过期")
 
     user = await user_crud.get_by_id(session, subject)
     if user is None:
+        _log_auth_failure(request, "user not found")
         raise _unauthorized("访问令牌对应的用户不存在")
 
     return user
@@ -129,6 +157,9 @@ async def register(payload: UserRegisterRequest, session: DbSession) -> AuthResp
         email=payload.email,
         password_hash=security.hash_password(payload.password),
     )
+    logger.info(
+        "注册成功: user=%s id=%s", safe_log_value(user.username), user.id
+    )
     return AuthResponse(**to_user_response(user).model_dump(), token=issue_token(user))
 
 
@@ -139,7 +170,9 @@ async def register(payload: UserRegisterRequest, session: DbSession) -> AuthResp
     description="`username` 支持用户名或邮箱。凭证错误统一返回 401，不区分是哪一个错。",
     responses={401: {"description": "用户名或密码错误"}},
 )
-async def login(payload: UserLoginRequest, session: DbSession) -> AuthResponse:
+async def login(
+    payload: UserLoginRequest, session: DbSession, request: Request
+) -> AuthResponse:
     """校验凭证并签发令牌。"""
     user = await user_crud.get_by_username(session, payload.username)
     if user is None:
@@ -147,8 +180,18 @@ async def login(payload: UserLoginRequest, session: DbSession) -> AuthResponse:
 
     # 用户不存在与密码错误返回同一个提示：避免枚举出哪些用户名已注册。
     if user is None or not security.verify_password(payload.password, user.password_hash):
+        # 失败必须留痕（暴力破解审计）；密码本身绝不进日志。
+        # 用户名做转义+截断，避免换行伪造日志行、超长输入刷屏。
+        logger.warning(
+            "登录失败: username=%s client=%s",
+            safe_log_value(payload.username),
+            _client_ip(request),
+        )
         raise _unauthorized("用户名或密码错误")
 
+    logger.info(
+        "登录成功: user=%s id=%s", safe_log_value(user.username), user.id
+    )
     return AuthResponse(**to_user_response(user).model_dump(), token=issue_token(user))
 
 

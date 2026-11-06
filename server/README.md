@@ -101,6 +101,32 @@ $env:PYTHONUTF8 = '1'   # Windows 上跑 Alembic 必需（否则 configparser �
 
 改契约的完整流程见 [`../AGENTS.md`](../AGENTS.md) 的「数据契约」。
 
+## 日志
+
+默认写入**文件**（`RotatingFileHandler`），不依赖终端回滚缓冲：
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` / `CRITICAL`（非法值按 `INFO`） |
+| `LOG_FILE` | `logs/app.log` | 相对路径按 `server/` 解析；**置空**则只输出到终端 |
+| `LOG_MAX_BYTES` | `10485760` | 单文件上限（字节）；`0` 表示不轮转 |
+| `LOG_BACKUP_COUNT` | `5` | 保留份数（`app.log.1`、`app.log.2`…） |
+| `LOG_CONSOLE` | `false` | 设为 `true` 时**额外**输出到终端 |
+
+- 行格式带**毫秒与时区偏移**的时间戳、请求 id 与 logger 名，例如
+  `2026-11-04 22:30:01.123+08:00 INFO     [3f9a1c2d7e4b] app.routers.ws ws connected: user=… client=… connections=1`
+- `request_id` 由 `core/request_context.py` 生成：同一个 HTTP / WebSocket 请求的
+  访问日志、写审计、广播日志都带同一个 id，并回写到响应头 `X-Request-ID`；
+  不在请求上下文里的日志（启动、脚本）显示 `-`
+- uvicorn 的访问日志/错误日志也追加进**同一个文件**；WS 的 `token` 与列表搜索的
+  `search` 在落盘前已脱敏（`token=***` / `search=***`），**root 与 uvicorn 的所有
+  handler 都覆盖**（含 `LOG_FILE` 为空的纯终端模式）
+- 排查顺序：先看 `server/logs/app.log`，再看终端里 uvicorn 自己的启动输出。
+- 文件打不开（目录无权限 / 磁盘满）时**自动退回终端**并记一条 warning，不会阻断启动。
+- ⚠️ `RotatingFileHandler` **不能多进程写同一文件**（轮转时互相抢）。本项目强制单
+  worker，故安全；并行起独立实例时（如 `run_web_tests.ps1` 的 8001 端口）要用
+  `LOG_FILE` 指向别的文件——脚本已自动指到 `%TEMP%`。
+
 ## 注意事项
 
 - **autogenerate 会把开发库里手工建过的测试表当成"已删除的表"**写进迁移

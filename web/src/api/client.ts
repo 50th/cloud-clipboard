@@ -7,6 +7,7 @@
 import axios, { AxiosError } from 'axios'
 
 import type { components } from '#src/types/api.ts'
+import { logger } from '#src/utils/logger.ts'
 
 export type ClipboardItem = components['schemas']['ClipboardItemResponse']
 export type ClipboardItemList = components['schemas']['ClipboardItemList']
@@ -118,6 +119,9 @@ http.interceptors.response.use(
       const url = error.config?.url ?? ''
       const isAuthEntry = url.includes('/auth/login') || url.includes('/auth/register')
       if (!isAuthEntry) {
+        // 静默登出会让用户以为"页面自己刷新了"：至少留一条可追溯的日志。
+        // ⚠️ 只记录接口与状态，不记录令牌。
+        logger.info(`请求被拒绝（401），已清除登录态: ${url}`)
         setToken(null)
         onUnauthorized?.()
       }

@@ -28,18 +28,26 @@ router = APIRouter(prefix="/clipboard", tags=["剪贴板"])
 CLOSE_UNAUTHORIZED = 4401
 
 
-async def _authenticate(token: str | None) -> str | None:
-    """校验 token，返回用户 id 字符串；无效时返回 None。"""
+async def _authenticate(token: str | None) -> tuple[str | None, str]:
+    """校验 token，返回 `(用户 id, 失败原因)`；成功时原因为 `"ok"`。"""
     if not token:
-        return None
+        return None, "missing token"
     subject = security.get_token_subject(token)
     if subject is None:
-        return None
+        return None, "invalid token"
     # 令牌有效但用户可能已被删除，同样拒绝
     factory = get_session_factory()
     async with factory() as session:
         user = await user_crud.get_by_id(session, subject)
-    return str(user.id) if user is not None else None
+    if user is None:
+        return None, "user not found"
+    return str(user.id), "ok"
+
+
+def _client_label(websocket: WebSocket) -> str:
+    """客户端地址，仅用于日志；`websocket.client` 可能为 None。"""
+    client = websocket.client
+    return f"{client.host}:{client.port}" if client is not None else "unknown"
 
 
 @router.websocket("/ws")
@@ -56,26 +64,45 @@ async def clipboard_ws(
     # 此时 Query 已把 token 解析成入参，改写 scope 不影响鉴权。
     scrub_scope_token(websocket.scope)
 
+    client = _client_label(websocket)
     await websocket.accept()
 
-    user_id = await _authenticate(token)
+    user_id, reason = await _authenticate(token)
     if user_id is None:
+        # 鉴权失败必须留痕：否则坏 token / 暴力重连在日志里完全不可见。
+        # ⚠️ 只记原因与关闭码，**绝不记 token 本身**。
+        logger.warning(
+            "ws 鉴权失败: client=%s reason=%s close=%d",
+            client,
+            reason,
+            CLOSE_UNAUTHORIZED,
+        )
         await websocket.close(code=CLOSE_UNAUTHORIZED, reason="invalid or missing token")
         return
 
     await manager.connect(user_id, websocket)
-    logger.info("ws connected: user=%s connections=%d", user_id, manager.connection_count())
+    logger.info(
+        "ws connected: user=%s client=%s connections=%d",
+        user_id,
+        client,
+        manager.connection_count(),
+    )
 
     try:
         while True:
             # 客户端只会发心跳；文本帧解析失败也不该断开连接（可能是代理发的噪声）
             message = await websocket.receive_text()
             if '"ping"' in message:
-                await manager.send_personal(websocket, events.EVENT_PONG, {})
+                sent = await manager.send_personal(websocket, events.EVENT_PONG, {})
+                if not sent:
+                    logger.debug("ws pong 发送失败: user=%s client=%s", user_id, client)
     except WebSocketDisconnect:
         pass
     finally:
         await manager.disconnect(user_id, websocket)
         logger.info(
-            "ws disconnected: user=%s connections=%d", user_id, manager.connection_count()
+            "ws disconnected: user=%s client=%s connections=%d",
+            user_id,
+            client,
+            manager.connection_count(),
         )

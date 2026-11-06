@@ -9,14 +9,19 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging_utils import safe_log_value
 from app.crud import clipboard as clipboard_crud
 from app.crud import user as user_crud
 from app.db.session import get_db, ping
 from app.schemas.clipboard import ClipboardItemCreate
 from app.schemas.common import MessageResponse
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/dev", tags=["系统"])
 
@@ -47,7 +52,7 @@ async def reset_store(session: AsyncSession = Depends(get_db)) -> MessageRespons
     # reset_password=True：本地重置后演示账号始终能用配置里的口令登录，
     # 避免"改了密码就再进不去"的死角。
     user = await user_crud.ensure_demo_user(session, reset_password=True)
-    await clipboard_crud.clear_items(session, user.id)
+    removed = await clipboard_crud.clear_items(session, user.id)
     for title, content in SEED_ITEMS:
         await clipboard_crud.create_item(
             session,
@@ -56,6 +61,14 @@ async def reset_store(session: AsyncSession = Depends(get_db)) -> MessageRespons
             username=user.username,
         )
     total = await clipboard_crud.count_items(session, user.id)
+    # 会删数据的接口必须留下审计痕迹：日志里要能看出"谁在什么时候清了库"。
+    logger.warning(
+        "dev reset: user=%s removed=%d seeded=%d total=%d",
+        safe_log_value(user.username),
+        removed,
+        len(SEED_ITEMS),
+        total,
+    )
     return MessageResponse(success=True, message=f"已重置为种子数据，共 {total} 条")
 
 

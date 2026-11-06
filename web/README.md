@@ -107,6 +107,15 @@ store、composables 与 API 封装。
 > 或正式域名。Vite 默认只监听 `127.0.0.1`，给手机访问需 `--host 0.0.0.0`，
 > 但那样仍是 HTTP，只能验证布局、保存与实时同步。
 
+## 日志
+
+前端统一走 `src/utils/logger.ts`，**组件、store、composables 不直接调 `console.*`**：
+
+- 级别：开发默认 `debug`，生产默认 `warn`；可用 `VITE_LOG_LEVEL=debug|info|warn|error` 覆盖
+- 输出带 `[cloud-clipboard]` 前缀，附加参数（如异常对象）原样透传，方便在控制台展开
+- 已接入：401 自动登出的原因、WebSocket 连接/重连记录、列表加载失败、清空失败、会话恢复失败
+- ⚠️ 不要打印令牌或剪贴板正文：控制台截图与用户反馈里的日志片段都会外流
+
 ## 测试
 
 ```powershell

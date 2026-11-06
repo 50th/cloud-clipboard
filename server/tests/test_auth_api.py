@@ -6,6 +6,9 @@
 
 from __future__ import annotations
 
+import logging
+
+import pytest
 from httpx import AsyncClient
 
 from app.core.config import settings
@@ -72,6 +75,11 @@ class TestRegister:
         status, _ = await register(client, "exact72", password="密" * 24)
         assert status == 201
 
+    async def test_用户名含换行被拒(self, client: AsyncClient) -> None:
+        """换行会破坏日志行结构（日志注入），必须在契约层拒绝。"""
+        status, _ = await register(client, "evil\nname")
+        assert status == 422
+
 
 class TestLogin:
     async def test_用户名登录(self, client: AsyncClient) -> None:
@@ -96,11 +104,50 @@ class TestLogin:
         )
         assert response.status_code == 401
 
+    async def test_登录失败会留痕但绝不含密码(
+        self, client: AsyncClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """失败日志是暴力破解审计的唯一线索；密码本身绝不能进日志。"""
+        await register(client, "grace-log")
+        with caplog.at_level(logging.WARNING, logger="app.routers.auth"):
+            await client.post(
+                "/api/v1/auth/login",
+                json={"username": "grace-log", "password": "wrong-password"},
+            )
+        assert "登录失败" in caplog.text
+        assert "wrong-password" not in caplog.text
+
     async def test_用户不存在返回_401(self, client: AsyncClient) -> None:
         response = await client.post(
             "/api/v1/auth/login", json={"username": "nobody", "password": PASSWORD}
         )
         assert response.status_code == 401
+
+    async def test_登录用户名含换行返回_422(self, client: AsyncClient) -> None:
+        """换行会破坏日志行结构（日志注入），必须在契约层拒绝。"""
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"username": "evil\nname", "password": PASSWORD},
+        )
+        assert response.status_code == 422
+
+    async def test_登录用户名超长返回_422(self, client: AsyncClient) -> None:
+        """登录框允许邮箱（上限 254），超出直接拒绝而不是写进日志。"""
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"username": "x" * 255, "password": PASSWORD},
+        )
+        assert response.status_code == 422
+
+    async def test_登录失败日志带客户端地址(
+        self, client: AsyncClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """暴力破解审计需要来源 IP，否则只知道"有人试过"。"""
+        with caplog.at_level(logging.WARNING, logger="app.routers.auth"):
+            await client.post(
+                "/api/v1/auth/login", json={"username": "nobody", "password": PASSWORD}
+            )
+        assert "client=" in caplog.text
 
     async def test_失败提示不区分账号是否存在(self, client: AsyncClient) -> None:
         """否则可用于枚举已注册用户名。"""
@@ -134,6 +181,20 @@ class TestCurrentUser:
     async def test_无令牌返回_401(self, client: AsyncClient) -> None:
         response = await client.get("/api/v1/auth/me")
         assert response.status_code == 401
+
+    async def test_401_带请求_id_响应头且日志有原因(
+        self, client: AsyncClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """⚠️ 401 必须能对上日志：响应头给出 request id，日志说明具体原因。"""
+        with caplog.at_level(logging.INFO, logger="app.routers.auth"):
+            response = await client.get("/api/v1/auth/me")
+
+        assert response.status_code == 401
+        request_id = response.headers.get("x-request-id")
+        assert request_id and len(request_id) == 12
+        assert "鉴权失败" in caplog.text
+        assert "missing token" in caplog.text
+        assert "path=/api/v1/auth/me" in caplog.text
 
     async def test_乱码令牌返回_401(self, client: AsyncClient) -> None:
         response = await client.get(

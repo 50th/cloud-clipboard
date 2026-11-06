@@ -98,6 +98,9 @@ $envVars = @{
     'CLIPBOARD_LOCK_PORT'   = "$LockPort"
     'APP_ENV'               = 'development'
     'PYTHONUTF8'            = '1'
+    # 日志默认写 RotatingFileHandler；两个实例写同一文件时，轮转会在 Windows 上
+    # 互相抢文件（PermissionError），所以隔离后端单独用一个日志文件
+    'LOG_FILE'              = (Join-Path $env:TEMP 'cloud-clipboard-test-server.log')
 }
 # 逐个注入到子进程环境（Start-Process 不继承本次调用内临时设的 $env:，故显式传入）
 foreach ($kv in $envVars.GetEnumerator()) {
