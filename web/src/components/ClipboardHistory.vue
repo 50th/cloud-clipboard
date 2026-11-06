@@ -28,6 +28,12 @@ function onSearchInput(event: Event) {
 }
 
 async function handleDelete(id: string) {
+  const target = items.value.find((item) => item.id === id)
+  const label = target?.title ? `「${target.title}」` : '这条记录'
+  if (!window.confirm(`确定删除${label}？此操作不可撤销。`)) {
+    return
+  }
+
   deletingId.value = id
   try {
     await store.removeItem(id)

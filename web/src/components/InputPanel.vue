@@ -21,6 +21,18 @@ const autoSave = ref(true)
 
 const contentSize = computed(() => (text.value ? formatBytes(byteSize(text.value)) : '0 B'))
 
+/**
+ * 自动保存成功后待回填到标题栏的标题。
+ *
+ * 标题留空时由服务端自动生成，不回填的话输入框一直空着，
+ * 用户看不到这条记录实际叫什么。回填要等保存结束再做（见下方 watch(saving)）。
+ */
+let pendingTitleBackfill: {
+  title: string
+  submittedText: string
+  submittedTitle: string
+} | null = null
+
 const { saving, error: autoSaveError, lastSaved, pending, remainingMs, progress, markSaved, saveNow } =
   useAutoSave({
     text,
@@ -28,9 +40,15 @@ const { saving, error: autoSaveError, lastSaved, pending, remainingMs, progress,
     enabled: autoSave,
     delay: AUTO_SAVE_DELAY,
     onSave: async () => {
+      // 记录提交时的值：请求期间用户可能继续输入
+      const submittedText = text.value
+      const submittedTitle = title.value
       try {
         // 自动保存复用同一条草稿记录，不会每个中间态都新建一行
-        const { item } = await store.saveDraft(text.value, title.value)
+        const { item } = await store.saveDraft(submittedText, submittedTitle)
+        if (submittedTitle.trim() === '' && item.title) {
+          pendingTitleBackfill = { title: item.title, submittedText, submittedTitle }
+        }
         const at = new Date().toLocaleTimeString('zh-CN', { hour12: false })
         emit('notice', { kind: 'ok', text: `已自动保存（${at}）：${item.title}` })
       } catch (err) {
@@ -39,6 +57,27 @@ const { saving, error: autoSaveError, lastSaved, pending, remainingMs, progress,
       }
     },
   })
+
+/**
+ * 保存结束后把服务端生成的标题回填到标题栏。
+ *
+ * ⚠️ 必须等 `saving` 落回 false 再改标题：保存过程中改标题会被
+ * useAutoSave 判定为新的未保存改动，多触发一次保存。
+ */
+watch(saving, (isSaving) => {
+  if (isSaving || !pendingTitleBackfill) {
+    return
+  }
+  const { title: generated, submittedText, submittedTitle } = pendingTitleBackfill
+  pendingTitleBackfill = null
+  // 保存期间用户自己填了标题：以用户输入为准，不覆盖
+  if (title.value !== submittedTitle) {
+    return
+  }
+  title.value = generated
+  // 基线按「提交时的正文 + 回填后的标题」重建，避免回填本身触发一次多余的自动保存
+  markSaved(submittedText)
+})
 
 // 自动保存失败时提示一次
 watch(autoSaveError, (message) => {
