@@ -368,6 +368,7 @@ Web 端新增 `utils/logger.ts`（开发 `debug`、生产 `warn`，可用 `VITE_
    「粘贴/输入 → 保存 → 列表 → 复制」，并覆盖自动保存、搜索/排序/分页、多标签 WebSocket 同步。
    - 2026-11-01 自动化 55 项通过；移动端布局、安全区与真机复制仍需人工确认
 2. **生产部署**：HTTPS / WSS + 域名与 ICP 备案；Web 静态构建 + 后端单 worker。
+   部署文件已创建，待服务器验证；方案见 [`deployment.md`](deployment.md)。
 3. **打 tag 发布**：版本号已统一为 `1.0.0`（server / web / harmony），Web 生产构建已通过；
    待确认发布渠道后打 tag。
 

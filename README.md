@@ -149,6 +149,7 @@ pnpm typecheck
 | [`docs/roadmap.md`](docs/roadmap.md) | **当前进度、踩坑记录、技术债、下一步行动** |
 | [`docs/api.md`](docs/api.md) | API 契约摘要 |
 | [`docs/ws-protocol.md`](docs/ws-protocol.md) | WebSocket 协议 |
+| [`docs/deployment.md`](docs/deployment.md) | 生产部署方案（Docker Compose + Nginx） |
 | [`server/README.md`](server/README.md) | 后端启动、迁移、数据库结构、环境变量 |
 | [`web/README.md`](web/README.md) | Web 端启动、桌面/移动布局、配置与验证步骤 |
 | [`harmony/README.md`](harmony/README.md) | 鸿蒙 App（暂停上架）的构建与签名说明 |

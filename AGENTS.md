@@ -136,6 +136,7 @@ cloud-clipboard/
 | [`docs/roadmap.md`](docs/roadmap.md) | **进度、踩坑、技术债、环境前置条件、下一步行动** |
 | [`docs/api.md`](docs/api.md) | API 契约摘要（含 OpenAPI 导出脚本） |
 | [`docs/ws-protocol.md`](docs/ws-protocol.md) | WebSocket 协议 |
+| [`docs/deployment.md`](docs/deployment.md) | 生产部署方案（Docker Compose + Nginx） |
 | [`server/README.md`](server/README.md) | 后端启动、迁移、数据库结构、排错 |
 | [`web/README.md`](web/README.md) | Web 端启动、桌面/移动布局、验证步骤 |
 | [`harmony/README.md`](harmony/README.md) | 鸿蒙 App（暂停上架）构建与签名 |

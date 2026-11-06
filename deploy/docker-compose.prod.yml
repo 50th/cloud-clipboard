@@ -1,0 +1,115 @@
+# ============================================================
+# 云剪贴板 · 生产部署（单机 Docker Compose）
+#
+# 用法（仓库根目录执行）：
+#   cp deploy/.env.example deploy/.env          # 首次：填写 POSTGRES_* 与 VITE_API_BASE_URL
+#   cp server/.env.example server/.env          # 首次：填写生产变量（见 docs/deployment.md）
+#   docker compose -f deploy/docker-compose.prod.yml build
+#   docker compose -f deploy/docker-compose.prod.yml up -d db
+#   docker compose -f deploy/docker-compose.prod.yml run --rm api alembic upgrade head
+#   docker compose -f deploy/docker-compose.prod.yml up -d
+#
+# 说明：
+#   - 只有 web 发布宿主端口；db 与 api 仅在内网互通
+#   - VITE_API_BASE_URL 是前端构建期常量，改 IP / 域名 / 协议后必须重新 build
+#   - 后端必须单 worker（WebSocket 广播是进程内实现）
+# ============================================================
+
+name: cloud-clipboard-prod
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-clipboard}
+      # ⚠️ 含特殊字符的密码需先做 URL 编码，否则拼进 DATABASE_URL 会解析失败
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+      POSTGRES_DB: ${POSTGRES_DB:-clipboard}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-clipboard} -d ${POSTGRES_DB:-clipboard}
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    logging: *default-logging
+    networks:
+      - app-net
+
+  api:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../server/.env
+    environment:
+      # 生产强制项：覆盖 server/.env 中的开发默认值
+      APP_ENV: production
+      DEBUG: "false"
+      ENABLE_DEV_ROUTES: "false"
+      # 容器内用服务名 db；不走宿主 5433
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-clipboard}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}@db:5432/${POSTGRES_DB:-clipboard}
+      # 空值 = 输出到 stdout，由 Docker 采集（不要再写容器内文件）
+      LOG_FILE: ""
+      LOG_CONSOLE: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging: *default-logging
+    networks:
+      - app-net
+
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:?set VITE_API_BASE_URL in deploy/.env}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      # HTTPS 证书就绪后再放开（见 deploy/nginx/nginx.conf 的注释）
+      # - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/locations.conf:/etc/nginx/locations.conf:ro
+      # HTTPS 证书目录（按需取消注释）
+      # - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    logging: *default-logging
+    networks:
+      - app-net
+
+volumes:
+  postgres_data:
+    name: cloud-clipboard-prod-postgres-data
+
+networks:
+  app-net:
+    driver: bridge

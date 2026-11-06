@@ -11,15 +11,30 @@ __pycache__/
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+# --- 环境变量（含密钥，绝不提交；仅保留模板）---
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 .vite/
 *.tsbuildinfo
 .DS_Store
 docs/.openapi.json
 # 后端运行日志（RotatingFileHandler 默认写入 server/logs/）
 server/logs/
+
+# --- 生产部署敏感文件（证书私钥绝不入库）---
+deploy/certs/
+*.pem
+*.key
+*.crt
+
+# --- 数据库备份 ---
+*.dump
+*.sql
+deploy/backups/
+
+# --- 编辑器 ---
+.vscode/
 
 # --- 鸿蒙端（DevEco）---
 # 构建缓存与日志：hvigor 会在每次构建时重写，不该入库
