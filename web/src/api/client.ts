@@ -173,16 +173,18 @@ export const authApi = {
     return data
   },
 
-  /** 注册：成功即返回令牌，无需再登录一次 */
+  /** 注册：成功即返回令牌，无需再登录一次。服务端开启邀请码时必须携带 `invite_code` */
   register: async (
     username: string,
     email: string,
     password: string,
+    inviteCode?: string,
   ): Promise<AuthResponse> => {
     const { data } = await http.post<AuthResponse>('/auth/register', {
       username,
       email,
       password,
+      invite_code: inviteCode?.trim() || undefined,
     })
     return data
   },

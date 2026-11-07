@@ -49,6 +49,14 @@ class UserRegisterRequest(BaseModel):
         min_length=6,
         description="密码，至少 6 字符，且不超过 72 字节（bcrypt 上限）",
     )
+    invite_code: str | None = Field(
+        None,
+        max_length=64,
+        description=(
+            "邀请码。服务端设置 `REGISTRATION_INVITE_CODE` 时必填且必须匹配，"
+            "否则返回 403；未设置时可为空"
+        ),
+    )
 
     @field_validator("username")
     @classmethod

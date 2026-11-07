@@ -26,7 +26,7 @@ cd server
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/v1/auth/register` | 注册：落库并校验唯一性，**直接返回令牌**；重名/重邮箱 409 |
+| POST | `/api/v1/auth/register` | 注册：先校验邀请码，再落库并校验唯一性，**直接返回令牌**；邀请码无效 403，重名/重邮箱 409 |
 | POST | `/api/v1/auth/login` | 登录：`username` 支持用户名或邮箱，凭证错误统一 401 |
 | GET | `/api/v1/auth/me` | 当前用户，依据 `Authorization: Bearer <token>` |
 | POST | `/api/v1/clipboard/items` | 创建；`title` 留空时自动生成，按 `timezone` 显示本地时间 |
@@ -60,6 +60,7 @@ Authorization: Bearer <JWT>
 - 密码用 **bcrypt** 哈希（`pwdlib`）入库；`password_hash` **绝不出现在任何响应里**
 - `password` 上限是 **72 字节**（不是字符数）：24 个汉字即达上限，超出返回 `422`
 - `username` 不允许换行等控制字符（避免日志注入）；注册为 3-32 字符，登录（用户名或邮箱）上限 254
+- 注册可选携带 `invite_code`：服务端设置 `REGISTRATION_INVITE_CODE` 时必须匹配，否则返回 `403`
 - 登录失败时"用户不存在"与"密码错误"返回**同一条提示**，避免枚举出已注册用户名
 
 ---

@@ -17,16 +17,20 @@ PASSWORD = "test-password-123"
 
 
 async def register(
-    client: AsyncClient, username: str, email: str | None = None, password: str = PASSWORD
+    client: AsyncClient,
+    username: str,
+    email: str | None = None,
+    password: str = PASSWORD,
+    invite_code: str | None = None,
 ) -> tuple[int, dict]:
-    response = await client.post(
-        "/api/v1/auth/register",
-        json={
-            "username": username,
-            "email": email or f"{username}@example.com",
-            "password": password,
-        },
-    )
+    body: dict = {
+        "username": username,
+        "email": email or f"{username}@example.com",
+        "password": password,
+    }
+    if invite_code is not None:
+        body["invite_code"] = invite_code
+    response = await client.post("/api/v1/auth/register", json=body)
     return response.status_code, response.json()
 
 
@@ -79,6 +83,51 @@ class TestRegister:
         """换行会破坏日志行结构（日志注入），必须在契约层拒绝。"""
         status, _ = await register(client, "evil\nname")
         assert status == 422
+
+
+class TestRegisterInviteCode:
+    """邀请码注册：为空时保持开放，配置后必须匹配。"""
+
+    async def test_未配置邀请码时保持开放注册(self, client: AsyncClient) -> None:
+        status, _ = await register(client, "open-register")
+        assert status == 201
+
+    async def test_配置后缺少邀请码返回_403(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "REGISTRATION_INVITE_CODE", "invite-secret")
+        status, body = await register(client, "no-invite")
+        assert status == 403
+        assert body["detail"] == "邀请码无效"
+
+    async def test_配置后错误邀请码返回_403(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "REGISTRATION_INVITE_CODE", "invite-secret")
+        status, _ = await register(client, "wrong-invite", invite_code="wrong")
+        assert status == 403
+
+    async def test_配置后正确邀请码可注册(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "REGISTRATION_INVITE_CODE", "invite-secret")
+        status, body = await register(
+            client, "right-invite", invite_code="invite-secret"
+        )
+        assert status == 201
+        assert body["username"] == "right-invite"
+
+    async def test_邀请码校验失败日志不含邀请码(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        monkeypatch.setattr(settings, "REGISTRATION_INVITE_CODE", "invite-secret")
+        with caplog.at_level(logging.WARNING, logger="app.routers.auth"):
+            await register(client, "log-invite", invite_code="wrong-secret")
+        assert "invalid_invite_code" in caplog.text
+        assert "wrong-secret" not in caplog.text
 
 
 class TestLogin:
