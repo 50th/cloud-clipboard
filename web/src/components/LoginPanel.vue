@@ -3,7 +3,7 @@
  * 登录 / 注册页（第 4 步）。
  *
  * 后端已接入真实 JWT：未登录时所有剪贴板请求都会 401，
- * 因此这里不再有"演示用户"兜底入口。
+ * 因此这里只提供真实账号的登录与注册。
  */
 import { computed, ref } from 'vue'
 
@@ -17,10 +17,71 @@ const userStore = useUserStore()
 type Mode = 'login' | 'register'
 const mode = ref<Mode>('login')
 
+/** 「记住密码」的本地存储键（只存在本机浏览器，不上传服务端） */
+const REMEMBER_KEY = 'cloud-clipboard.remembered-credentials'
+
+interface RememberedCredentials {
+  username: string
+  password: string
+}
+
 const username = ref('')
 const email = ref('')
 const password = ref('')
 const submitting = ref(false)
+const remember = ref(false)
+
+/** 读取上次保存的登录信息；解析失败时忽略并保持空表单。 */
+function loadRememberedCredentials(): void {
+  try {
+    const raw = localStorage.getItem(REMEMBER_KEY)
+    if (!raw) {
+      return
+    }
+    const saved = JSON.parse(raw) as Partial<RememberedCredentials>
+    if (saved.username) {
+      username.value = saved.username
+    }
+    if (saved.password) {
+      password.value = saved.password
+    }
+    remember.value = true
+  } catch {
+    /* 私密模式或数据损坏时忽略 */
+  }
+}
+
+loadRememberedCredentials()
+
+/** 勾选时保存账号密码，取消勾选时立即清除。 */
+function handleRememberChange(): void {
+  if (!remember.value) {
+    clearRememberedCredentials()
+  }
+}
+
+function persistRememberedCredentials(): void {
+  try {
+    if (remember.value) {
+      localStorage.setItem(
+        REMEMBER_KEY,
+        JSON.stringify({ username: username.value.trim(), password: password.value }),
+      )
+    } else {
+      localStorage.removeItem(REMEMBER_KEY)
+    }
+  } catch {
+    /* localStorage 不可用时忽略 */
+  }
+}
+
+function clearRememberedCredentials(): void {
+  try {
+    localStorage.removeItem(REMEMBER_KEY)
+  } catch {
+    /* localStorage 不可用时忽略 */
+  }
+}
 
 const isRegister = computed(() => mode.value === 'register')
 
@@ -58,9 +119,12 @@ async function handleSubmit() {
   try {
     if (isRegister.value) {
       await userStore.register(username.value.trim(), email.value.trim(), password.value)
+      // 注册的是新账号，清掉可能属于其他账号的本地记录
+      clearRememberedCredentials()
       emit('notice', { kind: 'ok', text: `注册成功，已以 ${username.value.trim()} 登录` })
     } else {
       await userStore.login(username.value.trim(), password.value)
+      persistRememberedCredentials()
       emit('notice', { kind: 'ok', text: `已登录：${username.value.trim()}` })
     }
     password.value = ''
@@ -69,13 +133,6 @@ async function handleSubmit() {
   } finally {
     submitting.value = false
   }
-}
-
-/** 一键填入本地演示账号（仅在开发环境可见） */
-function fillDemoAccount() {
-  mode.value = 'login'
-  username.value = 'demo'
-  password.value = 'demo1234'
 }
 </script>
 
@@ -112,7 +169,7 @@ function fillDemoAccount() {
           v-model="username"
           type="text"
           autocomplete="username"
-          placeholder="demo"
+          placeholder="用户名或邮箱"
           :disabled="submitting"
         />
       </label>
@@ -139,25 +196,22 @@ function fillDemoAccount() {
         />
       </label>
 
+      <label v-if="!isRegister" class="switch login__remember">
+        <input
+          v-model="remember"
+          type="checkbox"
+          :disabled="submitting"
+          @change="handleRememberChange"
+        />
+        <span>记住密码（保存在本机浏览器）</span>
+      </label>
+
       <div class="login__actions">
         <button type="submit" class="btn btn--primary" :disabled="!canSubmit">
           {{ submitLabel }}
         </button>
-        <button
-          v-if="!isRegister"
-          type="button"
-          class="btn btn--small"
-          :disabled="submitting"
-          @click="fillDemoAccount"
-        >
-          填入演示账号
-        </button>
       </div>
     </form>
-
-    <p class="login__note">
-      密码经 bcrypt 哈希后存储；服务端只保存哈希，不保存明文。
-    </p>
   </div>
 </template>
 
@@ -192,18 +246,16 @@ function fillDemoAccount() {
   font-weight: 500;
 }
 
+.login__remember {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
 .login__actions {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-top: 14px;
-}
-
-.login__note {
-  margin: 14px 0 0;
-  padding-top: 10px;
-  border-top: 1px dashed var(--border);
-  color: var(--text-muted);
-  font-size: 12px;
 }
 </style>
