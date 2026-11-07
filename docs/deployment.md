@@ -88,6 +88,7 @@ WebSocket 广播是进程内实现，单机单容器即可满足，无需 Redis�
 | `LOG_CONSOLE` | `false` | 与上一项配合即可 |
 | `CORS_ORIGINS` | 站点自身 origin | 同源反代下可保持最小列表 |
 | `DEMO_PASSWORD` | 不播种 | 生产**不执行**带种子数据的初始化 |
+| `REGISTRATION_INVITE_CODE` | 随机字符串 | 空 = 开放注册；生产务必设置，注册时需匹配 |
 
 `deploy/.env` 额外变量：
 
@@ -164,7 +165,8 @@ WebSocket 广播是进程内实现，单机单容器即可满足，无需 Redis�
 4. **Token 日志脱敏**：WS 的令牌在 query string（`?token=<JWT>`）。访问日志用 `$uri` 而不是 `$request_uri`，
    或对该 location 关闭 `access_log`；**不得让明文 token 落盘**。
 5. **拦截内部入口**：`/docs`、`/redoc`、`/openapi.json`、`/api/v1/dev/*` 返回 404。
-6. **登录限流**：对 `/api/v1/auth/login` 配置 `limit_req`，防口令爆破。
+6. **登录与注册限流**：登录 `/api/v1/auth/login` 每 IP 10 次/分钟，注册
+   `/api/v1/auth/register` 每 IP 5 次/分钟，防口令爆破与批量注册。
 7. **请求体上限**：按文字剪贴板需求设置 `client_max_body_size`（如 1 MB）。
 
 ## 9. 验收清单

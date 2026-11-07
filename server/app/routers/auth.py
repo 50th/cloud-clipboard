@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -14,6 +15,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
+from app.core.config import settings
 from app.core.logging_utils import safe_log_value
 from app.crud import user as user_crud
 from app.db.models.user import User
@@ -136,10 +138,30 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
         "创建账号并**直接返回令牌**，前端无需再登录一次。\n\n"
         "`password` 上限 72 字节是 bcrypt 的硬限制（超出会抛错，不会被截断）。"
     ),
-    responses={409: {"description": "用户名或邮箱已被占用"}},
+    responses={
+        403: {"description": "邀请码无效（服务端已开启注册验证）"},
+        409: {"description": "用户名或邮箱已被占用"},
+    },
 )
-async def register(payload: UserRegisterRequest, session: DbSession) -> AuthResponse:
-    """注册新用户：用户名与邮箱都要求全局唯一。"""
+async def register(
+    payload: UserRegisterRequest, session: DbSession, request: Request
+) -> AuthResponse:
+    """注册新用户：先校验邀请码，再校验用户名与邮箱唯一性。"""
+    required_code = settings.REGISTRATION_INVITE_CODE.strip()
+    if required_code:
+        provided = (payload.invite_code or "").strip()
+        # 常量时间比较，避免通过响应时间猜测邀请码
+        if not provided or not secrets.compare_digest(
+            provided.encode("utf-8"), required_code.encode("utf-8")
+        ):
+            # 只记来源与原因，绝不记录邀请码本身
+            logger.warning(
+                "注册被拒: reason=invalid_invite_code client=%s", _client_ip(request)
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="邀请码无效"
+            )
+
     if await user_crud.get_by_username(session, payload.username) is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

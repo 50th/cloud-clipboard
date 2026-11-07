@@ -28,6 +28,7 @@ interface RememberedCredentials {
 const username = ref('')
 const email = ref('')
 const password = ref('')
+const inviteCode = ref('')
 const submitting = ref(false)
 const remember = ref(false)
 
@@ -118,7 +119,12 @@ async function handleSubmit() {
   submitting.value = true
   try {
     if (isRegister.value) {
-      await userStore.register(username.value.trim(), email.value.trim(), password.value)
+      await userStore.register(
+        username.value.trim(),
+        email.value.trim(),
+        password.value,
+        inviteCode.value.trim() || undefined,
+      )
       // 注册的是新账号，清掉可能属于其他账号的本地记录
       clearRememberedCredentials()
       emit('notice', { kind: 'ok', text: `注册成功，已以 ${username.value.trim()} 登录` })
@@ -181,6 +187,17 @@ async function handleSubmit() {
           type="email"
           autocomplete="email"
           placeholder="you@example.com"
+          :disabled="submitting"
+        />
+      </label>
+
+      <label v-if="isRegister" class="field">
+        <span>邀请码（服务端开启注册验证时必填）</span>
+        <input
+          v-model="inviteCode"
+          type="text"
+          autocomplete="off"
+          placeholder="请输入邀请码"
           :disabled="submitting"
         />
       </label>
