@@ -357,18 +357,6 @@ const statusText = computed(() => {
       </label>
 
       <span class="autosave__right">
-        <!--
-          按钮常驻（仅禁用）而不是条件渲染：有条件出现会让这一行宽度跳动。
-        -->
-        <button
-          type="button"
-          class="btn btn--small"
-          :disabled="statusKind !== 'pending'"
-          :title="statusKind === 'pending' ? '跳过剩余等待，立刻保存' : '没有待保存的改动'"
-          @click="saveNow"
-        >
-          立即保存
-        </button>
         <span
           class="autosave__status"
           :class="{
