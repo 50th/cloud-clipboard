@@ -76,6 +76,8 @@ async def run_list(database_url: str) -> int:
                     status = "revoked"
                 elif row.expires_at is not None and row.expires_at <= now:
                     status = "expired"
+                elif row.max_uses is not None and row.used_count >= row.max_uses:
+                    status = "exhausted"
                 else:
                     status = "active"
                 max_uses = "∞" if row.max_uses is None else str(row.max_uses)
