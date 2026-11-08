@@ -57,7 +57,7 @@ TAGS_METADATA: list[dict[str, Any]] = [
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """应用生命周期：配置日志、探测数据库，退出时释放连接池。
 
-    第 5 步将在此初始化 Redis 订阅。
+    如后续引入 Redis Pub/Sub，在此初始化订阅。
     """
     # 必须最先做：root 默认没有 handler、级别是 WARNING，不先配日志的话
     # 下面所有 logger.info 都会被静默丢弃。

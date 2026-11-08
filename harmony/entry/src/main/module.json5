@@ -19,7 +19,7 @@
       },
       {
         // ⚠️ 读取剪贴板需要用户授权（user_grant）。不申请则读取直接失败，
-        //    只能写回、不能同步到云端。详见 docs/roadmap.md 的权限说明。
+        //    只能写回、不能同步到云端。详见 harmony/README.md 的说明。
         "name": "ohos.permission.READ_PASTEBOARD",
         "reason": "$string:reason_read_pasteboard",
         "usedScene": {

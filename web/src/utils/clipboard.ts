@@ -19,13 +19,13 @@ export class ClipboardError extends Error {
   }
 }
 
-/** 当前是否由本应用主动写入剪贴板（用于第 5 步过滤自身事件，避免循环同步）。 */
+/** 当前是否由本应用主动写入剪贴板（用于过滤自身事件，避免循环同步）。 */
 let selfWrite = false
 
 /** 本次写入的标志位保持多久（毫秒）。 */
 const SELF_WRITE_TTL = 800
 
-/** 是否处于「自身写入」窗口内。第 5 步的监听逻辑据此忽略自己触发的变化。 */
+/** 是否处于「自身写入」窗口内。监听逻辑据此忽略自己触发的变化。 */
 export function isSelfWrite(): boolean {
   return selfWrite
 }

@@ -1,4 +1,4 @@
-/** 用户状态（Pinia setup store）。第 4 步接入真实 JWT 登录。 */
+/** 用户状态（Pinia setup store）：真实 JWT 登录与会话恢复。 */
 
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'

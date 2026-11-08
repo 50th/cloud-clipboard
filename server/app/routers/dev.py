@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/dev", tags=["系统"])
 
-# 种子数据：与第 1 步的假数据保持一致，便于 Web 端对照
+# 种子数据：与 init_db 的演示数据保持一致，便于 Web 端对照
 SEED_ITEMS: list[tuple[str, str]] = [
     ("FastAPI 官方教程", "https://fastapi.tiangolo.com/tutorial/"),
     ("后端依赖安装命令", "pip install fastapi uvicorn[standard]"),
