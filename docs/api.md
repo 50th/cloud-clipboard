@@ -13,7 +13,7 @@ cd server
 ```
 
 > ⚠️ 导出的是**临时裸 JSON** `docs/.openapi.json`，**用完请删，不要提交**
-> （`.gitignore` 未覆盖它，会以未跟踪文件出现在 `git status` 里）。
+> （`.gitignore` 已忽略它，但仍不要入库）。
 
 ## 修改流程
 
@@ -55,6 +55,8 @@ POST /api/v1/auth/login      {"username": "demo", "password": "demo1234"}
 GET /api/v1/clipboard/items
 Authorization: Bearer <JWT>
 ```
+
+> 示例中的 `demo` 是**本地开发库**播种账号；生产环境不播种，注册需邀请码。
 
 - 令牌为 HS256 JWT，`sub` 是用户 UUID，有效期由 `JWT_EXPIRE_MINUTES` 控制（默认 7 天）
 - 密码用 **bcrypt** 哈希（`pwdlib`）入库；`password_hash` **绝不出现在任何响应里**

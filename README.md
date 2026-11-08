@@ -59,7 +59,7 @@ Python 3.13、Node 24 + pnpm、Docker Desktop。实测版本见 [`docs/roadmap.m
 # 仓库根目录执行
 docker compose -f infra/docker-compose.yml up -d
 
-# 连通性验证（可选；需先完成第 2 步的 venv）
+# 连通性验证（可选；需先在 server/ 创建 venv）
 server\venv\Scripts\python.exe scripts\verify_postgres.py
 ```
 
@@ -98,8 +98,9 @@ pnpm dev                              # http://127.0.0.1:5273
 
 ### 4. 登录
 
-**真实登录已接入**，首次使用需登录：演示账号 `demo` / `demo1234`
-（口令由 `server/.env` 的 `DEMO_PASSWORD` 控制，由 `init_db` 播种）。
+**真实登录已接入**：本地开发库由 `init_db` 播种演示账号 `demo` / `demo1234`
+（口令由 `server/.env` 的 `DEMO_PASSWORD` 控制）。
+**生产环境不播种演示账号**，注册需要邀请码（见 [`docs/deployment.md`](docs/deployment.md)）。
 
 ---
 
