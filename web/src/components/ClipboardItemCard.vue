@@ -92,11 +92,12 @@ function onKeydown(event: KeyboardEvent) {
       </button>
       <span class="item__meta">
         <template v-if="editing">● 编辑中 · </template>
+        {{ item.content_type }}
+        <template v-if="typeof size === 'number'"> · {{ formatBytes(size) }}</template>
+        ·
         <span :title="formatDateTime(item.created_at)">
           创建 {{ formatRelative(item.created_at) }}
         </span>
-        · {{ item.content_type }}
-        <template v-if="typeof size === 'number'"> · {{ formatBytes(size) }}</template>
       </span>
       <span v-if="copyError" class="warn">{{ copyError }}</span>
     </div>
