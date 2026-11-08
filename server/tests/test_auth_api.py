@@ -7,11 +7,14 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.crud import invite as invite_crud
 
 PASSWORD = "test-password-123"
 
@@ -86,36 +89,108 @@ class TestRegister:
 
 
 class TestRegisterInviteCode:
-    """邀请码注册：为空时保持开放，配置后必须匹配。"""
+    """邀请码注册：默认开放；开启后必须使用数据库中的有效邀请码。"""
 
-    async def test_未配置邀请码时保持开放注册(self, client: AsyncClient) -> None:
+    async def test_未开启邀请码要求时保持开放注册(self, client: AsyncClient) -> None:
         status, _ = await register(client, "open-register")
         assert status == 201
 
-    async def test_配置后缺少邀请码返回_403(
+    async def test_开启后缺少邀请码返回_403(
         self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(settings, "REGISTRATION_INVITE_CODE", "invite-secret")
+        monkeypatch.setattr(settings, "REGISTRATION_REQUIRE_INVITE", True)
         status, body = await register(client, "no-invite")
         assert status == 403
         assert body["detail"] == "邀请码无效"
 
-    async def test_配置后错误邀请码返回_403(
+    async def test_开启后不存在的邀请码返回_403(
         self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(settings, "REGISTRATION_INVITE_CODE", "invite-secret")
-        status, _ = await register(client, "wrong-invite", invite_code="wrong")
+        monkeypatch.setattr(settings, "REGISTRATION_REQUIRE_INVITE", True)
+        status, _ = await register(client, "bad-invite", invite_code="NOTEXIST")
         assert status == 403
 
-    async def test_配置后正确邀请码可注册(
-        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    async def test_有效邀请码可注册且大小写不敏感(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        monkeypatch.setattr(settings, "REGISTRATION_INVITE_CODE", "invite-secret")
-        status, body = await register(
-            client, "right-invite", invite_code="invite-secret"
-        )
+        code, row = await invite_crud.create_code(session, max_uses=1, label="test")
+        monkeypatch.setattr(settings, "REGISTRATION_REQUIRE_INVITE", True)
+        status, body = await register(client, "invite-ok", invite_code=code.lower())
         assert status == 201
-        assert body["username"] == "right-invite"
+        assert body["username"] == "invite-ok"
+        await session.refresh(row)
+        assert row.used_count == 1
+
+    async def test_邀请码用尽后再次注册返回_403(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        code, _ = await invite_crud.create_code(session, max_uses=1)
+        monkeypatch.setattr(settings, "REGISTRATION_REQUIRE_INVITE", True)
+        first, _ = await register(client, "quota-first", invite_code=code)
+        second, _ = await register(client, "quota-second", invite_code=code)
+        assert first == 201
+        assert second == 403
+
+    async def test_过期邀请码返回_403(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        code, _ = await invite_crud.create_code(
+            session,
+            expires_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+        )
+        monkeypatch.setattr(settings, "REGISTRATION_REQUIRE_INVITE", True)
+        status, _ = await register(client, "expired-invite", invite_code=code)
+        assert status == 403
+
+    async def test_已撤销邀请码返回_403(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        code, row = await invite_crud.create_code(session)
+        await invite_crud.revoke_code(session, code_id=row.id)
+        monkeypatch.setattr(settings, "REGISTRATION_REQUIRE_INVITE", True)
+        status, _ = await register(client, "revoked-invite", invite_code=code)
+        assert status == 403
+
+    async def test_不限次数的邀请码可多次使用(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        code, _ = await invite_crud.create_code(session, max_uses=None)
+        monkeypatch.setattr(settings, "REGISTRATION_REQUIRE_INVITE", True)
+        first, _ = await register(client, "unlimited-1", invite_code=code)
+        second, _ = await register(client, "unlimited-2", invite_code=code)
+        assert first == 201
+        assert second == 201
+
+    async def test_注册失败不会消耗邀请码(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """重名返回 409 时必须回滚，避免白白扣掉一次使用机会。"""
+        code, row = await invite_crud.create_code(session, max_uses=2)
+        monkeypatch.setattr(settings, "REGISTRATION_REQUIRE_INVITE", True)
+        first, _ = await register(client, "dup-user", invite_code=code)
+        duplicate, _ = await register(client, "dup-user", invite_code=code)
+        assert first == 201
+        assert duplicate == 409
+        await session.refresh(row)
+        assert row.used_count == 1
 
     async def test_邀请码校验失败日志不含邀请码(
         self,
@@ -123,11 +198,11 @@ class TestRegisterInviteCode:
         monkeypatch: pytest.MonkeyPatch,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        monkeypatch.setattr(settings, "REGISTRATION_INVITE_CODE", "invite-secret")
+        monkeypatch.setattr(settings, "REGISTRATION_REQUIRE_INVITE", True)
         with caplog.at_level(logging.WARNING, logger="app.routers.auth"):
-            await register(client, "log-invite", invite_code="wrong-secret")
+            await register(client, "log-invite", invite_code="WRONGSECRET")
         assert "invalid_invite_code" in caplog.text
-        assert "wrong-secret" not in caplog.text
+        assert "WRONGSECRET" not in caplog.text
 
 
 class TestLogin:

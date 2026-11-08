@@ -30,7 +30,7 @@ from app.core.config import settings
 from app.db.base import Base
 
 # 导入模型包，把表注册进 Base.metadata（autogenerate 依赖它）
-from app.db.models import ClipboardItem, User  # noqa: F401
+from app.db.models import ClipboardItem, InviteCode, User  # noqa: F401
 
 config = context.config
 
