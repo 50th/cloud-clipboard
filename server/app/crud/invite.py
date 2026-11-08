@@ -104,7 +104,10 @@ async def revoke_code(
         result = await session.execute(select(InviteCode).where(InviteCode.id == code_id))
     elif hint:
         result = await session.execute(
-            select(InviteCode).where(InviteCode.code_hint == hint.strip().upper())
+            select(InviteCode)
+            .where(InviteCode.code_hint == hint.strip().upper())
+            .order_by(InviteCode.created_at.desc())
+            .limit(1)
         )
     else:
         return None
