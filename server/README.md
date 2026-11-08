@@ -100,10 +100,7 @@ $env:PYTHONUTF8 = '1'   # Windows 上跑 Alembic 必需（否则 configparser �
 .\venv\Scripts\python.exe -m scripts.init_db --no-seed  # 只建表
 # --drop 会清库；目标库名不含 test 时需显式 ALLOW_DROP_DEV=1
 
-# 注册邀请码（生产环境通过容器执行，见 docs/deployment.md）
-.\venv\Scripts\python.exe -m scripts.invite_code create --days 7 --max-uses 1 --label "alice"
-.\venv\Scripts\python.exe -m scripts.invite_code list
-.\venv\Scripts\python.exe -m scripts.invite_code revoke --hint ABCD1234
+# 注册邀请码的 create / list / revoke 见 docs/deployment.md 的「邀请码管理」
 ```
 
 改契约的完整流程见 [`../AGENTS.md`](../AGENTS.md) 的「数据契约」。

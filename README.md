@@ -136,9 +136,8 @@ pnpm test
 pnpm typecheck
 ```
 
-- 两套测试**各用一个独立的库**（`clipboard_test` / `clipboard_web_test`），
-  可任意并行；开发库 `clipboard` 完全不受影响
-- Web 端有安全守卫：目标库名不含 `test` 时，破坏性操作一律跳过
+> 两套测试各用独立测试库（`clipboard_test` / `clipboard_web_test`）；
+> 数据库隔离细节与安全守卫见 [`server/README.md`](server/README.md)、[`web/README.md`](web/README.md)。
 
 ---
 
@@ -151,7 +150,7 @@ pnpm typecheck
 | [`docs/api.md`](docs/api.md) | API 契约摘要 |
 | [`docs/ws-protocol.md`](docs/ws-protocol.md) | WebSocket 协议 |
 | [`docs/deployment.md`](docs/deployment.md) | 生产部署方案（Docker Compose + Nginx） |
-| [`docs/deploy-image-transfer.md`](docs/deploy-image-transfer.md) | 方案 B：本地构建镜像、制品传输与回滚 |
+| [`docs/deploy-image-transfer.md`](docs/deploy-image-transfer.md) | 方案 B：本地出包、制品传输与回滚 |
 | [`server/README.md`](server/README.md) | 后端启动、迁移、数据库结构、环境变量 |
 | [`web/README.md`](web/README.md) | Web 端启动、桌面/移动布局、配置与验证步骤 |
 | [`harmony/README.md`](harmony/README.md) | 鸿蒙 App（暂停上架）的构建与签名说明 |

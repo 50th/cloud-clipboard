@@ -137,7 +137,7 @@ cloud-clipboard/
 | [`docs/api.md`](docs/api.md) | API 契约摘要（含 OpenAPI 导出脚本） |
 | [`docs/ws-protocol.md`](docs/ws-protocol.md) | WebSocket 协议 |
 | [`docs/deployment.md`](docs/deployment.md) | 生产部署方案（Docker Compose + Nginx） |
-| [`docs/deploy-image-transfer.md`](docs/deploy-image-transfer.md) | 方案 B：本地构建镜像、制品传输与回滚 |
+| [`docs/deploy-image-transfer.md`](docs/deploy-image-transfer.md) | 方案 B：本地出包、制品传输与回滚 |
 | [`server/README.md`](server/README.md) | 后端启动、迁移、数据库结构、排错 |
 | [`web/README.md`](web/README.md) | Web 端启动、桌面/移动布局、验证步骤 |
 | [`harmony/README.md`](harmony/README.md) | 鸿蒙 App（暂停上架）构建与签名 |
