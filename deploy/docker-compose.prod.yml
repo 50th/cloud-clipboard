@@ -49,6 +49,8 @@ services:
       - app-net
 
   api:
+    # 方案 B：优先使用本地构建并传输过来的镜像；IMAGE_TAG 来自 deploy/.env
+    image: cloud-clipboard-api:${IMAGE_TAG:?set IMAGE_TAG in deploy/.env}
     build:
       context: ../server
       dockerfile: Dockerfile
@@ -85,6 +87,7 @@ services:
       - app-net
 
   web:
+    image: cloud-clipboard-web:${IMAGE_TAG:?set IMAGE_TAG in deploy/.env}
     build:
       context: ../web
       dockerfile: Dockerfile

@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # 云剪贴板后端生产镜像。
 # 迁移不在镜像构建期执行：由部署流程单独运行 `alembic upgrade head`。
 FROM python:3.13-slim
