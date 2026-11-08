@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # 云剪贴板 Web 端生产镜像：多阶段构建，Nginx 托管静态文件。
 # Nginx 配置由 deploy/docker-compose.prod.yml 挂载，不在本镜像内。
 

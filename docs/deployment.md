@@ -4,6 +4,8 @@
 > 容器全部健康，API 冒烟测试通过（注册 / 创建 / 列表 / 删除），`/health` 正常。
 > 已启用数据库邀请码（有效期 / 使用次数 / 撤销，见第 10 节）与注册/登录限流。
 > 云安全组已放行 TCP 8443，公网 HTTPS 与邀请码注册已验证通过。
+> 当前镜像改为**本地构建 + 制品传输**（方案 B），见 [`deploy-image-transfer.md`](deploy-image-transfer.md)；
+> 服务器构建保留为回退路径。
 > 进度与验收记录仍以 [`roadmap.md`](roadmap.md) 为准。
 
 **最后更新**：2026-11-08
@@ -45,7 +47,9 @@ WebSocket 广播是进程内实现，单机单容器即可满足，无需 Redis�
 | `deploy/docker-compose.prod.yml` | 编排 `db` / `api` / `web` 三个服务，配置健康检查、重启策略、日志轮转 |
 | `deploy/nginx/nginx.conf` | 主配置：HTTP→HTTPS 跳转、TLS、日志格式（不含 query string）、登录限流 |
 | `deploy/nginx/locations.conf` | 站点路由：SPA fallback、静态缓存、API / WS 反代、dev 路由拦截（HTTP/HTTPS 共用） |
-| `deploy/.env.example` | Compose 变量模板（`POSTGRES_*`、端口、`VITE_API_BASE_URL`、证书说明） |
+| `deploy/.env.example` | Compose 变量模板（`POSTGRES_*`、端口、`IMAGE_TAG`、`VITE_API_BASE_URL`、证书说明） |
+| `scripts/build_release.ps1` | 本地构建镜像、打 tag、导出 `release-<tag>.tar.gz` 与源码包 |
+| `scripts/deploy_release.ps1` | 上传发布包、`docker load`、备份、迁移、切换并做健康检查 |
 | `server/.dockerignore`、`web/.dockerignore` | 排除 `venv`、`node_modules`、`.env`、`logs`、`dist` |
 
 > 生产 Compose 与开发用的 `infra/docker-compose.yml` **保持独立**，不要复用同一份文件。
@@ -97,6 +101,7 @@ WebSocket 广播是进程内实现，单机单容器即可满足，无需 Redis�
 |------|--------|------|
 | `WEB_HTTP_PORT` | `8080` | 宿主机 HTTP 端口，仅做 HTTPS 跳转 |
 | `WEB_HTTPS_PORT` | `8443` | 宿主机 HTTPS 端口 |
+| `IMAGE_TAG` | `1.0.0` | 本地构建的镜像版本 tag；回滚时改回旧版本 |
 | `VITE_API_BASE_URL` | 必填 | 构建期写入前端 bundle |
 
 ## 6. 首次部署步骤
