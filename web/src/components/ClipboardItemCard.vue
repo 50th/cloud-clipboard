@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 
 import type { ClipboardItem } from '@/api/client'
 import { useCopy } from '@/composables/useCopy'
-import { formatBytes, formatRelative } from '@/utils/format'
+import { formatBytes, formatDateTime, formatRelative } from '@/utils/format'
 
 const props = defineProps<{
   item: ClipboardItem
@@ -28,7 +28,6 @@ const shownContent = computed(() =>
 )
 
 const size = computed(() => props.item.metadata?.size)
-const updated = computed(() => props.item.updated_at !== props.item.created_at)
 
 function requestEdit() {
   emit('edit', props.item)
@@ -56,8 +55,13 @@ function onKeydown(event: KeyboardEvent) {
   >
     <header class="item__head">
       <h3 class="item__title" :title="item.title">{{ item.title }}</h3>
-      <span class="item__time" :title="item.created_at">
-        {{ formatRelative(item.created_at) }}
+      <span class="item__times">
+        <span :title="formatDateTime(item.created_at)">
+          创建 {{ formatRelative(item.created_at) }}
+        </span>
+        <span :title="formatDateTime(item.updated_at)">
+          编辑 {{ formatRelative(item.updated_at) }}
+        </span>
       </span>
     </header>
 
@@ -95,7 +99,6 @@ function onKeydown(event: KeyboardEvent) {
         <template v-if="editing">● 编辑中 · </template>
         {{ item.content_type }}
         <template v-if="typeof size === 'number'"> · {{ formatBytes(size) }}</template>
-        <template v-if="updated"> · 已更新</template>
       </span>
       <span v-if="copyError" class="warn">{{ copyError }}</span>
     </div>
