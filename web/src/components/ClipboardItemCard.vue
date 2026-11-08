@@ -55,13 +55,8 @@ function onKeydown(event: KeyboardEvent) {
   >
     <header class="item__head">
       <h3 class="item__title" :title="item.title">{{ item.title }}</h3>
-      <span class="item__times">
-        <span :title="formatDateTime(item.created_at)">
-          创建 {{ formatRelative(item.created_at) }}
-        </span>
-        <span :title="formatDateTime(item.updated_at)">
-          编辑 {{ formatRelative(item.updated_at) }}
-        </span>
+      <span class="item__time" :title="formatDateTime(item.updated_at)">
+        编辑 {{ formatRelative(item.updated_at) }}
       </span>
     </header>
 
@@ -97,7 +92,10 @@ function onKeydown(event: KeyboardEvent) {
       </button>
       <span class="item__meta">
         <template v-if="editing">● 编辑中 · </template>
-        {{ item.content_type }}
+        <span :title="formatDateTime(item.created_at)">
+          创建 {{ formatRelative(item.created_at) }}
+        </span>
+        · {{ item.content_type }}
         <template v-if="typeof size === 'number'"> · {{ formatBytes(size) }}</template>
       </span>
       <span v-if="copyError" class="warn">{{ copyError }}</span>
