@@ -51,6 +51,7 @@ Invoke-ScpWithRetry $source "${Server}:/tmp/source-$Tag.tar.gz"
 $remote = @'
 set -euo pipefail
 cd /opt/cloud-clipboard
+export IMAGE_TAG=__TAG__
 
 tar -xzf /tmp/source-__TAG__.tar.gz -C /opt/cloud-clipboard
 rm -f /tmp/source-__TAG__.tar.gz
@@ -58,18 +59,19 @@ rm -f /tmp/source-__TAG__.tar.gz
 sed -i '/^IMAGE_TAG=/d' deploy/.env
 printf 'IMAGE_TAG=__TAG__\n' >> deploy/.env
 chmod 600 deploy/.env
+grep -q '^IMAGE_TAG=__TAG__$' deploy/.env
 
 gunzip -c /tmp/release-__TAG__.tar.gz | sudo docker load
 rm -f /tmp/release-__TAG__.tar.gz
 
-sudo docker compose -f deploy/docker-compose.prod.yml config --quiet
+sudo env IMAGE_TAG="$IMAGE_TAG" docker compose -f deploy/docker-compose.prod.yml config --quiet
 
 mkdir -p backups
-sudo docker compose -f deploy/docker-compose.prod.yml exec -T db pg_dump -U clipboard clipboard \
+sudo env IMAGE_TAG="$IMAGE_TAG" docker compose -f deploy/docker-compose.prod.yml exec -T db pg_dump -U clipboard clipboard \
   | gzip > "backups/backup-$(date +%Y%m%d-%H%M%S).sql.gz"
 
-sudo docker compose -f deploy/docker-compose.prod.yml run --rm api alembic upgrade head
-sudo docker compose -f deploy/docker-compose.prod.yml up -d
+sudo env IMAGE_TAG="$IMAGE_TAG" docker compose -f deploy/docker-compose.prod.yml run --rm api alembic upgrade head
+sudo env IMAGE_TAG="$IMAGE_TAG" docker compose -f deploy/docker-compose.prod.yml up -d
 
 sleep 5
 curl -sk https://127.0.0.1:8443/health
