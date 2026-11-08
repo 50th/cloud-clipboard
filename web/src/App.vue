@@ -4,7 +4,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import LoginPanel from '@/components/LoginPanel.vue'
 import ClipboardHistory from '@/components/ClipboardHistory.vue'
 import InputPanel from '@/components/InputPanel.vue'
-import { API_BASE_URL, getErrorMessage } from '@/api/client'
+import { getErrorMessage } from '@/api/client'
 import { useNotice } from '@/composables/useNotice'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useClipboardStore } from '@/stores/clipboardStore'
@@ -148,17 +148,12 @@ async function handleClearAll() {
           退出登录
         </button>
       </div>
-      <p class="app__subtitle">
-        <!-- 后端地址是开发信息，移动端隐藏，避免把状态行挤成两行 -->
-        <span class="app__backend">后端 {{ API_BASE_URL }} · </span>
+      <p v-if="isAuthenticated" class="app__subtitle">
         <template v-if="user">当前用户 {{ user.username }}</template>
-        <template v-else>未登录</template>
-        <template v-if="isAuthenticated">
-          ·
-          <span :class="['realtime', realtimeConnected ? 'realtime--on' : 'realtime--off']">
-            {{ realtimeConnected ? '实时同步中' : '实时连接断开，正在重连…' }}
-          </span>
-        </template>
+        ·
+        <span :class="['realtime', realtimeConnected ? 'realtime--on' : 'realtime--off']">
+          {{ realtimeConnected ? '实时同步中' : '实时连接断开，正在重连…' }}
+        </span>
       </p>
     </header>
 

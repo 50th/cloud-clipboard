@@ -109,7 +109,6 @@ const canSubmit = computed(() => {
 
 function switchMode(next: Mode) {
   mode.value = next
-  password.value = ''
 }
 
 async function handleSubmit() {
@@ -163,9 +162,8 @@ async function handleSubmit() {
       </button>
     </div>
 
-    <p class="hint">
-      <template v-if="isRegister">创建一个新账号，注册成功后会直接登录。</template>
-      <template v-else>登录后才能查看和同步你的剪贴板记录。</template>
+    <p v-if="isRegister" class="hint">
+      创建一个新账号，注册成功后会直接登录。
     </p>
 
     <form @submit.prevent="handleSubmit">
@@ -220,7 +218,7 @@ async function handleSubmit() {
           :disabled="submitting"
           @change="handleRememberChange"
         />
-        <span>记住密码（保存在本机浏览器）</span>
+        <span>记住密码</span>
       </label>
 
       <div class="login__actions">

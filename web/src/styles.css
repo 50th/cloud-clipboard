@@ -550,10 +550,6 @@ textarea {
     font-size: 12px;
   }
 
-  .app__backend {
-    display: none;
-  }
-
   /* 页签吸顶：滚到列表中间也能直接切回输入区 */
   .pane-tabs {
     position: sticky;
