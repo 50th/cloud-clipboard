@@ -59,7 +59,7 @@ export const API_PREFIX = '/api/v1'
 
 const TOKEN_KEY = 'cloud-clipboard.token'
 
-/** 读取本地保存的 JWT（第 4 步接入登录后使用）。 */
+/** 读取本地保存的 JWT（登录后使用）。 */
 export function getToken(): string | null {
   try {
     return localStorage.getItem(TOKEN_KEY)
@@ -87,7 +87,7 @@ export const http = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// 自动附加 Bearer token。第 4 步起剪贴板接口必须带令牌，缺失会被后端 401。
+// 自动附加 Bearer token。剪贴板接口必须带令牌，缺失会被后端 401。
 http.interceptors.request.use((config) => {
   const bearer = readEnv('VITE_AUTH_TOKEN') || getToken()
   if (bearer) {

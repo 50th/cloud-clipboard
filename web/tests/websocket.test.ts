@@ -1,5 +1,5 @@
 /**
- * WebSocket 实时同步的端到端测试（第 5 步验收资产）。
+ * WebSocket 实时同步的端到端测试。
  *
  * 与 `e2e.test.ts` 的区别：这里驱动**真实的** `useWebSocket` composable，
  * 用 Node 内置的全局 `WebSocket` 连到真实后端，验证「标签 A 上传 → 标签 B 秒级收到」。

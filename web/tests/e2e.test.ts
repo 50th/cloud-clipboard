@@ -1,5 +1,5 @@
 /**
- * 端到端闭环测试（第 2 步验收资产，第 3 步起打真实 PostgreSQL）。
+ * 端到端闭环测试（打真实 PostgreSQL）。
  *
  * 直接驱动真实的 Pinia store + axios 客户端打到真实后端，
  * 覆盖「上传 → 标题 → 列表展示 → 去重 → 搜索 → 排序 → 删除 → 清空」这条链路。
@@ -47,7 +47,7 @@ const { API_BASE_URL, authApi, clipboardApi, devApi, setToken } = await import(
 const { useClipboardStore, PAGE_SIZE } = await import('#src/stores/clipboardStore.ts')
 
 /**
- * 先登录拿 JWT：第 4 步起剪贴板接口全部受保护，不带令牌一律 401。
+ * 先登录拿 JWT：剪贴板接口全部受保护，不带令牌一律 401。
  *
  * 用演示账号（由 `scripts/init_db` 或 `dev/reset` 按 DEMO_PASSWORD 播种），
  * 这样测试数据仍归属 demo 用户，与手工验证看到的一致。
@@ -93,7 +93,7 @@ const ON_TEST_DATABASE = TARGET_DATABASE !== null && /test/i.test(TARGET_DATABAS
  *   2. 显式设置 `E2E_ALLOW_DESTRUCTIVE=1`
  *
  * 加第 1 个条件是因为：原先只靠环境变量，而**收尾钩子里的 `dev/reset` 是无条件调用的**，
- * 于是"跑一次测试"就会清掉开发库里 demo 用户的全部剪贴板数据（P2）。
+ * 于是"跑一次测试"就会清掉开发库里 demo 用户的全部剪贴板数据。
  * 现在只要目标不是测试库，任何破坏性操作都不会执行。
  *
  * 想覆盖破坏性用例请用 `scripts/run_web_tests.ps1`（自动指向测试库并设好该开关）。
@@ -483,8 +483,8 @@ describe('Web 端单端闭环（真实后端）', () => {
     assert.equal(typeof ALLOW_DESTRUCTIVE, 'boolean')
   })
 
-  it('安全守卫：非测试库上绝不执行破坏性操作（P2 回归）', () => {
-    // 这是 P2 的回归保护：无论 E2E_ALLOW_DESTRUCTIVE 怎么设，
+  it('安全守卫：非测试库上绝不执行破坏性操作（回归）', () => {
+    // 这是安全守卫的回归保护：无论 E2E_ALLOW_DESTRUCTIVE 怎么设，
     // 只要目标不是测试库，破坏性开关就必须是关的。
     if (!ON_TEST_DATABASE) {
       assert.equal(

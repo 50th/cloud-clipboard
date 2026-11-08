@@ -1,11 +1,11 @@
-"""后端测试夹具（第 8 步将在此基础上扩充单元测试）。
+"""后端测试夹具。
 
 设计要点：
 - **测试打独立数据库**（默认 `clipboard_test`），不碰开发库，避免测试清空真实数据
 - 每个测试函数一个会话，结束后回滚，测试之间互不干扰
 - 表结构由 `Base.metadata.create_all` 建立；迁移本身另用 `alembic upgrade` 验证
 
-依赖（尚未安装，第 8 步补齐）：
+依赖：
     .\\venv\\Scripts\\python.exe -m pip install pytest pytest-asyncio httpx
 
 用法：

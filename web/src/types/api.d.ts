@@ -83,7 +83,7 @@ export interface paths {
          * 创建剪贴板项
          * @description 提交文字内容。`title` 留空时由服务端自动生成（`<用户名> · <月-日 时:分>`），时间按 `timezone`（IANA 时区名，前端会传浏览器时区）展示，例如 `demo · 10-05 21:56`。
          *
-         *     **已内置内容去重**：同一用户提交相同 `content` 时不创建新记录，只更新 `updated_at`；此时仅当显式传了 `title` 才覆盖标题（第 6 步对应广播 `clipboard.updated`）。
+         *     **已内置内容去重**：同一用户提交相同 `content` 时不创建新记录，只更新 `updated_at`；此时仅当显式传了 `title` 才覆盖标题（去重命中时对应广播 `clipboard.updated`）。
          */
         post: operations["create_item_api_v1_clipboard_items_post"];
         /**

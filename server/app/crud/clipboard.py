@@ -154,8 +154,8 @@ async def create_item(
     `username` 用于在用户未填标题时生成自动标题。
 
     返回 (item, created)：
-    - `created=True`：新建记录 → 第 5 步广播 `clipboard.created`
-    - `created=False`：命中内容去重，仅刷新时间戳 → 第 6 步广播 `clipboard.updated`
+    - `created=True`：新建记录 → 广播 `clipboard.created`
+    - `created=False`：命中内容去重，仅刷新时间戳 → 广播 `clipboard.updated`
     """
     digest = content_hash(payload.content)
     existing = await get_by_content_hash(session, user_id, digest)

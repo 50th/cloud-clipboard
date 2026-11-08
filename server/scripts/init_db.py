@@ -32,7 +32,7 @@ from app.db.base import Base  # noqa: E402
 from app.db.models import ClipboardItem, User  # noqa: E402  （导入以注册 metadata）
 from app.schemas.clipboard import ClipboardItemCreate  # noqa: E402
 
-# 种子数据：与第 1 步的假数据保持一致，便于 Web 端对照
+# 种子数据：与演示数据保持一致，便于 Web 端对照
 SEED_ITEMS: list[tuple[str, str]] = [
     ("FastAPI 官方教程", "https://fastapi.tiangolo.com/tutorial/"),
     ("后端依赖安装命令", "pip install fastapi uvicorn[standard]"),
