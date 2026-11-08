@@ -89,7 +89,7 @@ WebSocket 广播是进程内实现，单机单容器即可满足，无需 Redis�
 | `LOG_CONSOLE` | `false` | 与上一项配合即可 |
 | `CORS_ORIGINS` | 站点自身 origin | 同源反代下可保持最小列表 |
 | `DEMO_PASSWORD` | 不播种 | 生产**不执行**带种子数据的初始化 |
-| `REGISTRATION_INVITE_CODE` | 随机字符串 | 空 = 开放注册；生产务必设置，注册时需匹配 |
+| `REGISTRATION_REQUIRE_INVITE` | `true` | 开启后注册必须使用 `invite_codes` 表中的有效邀请码 |
 
 `deploy/.env` 额外变量：
 
@@ -182,6 +182,25 @@ WebSocket 广播是进程内实现，单机单容器即可满足，无需 Redis�
 8. 重启服务器后容器自动拉起，数据仍在。
 
 ## 10. 运维
+
+### 邀请码管理
+
+邀请码存放在 `invite_codes` 表，明文只在生成时输出一次（库里只存哈希）。
+默认有效期 7 天、最多使用 1 次；`--days 0` 表示不过期，`--max-uses 0` 表示不限次数。
+
+```bash
+# 生成（可加 --label 备注邀请对象）
+docker compose -f deploy/docker-compose.prod.yml run --rm api \
+  python -m scripts.invite_code create --days 7 --max-uses 1 --label "alice"
+
+# 查看使用情况（active / expired / revoked）
+docker compose -f deploy/docker-compose.prod.yml run --rm api \
+  python -m scripts.invite_code list
+
+# 撤销（按明文前 8 位或记录 id）
+docker compose -f deploy/docker-compose.prod.yml run --rm api \
+  python -m scripts.invite_code revoke --hint ABCD1234
+```
 
 ### 备份
 

@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import logging
-import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -17,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import security
 from app.core.config import settings
 from app.core.logging_utils import safe_log_value
+from app.crud import invite as invite_crud
 from app.crud import user as user_crud
 from app.db.models.user import User
 from app.db.session import get_db
@@ -147,13 +147,9 @@ async def register(
     payload: UserRegisterRequest, session: DbSession, request: Request
 ) -> AuthResponse:
     """注册新用户：先校验邀请码，再校验用户名与邮箱唯一性。"""
-    required_code = settings.REGISTRATION_INVITE_CODE.strip()
-    if required_code:
+    if settings.REGISTRATION_REQUIRE_INVITE:
         provided = (payload.invite_code or "").strip()
-        # 常量时间比较，避免通过响应时间猜测邀请码
-        if not provided or not secrets.compare_digest(
-            provided.encode("utf-8"), required_code.encode("utf-8")
-        ):
+        if not provided or await invite_crud.consume_code(session, provided) is None:
             # 只记来源与原因，绝不记录邀请码本身
             logger.warning(
                 "注册被拒: reason=invalid_invite_code client=%s", _client_ip(request)

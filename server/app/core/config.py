@@ -36,9 +36,9 @@ class Settings(BaseSettings):
     # 开发/测试辅助路由（如 /api/v1/dev/reset）的总开关。
     # 故意与 DEBUG 解耦：DEBUG 可能因调试临时打开，而该路由会清库，绝不该跟着被打开。
     ENABLE_DEV_ROUTES: bool = False
-    # 注册邀请码。为空 = 开放注册（本地开发/测试默认）。
-    # 生产环境应设置随机值；设置后注册请求必须携带匹配的 invite_code，否则返回 403。
-    REGISTRATION_INVITE_CODE: str = ""
+    # 注册是否需要邀请码。邀请码存放在 `invite_codes` 表（见 scripts/invite_code.py）。
+    # False = 开放注册（本地开发/测试默认）；生产环境应设为 True。
+    REGISTRATION_REQUIRE_INVITE: bool = False
     API_V1_PREFIX: str = "/api/v1"
 
     # --- 日志（详细说明见 core/logging_config.py）---

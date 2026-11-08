@@ -34,7 +34,7 @@ TEST_DATABASE_URL = os.environ.get(
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 from app.db.base import Base  # noqa: E402
-from app.db.models import ClipboardItem, User  # noqa: E402,F401  （导入以注册 metadata）
+from app.db.models import ClipboardItem, InviteCode, User  # noqa: E402,F401  （导入以注册 metadata）
 from app.db.session import get_db  # noqa: E402
 from app.main import app as fastapi_app  # noqa: E402
 
