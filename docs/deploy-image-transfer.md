@@ -1,8 +1,8 @@
 # 方案 B：本地构建镜像 → 传输 → 部署
 
-> **状态：已确认并实施（方案 2：Docker 多阶段构建）；待服务器切换验证。**
-> 本文描述镜像生产方式；Nginx 配置、证书、迁移文件仍随源码包同步。
-> 服务器构建保留为回退路径。
+> **状态：已实施并验证（2026-11-08）。**
+> 线上容器已切换为 `cloud-clipboard-api:1.0.0` / `cloud-clipboard-web:1.0.0`。
+> Nginx 配置、证书、迁移文件仍随源码包同步；服务器构建保留为回退路径。
 
 **最后更新**：2026-11-08
 
@@ -137,6 +137,19 @@ curl -k https://127.0.0.1:8443/health
 7. 验证回滚流程；
 8. 提交并推送。
 
+## 8. 实施结果（2026-11-08）
+
+- 本地出包：`release-1.0.0.tar.gz` 97.4 MB；`api` 222 MB、`web` 63.2 MB。
+- 服务器 `docker load` 成功，容器切换为：
+  - `cloud-clipboard-api:1.0.0`
+  - `cloud-clipboard-web:1.0.0`
+- 部署脚本自动备份数据库到 `/opt/cloud-clipboard/backups/`。
+- `alembic upgrade head` 通过（无新迁移）。
+- 验证：内部 `/health` 200；外部 HTTPS 200；未登录 API 返回 401。
+- 回滚演练：切换到旧服务器镜像 tag `0.9.0` → 健康检查通过；再切回 `1.0.0` → 健康检查通过。
+- 首次部署脚本曾因 `IMAGE_TAG` 插值失败；已改为显式 `export IMAGE_TAG` +
+  `sudo env IMAGE_TAG=... docker compose` 注入。
+
 ---
 
-已确认按方案 2（Docker 多阶段构建）实施；服务器切换验证完成后更新本文状态。
+方案 2 已实施并完成验证。

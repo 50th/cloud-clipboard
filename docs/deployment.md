@@ -106,6 +106,10 @@ WebSocket 广播是进程内实现，单机单容器即可满足，无需 Redis�
 
 ## 6. 首次部署步骤
 
+> 当前生产已切换为**方案 B（本地出包 + 制品传输）**，日常发布用
+> [`build_release.ps1`](../scripts/build_release.ps1) / [`deploy_release.ps1`](../scripts/deploy_release.ps1)。
+> 以下服务器构建步骤保留为**回退方案**。
+
 在服务器上按顺序执行（仓库根目录为 `/opt/cloud-clipboard`）：
 
 1. **初始化服务器**：Docker Engine、镜像源；按需调整云安全组。
