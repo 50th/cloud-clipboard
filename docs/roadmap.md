@@ -332,19 +332,19 @@ Web 端新增 `utils/logger.ts`（开发 `debug`、生产 `warn`，可用 `VITE_
 连接串、数据卷、健康检查等见 `infra/docker-compose.yml` 顶部注释与
 `scripts/verify_postgres.py`。
 
-- **Docker Hub 当前不可达**（TLS handshake timeout）→ compose 用本地已有的 `postgres:16`
-  而非 `16-alpine`；离线启动加 `--pull never`
+- **Docker Hub 已恢复可拉取**（2026-11-08 实测 `python:3.13-slim`、`node:24-alpine`、
+  `nginx:alpine` 均成功）；网络不稳时仍建议预拉取或改用镜像源
 - Docker CLI 需访问命名管道，**受限沙箱下会被拒绝**，故 docker 命令都需完全权限
-- 本地与规划中的生产**均为 16**，避免跨大版本 `pg_dump/pg_restore` 不兼容
+- 本地与生产**均为 16**，避免跨大版本 `pg_dump/pg_restore` 不兼容
 
 ## 环境前置条件
 
 | 组件 | 状态 | 说明 |
 |------|------|------|
 | Python 3.13.7 | ✅ | `server/venv` 已建 |
-| Node 24.11.1 + pnpm 11.7.0 | ✅ | `web/node_modules` 已装 |
+| Node 24.11.1 + pnpm | ✅ | `web/node_modules` 已装；本地 pnpm 10.13.1，构建镜像内固定 11.7.0 |
 | Docker Desktop | ✅ | CLI 需完全权限才能访问命名管道 |
-| Docker Hub 拉取 | ❌ | 网络不可达，只能用本地已有镜像 |
+| Docker Hub 拉取 | ✅ | 已恢复（2026-11-08）；网络不稳时用镜像源或预拉取 |
 | 本机 PostgreSQL 18 | ✅ `5432` | **保留不动**，与容器并存 |
 | 容器 PostgreSQL 16 | ✅ healthy | 本地开发主用（宿主 5433） |
 | Redis | ⬜ 空闲 | **本阶段不引入**（P3 走单 worker）；需跨进程广播时再启用 |
@@ -367,8 +367,9 @@ Web 端新增 `utils/logger.ts`（开发 `debug`、生产 `warn`，可用 `VITE_
 
 1. **Web 端人工验收**：桌面 + 手机（Chrome DevTools / 真机）走
    「粘贴/输入 → 保存 → 列表 → 复制」，并覆盖自动保存、搜索/排序/分页、多标签 WebSocket 同步。
-   - 2026-11-01 自动化 55 项通过；移动端布局、安全区与真机复制仍需人工确认
-2. **生产部署**：HTTPS / WSS + 域名与 ICP 备案；Web 静态构建 + 后端单 worker。
+   - 2026-11-08 自动化 60 项通过；移动端布局、安全区与真机复制仍需人工确认
+2. **生产部署收尾**：域名 + ICP 备案 + 正式证书（当前已用自签证书上线）；
+   Web 静态构建 + 后端单 worker。
    已部署到 43.134.121.173（HTTPS 8443，自签证书），容器与 API 冒烟通过；
    已启用数据库邀请码（有效期 / 限次 / 撤销）与注册/登录限流；
    云安全组已放行 8443，公网注册验证通过。
@@ -384,8 +385,8 @@ Web 端新增 `utils/logger.ts`（开发 `debug`、生产 `warn`，可用 `VITE_
 
 - 图片剪贴板 + 对象存储（原阶段二）
 - 文件剪贴板 + 体验优化（原阶段三）
-- 对象存储先做**适配层**：MinIO 镜像当前不可得，开发期可先用本地磁盘实现，
-  接口保持 S3 兼容，后续切换不改业务代码
+- 对象存储先做**适配层**：MinIO 端口 9000 被 Windows 保留段占用，需换端口；
+  开发期也可先用本地磁盘实现，接口保持 S3 兼容，后续切换不改业务代码
 
 ### 之后可考虑
 

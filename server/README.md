@@ -63,7 +63,7 @@ server/
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/v1/auth/register` | 注册（落库 + 唯一性校验，**直接返回令牌**；重名/重邮箱 409） |
+| POST | `/api/v1/auth/register` | 注册（先校验邀请码，再落库 + 唯一性校验，**直接返回令牌**；邀请码无效 403，重名/重邮箱 409） |
 | POST | `/api/v1/auth/login` | 登录（`username` 支持用户名或邮箱，错误统一 401） |
 | GET | `/api/v1/auth/me` | 当前用户（需 `Authorization: Bearer <token>`） |
 | POST | `/api/v1/clipboard/items` | 创建（含内容去重） |
@@ -78,6 +78,8 @@ server/
 | GET | `/health` | 健康检查 |
 
 > `/api/v1/clipboard/*` **全部需要认证**，不带令牌返回 `401`。
+> 生产开启 `REGISTRATION_REQUIRE_INVITE` 后，注册必须携带 `invite_codes` 表中的有效邀请码
+> （生成与撤销见 [`../docs/deployment.md`](../docs/deployment.md) 的「邀请码管理」）。
 > ⚠️ 必须**单 worker** 启动：广播是进程内实现，多 worker 会"数据一致但推送丢事件"。
 > 启动守卫会自动检测并拒绝（`WEB_CONCURRENCY` + 固定回环端口独占）。
 

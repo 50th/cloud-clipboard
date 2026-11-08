@@ -16,7 +16,7 @@
 | 本机 npm registry | 可用（慢，但成功） |
 | 本机本地构建 `api` | 成功，镜像 **222 MB** |
 | 本机本地构建 `web` | 成功，镜像 **63.2 MB** |
-| 两个镜像导出后大小 | 未压缩 **280.4 MB**，gzip 后 **94.9 MB** |
+| 两个镜像导出后大小 | 未压缩 **280.4 MB**，gzip 发布包 **97.4 MB** |
 | 构建耗时 | api 约 19 分钟、web 约 4 分钟（当前网络下 pip/npm 下载约 30 KB/s） |
 
 ### 构建时发现的阻塞点
@@ -41,8 +41,8 @@ Dockerfile 首行：
 | `web/Dockerfile` | 删除 `# syntax=docker/dockerfile:1` |
 | `deploy/docker-compose.prod.yml` | `api` / `web` 增加 `image: cloud-clipboard-{api,web}:${IMAGE_TAG}`，保留 `build` |
 | `deploy/.env.example` | 增加 `IMAGE_TAG=1.0.0` |
-| `scripts/build_release.ps1`（新增） | 本地构建、打 tag、`docker save` 压缩成发布包 |
-| `scripts/deploy_release.ps1`（新增） | 上传发布包、`docker load`、可选迁移、`up -d`、健康检查 |
+| `scripts/build_release.ps1` | 本地构建、打 tag、`docker save` 压缩成发布包 |
+| `scripts/deploy_release.ps1` | 上传发布包、`docker load`、备份、迁移、`up -d`、健康检查 |
 | `docs/deployment.md` | 补充方案 B 的操作流程 |
 
 可选但推荐：
@@ -68,42 +68,47 @@ Dockerfile 首行：
 ### 3.1 构建（本地）
 
 ```powershell
-# 先确保测试通过
+# 1) 先确保测试通过
 cd server; $env:PYTHONUTF8='1'; .\venv\Scripts\python.exe -m pytest
+cd ..
 .\scripts\run_web_tests.ps1 -PnpmPath "C:\Users\shouw\AppData\Roaming\npm\pnpm.cmd"
 
-# 构建
-docker build --platform linux/amd64 -t cloud-clipboard-api:1.0.0 server
-docker build --platform linux/amd64 `
-  --build-arg VITE_API_BASE_URL=https://43.134.121.173:8443 `
-  -t cloud-clipboard-web:1.0.0 web
-
-# 导出发布包
-docker save cloud-clipboard-api:1.0.0 cloud-clipboard-web:1.0.0 `
-  | gzip > release-1.0.0.tar.gz
+# 2) 出包（要求工作区干净）
+.\scripts\build_release.ps1 -ApiBaseUrl "https://43.134.121.173:8443" -Tag "1.0.0"
 ```
+
+产物（`dist/` 已被 git 忽略）：
+
+- `release-1.0.0.tar.gz`：`api` + `web` 镜像（gzip）
+- `source-1.0.0.tar.gz`：已提交源码（Compose / Nginx / 迁移）
 
 ### 3.2 部署（服务器）
 
+```powershell
+.\scripts\deploy_release.ps1 -Tag "1.0.0"
+```
+
+脚本会自动：上传镜像包与源码包 → 解压源码 → 更新 `IMAGE_TAG` → `docker load`
+→ 备份数据库 → `alembic upgrade head` → `up -d` → 外部健康检查。
+
+手动等价步骤（脚本不可用时）：
+
 ```bash
-gunzip -c /tmp/release-1.0.0.tar.gz | docker load
+gunzip -c /tmp/release-1.0.0.tar.gz | sudo docker load
 cd /opt/cloud-clipboard
-
-# 有迁移时先备份
 sudo docker compose -f deploy/docker-compose.prod.yml exec -T db \
-  pg_dump -U clipboard clipboard | gzip > backup-$(date +%F-%H%M).sql.gz
-
+  pg_dump -U clipboard clipboard | gzip > backups/backup-$(date +%F-%H%M).sql.gz
 sudo docker compose -f deploy/docker-compose.prod.yml run --rm api alembic upgrade head
 sudo docker compose -f deploy/docker-compose.prod.yml up -d
 curl -k https://127.0.0.1:8443/health
 ```
 
-> `deploy/.env` 需同步设置 `IMAGE_TAG=1.0.0`，否则 Compose 会找不到镜像。
+> `deploy/.env` 需同步设置 `IMAGE_TAG=1.0.0`；`deploy_release.ps1` 会自动更新。
 
 ## 4. 回滚
 
 - 保留每次的 `release-<tag>.tar.gz`；
-- 回滚时 `docker load` 旧包，把 `deploy/.env` 的 `IMAGE_TAG` 改回旧版本，再 `up -d`；
+- 回滚时 `sudo docker load` 旧包，把 `deploy/.env` 的 `IMAGE_TAG` 改回旧版本，再 `up -d`；
 - 数据库迁移不回滚，破坏性变更前必须先备份。
 
 ## 5. 风险与注意事项
@@ -111,9 +116,9 @@ curl -k https://127.0.0.1:8443/health
 1. **本机构建速度受网络影响**：当前 pip 约 30 KB/s，api 首次构建近 20 分钟；网络改善后会明显加快。
 2. **构建架构必须是 `linux/amd64`**：服务器是 x86_64；Apple Silicon 必须显式 `--platform linux/amd64`。
 3. **`VITE_API_BASE_URL` 必须是生产地址**：构建期写入，写错会导致前端连到 localhost。
-4. **发布包较大**：约 95 MB（gzip），scp 时间取决于本机上行带宽。
+4. **发布包较大**：约 97 MB（gzip），scp 时间取决于本机上行带宽。
 5. **Compose 的 `image:` 与 `build:` 同时存在时**：`up -d` 使用已有镜像；只有显式 `--build` 才重新构建。部署时不要误加 `--build`。
-6. **源码/配置仍需同步**：Compose、Nginx 配置、证书、迁移文件仍通过 `git archive` 传输；方案 B 只改变镜像生产方式。
+6. **源码/配置仍需同步**：部署脚本会自动上传源码包并解压；方案 B 只改变镜像生产方式。
 7. **本地必须先跑完整测试**：方案 B 把生产镜像的构建责任移到本地，测试不过就不应出包。
 8. **基础镜像 digest 固定为可选项**：固定后本地必须先预拉取，网络差时更依赖预拉取。
 
@@ -126,7 +131,7 @@ curl -k https://127.0.0.1:8443/health
 5. 注册（邀请码）、登录、保存、多标签同步正常；
 6. 回滚演练：加载上一个发布包后可恢复运行。
 
-## 7. 确认后实施顺序
+## 7. 实施步骤（已完成）
 
 1. 删除两个 Dockerfile 的 `# syntax` 行；
 2. Compose 增加 `image:`，`.env.example` 增加 `IMAGE_TAG`；

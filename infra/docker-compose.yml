@@ -11,7 +11,7 @@
 #
 # 端口约定：
 #   5433 -> 容器 PostgreSQL（宿主 5432 已被本机原生 PostgreSQL 18 占用）
-#   6379 -> Redis（第 5 步启用）
+#   6379 -> Redis（预留端口，当前未定义服务）
 #
 # ⚠️ 镜像必须钉版本，不要用 latest：版本漂移会让本地与生产行为不一致，
 #    且跨大版本 pg_dump/pg_restore 不兼容。
@@ -19,8 +19,8 @@
 
 services:
   postgres:
-    # 用本地已有的 postgres:16。Docker Hub 当前不可达，
-    # 若换成 16-alpine 需联网拉取；离线启动可加 --pull never
+    # 使用本地已有的 postgres:16；若本地没有可正常联网拉取。
+    # 离线环境仍可加 --pull never 启动
     image: postgres:16
     container_name: cloud-clipboard-postgres
     restart: unless-stopped

@@ -74,7 +74,7 @@ WebSocket 广播是进程内实现，单机单容器即可满足，无需 Redis�
 | 账号 | 创建非 root 运维用户，启用 2 GB swap |
 | 防火墙 | 云安全组 + UFW 仅放行 22 与站点端口（默认 8080 / 8443） |
 | Docker | Docker Engine + Compose 插件（不要用 Docker Desktop） |
-| 镜像源 | 国内服务器拉取 `postgres:16`、`python:3.13-slim`、`node:24-alpine`、`nginx:alpine` 可能失败，需配置国内 registry 镜像，或 `docker save` / `docker load` 离线导入 |
+| 镜像源 | 可直连 Docker Hub 时无需配置；拉取失败时再用镜像源或离线导入 |
 | npm 源 | web 镜像构建走 `web/.npmrc` 的 `registry.npmjs.org`；国内构建慢或失败时可临时改用镜像源 |
 | SSH | 禁用密码登录，只允许密钥；改完先用新会话验证可登录再断开旧连接 |
 
@@ -119,7 +119,7 @@ WebSocket 广播是进程内实现，单机单容器即可满足，无需 Redis�
    - 生成自签证书（见本节末尾）。
 3. **启动数据库**：
    ```bash
-   docker compose -f deploy/docker-compose.prod.yml up -d db
+   sudo docker compose -f deploy/docker-compose.prod.yml up -d db
    ```
 4. **本地出包**：
    ```powershell
@@ -151,14 +151,14 @@ chmod 600 deploy/certs/privkey.pem
 
 不依赖本地 Docker 的回退路径：
 
-1. 初始化服务器、获取代码、写 `deploy/.env` 与 `server/.env`。
+1. 初始化服务器、获取代码、写 `deploy/.env`（含 `IMAGE_TAG`）与 `server/.env`。
 2. 生成自签证书（同上）。
 3. 构建并启动：
    ```bash
-   docker compose -f deploy/docker-compose.prod.yml build
-   docker compose -f deploy/docker-compose.prod.yml up -d db
-   docker compose -f deploy/docker-compose.prod.yml run --rm api alembic upgrade head
-   docker compose -f deploy/docker-compose.prod.yml up -d
+   sudo docker compose -f deploy/docker-compose.prod.yml build
+   sudo docker compose -f deploy/docker-compose.prod.yml up -d db
+   sudo docker compose -f deploy/docker-compose.prod.yml run --rm api alembic upgrade head
+   sudo docker compose -f deploy/docker-compose.prod.yml up -d
    ```
 4. 验证 `curl -k https://<服务器IP>:8443/health`。
 5. 生产**不要执行** `scripts.init_db` 的播种流程，避免出现 `demo / demo1234`。
@@ -180,7 +180,7 @@ chmod 600 deploy/certs/privkey.pem
 ## 8. Nginx 反代要点
 
 1. **SPA fallback**：`try_files $uri $uri/ /index.html`。
-2. **API 反代**：`location /api/ { proxy_pass http://api:8000; }`，保留原始路径。
+2. **API 反代**：`location /api/ { proxy_pass http://api_backend; }`，保留原始路径。
 3. **WebSocket**：必须带升级头：
    ```nginx
    proxy_http_version 1.1;
@@ -190,10 +190,11 @@ chmod 600 deploy/certs/privkey.pem
    ```
 4. **Token 日志脱敏**：WS 的令牌在 query string（`?token=<JWT>`）。访问日志用 `$uri` 而不是 `$request_uri`，
    或对该 location 关闭 `access_log`；**不得让明文 token 落盘**。
-5. **拦截内部入口**：`/docs`、`/redoc`、`/openapi.json`、`/api/v1/dev/*` 返回 404。
+5. **内部入口**：`/docs`、`/redoc`、`/openapi.json` 不在 `/api/` 反代范围内，
+   公网不会暴露后端文档；`/api/v1/dev/*` 明确返回 404。
 6. **登录与注册限流**：登录 `/api/v1/auth/login` 每 IP 10 次/分钟，注册
    `/api/v1/auth/register` 每 IP 5 次/分钟，防口令爆破与批量注册。
-7. **请求体上限**：按文字剪贴板需求设置 `client_max_body_size`（如 1 MB）。
+7. **请求体上限**：按文字剪贴板需求设置 `client_max_body_size`（当前 2 MB）。
 
 ## 9. 验收清单
 
@@ -215,15 +216,15 @@ chmod 600 deploy/certs/privkey.pem
 
 ```bash
 # 生成（可加 --label 备注邀请对象）
-docker compose -f deploy/docker-compose.prod.yml run --rm api \
+sudo docker compose -f deploy/docker-compose.prod.yml run --rm api \
   python -m scripts.invite_code create --days 7 --max-uses 1 --label "alice"
 
-# 查看使用情况（active / expired / revoked）
-docker compose -f deploy/docker-compose.prod.yml run --rm api \
+# 查看使用情况（active / expired / revoked / exhausted）
+sudo docker compose -f deploy/docker-compose.prod.yml run --rm api \
   python -m scripts.invite_code list
 
 # 撤销（按明文前 8 位或记录 id）
-docker compose -f deploy/docker-compose.prod.yml run --rm api \
+sudo docker compose -f deploy/docker-compose.prod.yml run --rm api \
   python -m scripts.invite_code revoke --hint ABCD1234
 ```
 
@@ -254,8 +255,8 @@ docker compose -f deploy/docker-compose.prod.yml run --rm api \
 ### 回滚
 
 - 保留 `dist/release-<tag>.tar.gz` 与服务器上的镜像 tag。
-- 回滚：`docker load` 旧发布包 → 把 `deploy/.env` 的 `IMAGE_TAG` 改回旧版本 →
-  `docker compose up -d`。
+- 回滚：`sudo docker load` 旧发布包 → 把 `deploy/.env` 的 `IMAGE_TAG` 改回旧版本 →
+  `sudo docker compose up -d`。
 - 数据库迁移**不做自动回滚**；涉及破坏性变更前必须先备份。
 
 ### 监控
@@ -285,7 +286,7 @@ docker compose -f deploy/docker-compose.prod.yml run --rm api \
 
 ### 待决策
 
-- 域名购买与 ICP 备案的启动时间（决定何时能从方案 A 切到 C）。
-- **注册接口当前对所有人开放**：生产前需决定是否加邀请码 / 白名单 / 关闭注册。
+- 域名购买与 ICP 备案的启动时间（决定何时从自签证书切到正式域名证书）。
+- 生产已启用数据库邀请码；本地默认开放注册（`REGISTRATION_REQUIRE_INVITE=false`）。
 - 是否长期拦截 `/docs` 等文档入口（当前应用本身始终注册这些路由）。
-- 服务器镜像源方案：配置 registry 镜像，还是离线导入本地已有的 `postgres:16`。
+- 网络再次不稳定时的镜像获取策略：镜像源或离线导入。
