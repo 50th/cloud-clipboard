@@ -106,46 +106,62 @@ WebSocket 广播是进程内实现，单机单容器即可满足，无需 Redis�
 
 ## 6. 首次部署步骤
 
-> 当前生产已切换为**方案 B（本地出包 + 制品传输）**，日常发布用
-> [`build_release.ps1`](../scripts/build_release.ps1) / [`deploy_release.ps1`](../scripts/deploy_release.ps1)。
-> 以下服务器构建步骤保留为**回退方案**。
+当前生产使用**方案 B（本地出包 + 制品传输）**。服务器构建保留为回退方案。
 
-在服务器上按顺序执行（仓库根目录为 `/opt/cloud-clipboard`）：
+### 6.1 方案 B（当前）
 
-1. **初始化服务器**：Docker Engine、镜像源；按需调整云安全组。
-2. **获取代码**：`git clone` 后切到目标 tag / 分支，或用 `git archive` 传输。
-3. **写生产变量**：复制 `deploy/.env.example` 为 `deploy/.env`（Compose 变量插值），
-   复制 `server/.env.example` 为 `server/.env` 并按第 5 节填写，确认权限 600。
-4. **生成自签证书**（无域名阶段）：
-   ```bash
-   mkdir -p deploy/certs
-   openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
-     -keyout deploy/certs/privkey.pem \
-     -out deploy/certs/fullchain.pem \
-     -subj "/CN=<服务器IP>" \
-     -addext "subjectAltName=IP:<服务器IP>"
-   chmod 600 deploy/certs/privkey.pem
-   ```
-5. **构建镜像**（`VITE_API_BASE_URL` 已在 `deploy/.env` 中）：
-   ```bash
-   docker compose -f deploy/docker-compose.prod.yml build
-   ```
-6. **启动数据库并等待健康**：
+1. **初始化服务器**：Docker Engine、镜像源；云安全组放行站点端口。
+2. **部署源码与配置**：
+   - 把已提交源码解压到 `/opt/cloud-clipboard`（`git archive` 或 `scp`）；
+   - 按第 5 节创建 `server/.env`；
+   - 复制 `deploy/.env.example` 为 `deploy/.env`，填写 `POSTGRES_*`、`IMAGE_TAG`、
+     `VITE_API_BASE_URL`；
+   - 生成自签证书（见本节末尾）。
+3. **启动数据库**：
    ```bash
    docker compose -f deploy/docker-compose.prod.yml up -d db
    ```
-7. **执行迁移**：
-   ```bash
-   docker compose -f deploy/docker-compose.prod.yml run --rm api alembic upgrade head
+4. **本地出包**：
+   ```powershell
+   .\scripts\build_release.ps1 -ApiBaseUrl "https://<服务器IP>:8443" -Tag "1.0.0"
    ```
-   > 生产**不要执行** `scripts.init_db` 的播种流程，避免出现 `demo / demo1234` 演示账号。
-8. **启动全部服务**：
+5. **上传并部署**：
+   ```powershell
+   .\scripts\deploy_release.ps1 -Tag "1.0.0"
+   ```
+   脚本会依次：解压源码 → 更新 `IMAGE_TAG` → `docker load` → 备份数据库 →
+   `alembic upgrade head` → `up -d` → 健康检查。
+6. **创建首个账号**，并按第 9 节验收。
+
+> 首次部署时数据库为空，脚本里的 `pg_dump` 只是空库备份，属正常。
+
+**自签证书（无域名阶段）：**
+
+```bash
+mkdir -p deploy/certs
+openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
+  -keyout deploy/certs/privkey.pem \
+  -out deploy/certs/fullchain.pem \
+  -subj "/CN=<服务器IP>" \
+  -addext "subjectAltName=IP:<服务器IP>"
+chmod 600 deploy/certs/privkey.pem
+```
+
+### 6.2 回退：服务器构建
+
+不依赖本地 Docker 的回退路径：
+
+1. 初始化服务器、获取代码、写 `deploy/.env` 与 `server/.env`。
+2. 生成自签证书（同上）。
+3. 构建并启动：
    ```bash
+   docker compose -f deploy/docker-compose.prod.yml build
+   docker compose -f deploy/docker-compose.prod.yml up -d db
+   docker compose -f deploy/docker-compose.prod.yml run --rm api alembic upgrade head
    docker compose -f deploy/docker-compose.prod.yml up -d
    ```
-9. **验证**：`curl -k https://<服务器IP>:8443/health` 应返回 `{"status":"ok"}`。
-10. **创建首个账号**：通过页面注册并登录。
-11. **按第 9 节清单验收**。
+4. 验证 `curl -k https://<服务器IP>:8443/health`。
+5. 生产**不要执行** `scripts.init_db` 的播种流程，避免出现 `demo / demo1234`。
 
 ## 7. HTTPS 方案（暂无域名）
 
@@ -224,14 +240,22 @@ docker compose -f deploy/docker-compose.prod.yml run --rm api \
 
 ### 发布
 
-1. `git pull` 并切到新 tag。
-2. 重建镜像（打版本 tag，保留上一版）。
-3. `alembic upgrade head`。
-4. `up -d`。
+1. 本地跑完后端 + Web 测试。
+2. 出包：
+   ```powershell
+   .\scripts\build_release.ps1 -ApiBaseUrl "https://43.134.121.173:8443" -Tag "1.1.0"
+   ```
+3. 部署：
+   ```powershell
+   .\scripts\deploy_release.ps1 -Tag "1.1.0"
+   ```
+4. 脚本自动完成备份、迁移、切换与健康检查。
 
 ### 回滚
 
-- 切回上一版镜像 tag 后重启。
+- 保留 `dist/release-<tag>.tar.gz` 与服务器上的镜像 tag。
+- 回滚：`docker load` 旧发布包 → 把 `deploy/.env` 的 `IMAGE_TAG` 改回旧版本 →
+  `docker compose up -d`。
 - 数据库迁移**不做自动回滚**；涉及破坏性变更前必须先备份。
 
 ### 监控

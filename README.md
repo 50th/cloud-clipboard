@@ -10,7 +10,7 @@
 
 | 阶段 | 内容 | 版本 | 状态 |
 |------|------|------|------|
-| 阶段一 | 文字：保存 / 查询 / 删除 + 实时同步 + 登录 + 去重 | **v1.0.0** | ✅ 功能完成，发版中 |
+| 阶段一 | 文字：保存 / 查询 / 删除 + 实时同步 + 登录 + 去重 | **v1.0.0** | ✅ 已完成，已部署生产 |
 | 阶段二 | 图片 + 对象存储 | **v1.1（下一版本）** | 📋 计划中 |
 | 阶段三 | 文件 + 体验优化 | **v1.1（下一版本）** | 📋 计划中 |
 | 阶段四 | 端到端加密 + 生产加固 | 后续 | 📋 计划中 |
@@ -121,12 +121,12 @@ pnpm dev                              # http://127.0.0.1:5273
 ## 测试
 
 ```powershell
-# 后端：163 项（纯函数 + 接口集成，打独立测试库 clipboard_test）
+# 后端：220 项（纯函数 + 接口集成，打独立测试库 clipboard_test）
 cd server
 $env:PYTHONUTF8='1'
 .\venv\Scripts\python.exe -m pytest
 
-# Web 端隔离模式（推荐，55 项）：自动起一个指向测试库的独立后端，跑完自动停
+# Web 端隔离模式（推荐，60 项）：自动起一个指向测试库的独立后端，跑完自动停
 .\scripts\run_web_tests.ps1
 
 # Web 端安全模式：打当前后端，不删除任何既有数据
@@ -150,6 +150,7 @@ pnpm typecheck
 | [`docs/api.md`](docs/api.md) | API 契约摘要 |
 | [`docs/ws-protocol.md`](docs/ws-protocol.md) | WebSocket 协议 |
 | [`docs/deployment.md`](docs/deployment.md) | 生产部署方案（Docker Compose + Nginx） |
+| [`docs/deploy-image-transfer.md`](docs/deploy-image-transfer.md) | 方案 B：本地构建镜像、制品传输与回滚 |
 | [`server/README.md`](server/README.md) | 后端启动、迁移、数据库结构、环境变量 |
 | [`web/README.md`](web/README.md) | Web 端启动、桌面/移动布局、配置与验证步骤 |
 | [`harmony/README.md`](harmony/README.md) | 鸿蒙 App（暂停上架）的构建与签名说明 |
