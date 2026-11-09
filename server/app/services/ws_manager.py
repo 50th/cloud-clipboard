@@ -56,6 +56,48 @@ class ConnectionManager:
             if not sockets:
                 self._connections.pop(key, None)
 
+    async def close_user(
+        self,
+        user_id: str | uuid.UUID,
+        *,
+        code: int = 4401,
+        reason: str = "account disabled",
+    ) -> int:
+        """关闭并移除某用户的全部连接，返回成功关闭的数量。
+
+        用于禁用/删除/重置密码后立即终止会话；复用 4401 关闭码，
+        客户端会停止重连，下一次 HTTP 请求的 401 再清理登录态。
+        """
+        key = str(user_id)
+        async with self._lock:
+            targets = list(self._connections.pop(key, ()))
+
+        if not targets:
+            return 0
+
+        results = await asyncio.gather(
+            *(self._safe_close(socket, code, reason) for socket in targets),
+            return_exceptions=True,
+        )
+        failed = sum(1 for result in results if result is not True)
+        if failed:
+            logger.warning(
+                "ws 强制关闭部分失败: user=%s closed=%d failed=%d",
+                key,
+                len(targets) - failed,
+                failed,
+            )
+        return len(targets) - failed
+
+    @staticmethod
+    async def _safe_close(socket: WebSocket, code: int, reason: str) -> bool:
+        """关闭单条连接；已断开/异常都按失败处理但不抛出。"""
+        try:
+            await socket.close(code=code, reason=reason)
+            return True
+        except Exception:  # noqa: BLE001 - 对端可能已经断开
+            return False
+
     async def send_to_user(
         self, user_id: str | uuid.UUID, event: str, data: Any
     ) -> int:

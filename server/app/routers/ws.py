@@ -32,15 +32,22 @@ async def _authenticate(token: str | None) -> tuple[str | None, str]:
     """校验 token，返回 `(用户 id, 失败原因)`；成功时原因为 `"ok"`。"""
     if not token:
         return None, "missing token"
-    subject = security.get_token_subject(token)
-    if subject is None:
+    claims = security.decode_access_token(token)
+    if claims is None:
         return None, "invalid token"
-    # 令牌有效但用户可能已被删除，同样拒绝
+    subject = claims.get("sub")
+    if not subject:
+        return None, "invalid token"
+    # 令牌有效但用户可能已被删除、禁用或令牌被撤销，同样拒绝
     factory = get_session_factory()
     async with factory() as session:
-        user = await user_crud.get_by_id(session, subject)
+        user = await user_crud.get_by_id(session, str(subject))
     if user is None:
         return None, "user not found"
+    if not user.is_active:
+        return None, "account disabled"
+    if int(claims.get("sv", 0) or 0) != user.token_version:
+        return None, "token revoked"
     return str(user.id), "ok"
 
 

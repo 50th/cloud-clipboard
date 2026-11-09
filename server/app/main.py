@@ -27,7 +27,7 @@ from app.core.logging_utils import install_log_redaction
 from app.core.request_context import RequestIdMiddleware
 from app.core.single_worker import assert_single_worker, release_single_worker
 from app.db.session import dispose_engine, ping
-from app.routers import auth, clipboard, dev, ws
+from app.routers import admin, auth, clipboard, dev, ws
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,13 @@ TAGS_METADATA: list[dict[str, Any]] = [
         "description": (
             "文字剪贴板的上传、列表、详情、删除。"
             "数据持久化在 PostgreSQL；同一用户提交相同内容会命中去重，不新建记录。"
+        ),
+    },
+    {
+        "name": "后台管理",
+        "description": (
+            "管理员专用：用户与剪贴板管理、概览统计与操作审计。"
+            "全部接口要求 `is_admin=true`，普通用户返回 403。"
         ),
     },
     {
@@ -138,6 +145,8 @@ def create_app() -> FastAPI:
     application.include_router(clipboard.router, prefix=settings.API_V1_PREFIX)
     # WebSocket 实时同步（与 clipboard 路由同为 /clipboard 前缀，挂在 /clipboard/ws）
     application.include_router(ws.router, prefix=settings.API_V1_PREFIX)
+    # 后台管理：始终注册，权限由 AdminUser 依赖强制校验。
+    application.include_router(admin.router, prefix=settings.API_V1_PREFIX)
 
     # 开发/测试辅助路由。受独立的 ENABLE_DEV_ROUTES 控制，**不复用 DEBUG**：
     # /dev/reset 会删数据，绝不能因为调试开了 DEBUG 就跟着可用。

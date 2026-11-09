@@ -1,18 +1,11 @@
-import { createPinia } from 'pinia'
-import { createApp } from 'vue'
+/**
+ * 应用入口：按路径分发用户端与管理端。
+ *
+ * 两个入口都通过动态 import 拆包，普通用户访问 `/` 不会加载管理端代码，
+ * 管理端也不依赖 vue-router；Nginx 现有 SPA fallback 已支持 `/admin`。
+ */
 
-import App from '@/App.vue'
-import { setUnauthorizedHandler } from '@/api/client'
-import { useUserStore } from '@/stores/userStore'
-import '@/styles.css'
+import { isAdminPath } from '@/admin/path'
 
-const pinia = createPinia()
-const app = createApp(App).use(pinia)
-
-// 令牌过期/被吊销时后端返回 401：清空登录态回到登录页。
-// 在这里注册而不是写进 api/client.ts，是为了避免 store 与 axios 客户端循环依赖。
-setUnauthorizedHandler(() => {
-  useUserStore(pinia).logout()
-})
-
-app.mount('#app')
+const admin = isAdminPath(window.location.pathname)
+void (admin ? import('@/admin/main') : import('@/bootstrap'))
