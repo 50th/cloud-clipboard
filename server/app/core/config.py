@@ -76,6 +76,9 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     # 默认 7 天（10080 分钟）
     JWT_EXPIRE_MINUTES: int = 10080
+    # 管理员令牌单独使用更短有效期（默认 12 小时 = 720 分钟）。
+    # 管理端能读取全部用户明文剪贴板，缩短泄露窗口。
+    ADMIN_JWT_EXPIRE_MINUTES: int = 720
 
     # --- 演示用户（仅用于本地开发/测试播种；真实登录已接入，不再是兜底身份）---
     DEMO_USER_ID: str = "3f1a9c62-7d4b-4e18-9f2a-6b0c5d8e1a34"

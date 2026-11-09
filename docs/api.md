@@ -35,6 +35,20 @@ cd server
 | PATCH | `/api/v1/clipboard/items/{id}` | 更新（只改显式传入的字段）。内容与**另一条**重复时返回 `409` |
 | DELETE | `/api/v1/clipboard/items/{id}` | 删除单条 |
 | DELETE | `/api/v1/clipboard/items` | 清空 |
+| GET | `/api/v1/admin/stats` | 后台概览：用户 / 剪贴板 / 总占用 / 近 7 天新增 |
+| GET | `/api/v1/admin/users` | 用户分页：搜索用户名/邮箱、状态筛选、角色筛选、排序 |
+| GET | `/api/v1/admin/users/{id}` | 用户详情与剪贴板统计 |
+| PATCH | `/api/v1/admin/users/{id}` | 修改昵称 / 邮箱 / 启用状态 / 管理员标记 |
+| POST | `/api/v1/admin/users/{id}/reset-password` | 重置密码，旧令牌立即失效 |
+| DELETE | `/api/v1/admin/users/{id}` | 物理删除用户并级联删除剪贴板 |
+| DELETE | `/api/v1/admin/users/{id}/clipboards` | 清空指定用户剪贴板 |
+| GET | `/api/v1/admin/clipboards` | 全局剪贴板分页，支持用户/用户名/关键字筛选 |
+| GET | `/api/v1/admin/clipboards/{id}` | 剪贴板详情（返回完整正文） |
+| DELETE | `/api/v1/admin/clipboards/{id}` | 删除任意用户的单条剪贴板 |
+| GET | `/api/v1/admin/audit-logs` | 管理员操作审计分页 |
+| GET | `/api/v1/admin/invite-codes` | 邀请码分页；`status=all/active/exhausted/expired/revoked` |
+| POST | `/api/v1/admin/invite-codes` | 生成邀请码；`max_uses` 必填，明文仅返回一次 |
+| POST | `/api/v1/admin/invite-codes/{id}/revoke` | 撤销邀请码 |
 | POST | `/api/v1/dev/reset` | ⚠️ 删数据并重建种子（仅 `ENABLE_DEV_ROUTES=true` 时注册） |
 | GET | `/api/v1/dev/db` | 探测当前连接的数据库（同上，仅开发路由开启时） |
 | GET | `/health` / `/` | 健康检查 / 服务信息 |
@@ -58,7 +72,11 @@ Authorization: Bearer <JWT>
 
 > 示例中的 `demo` 是**本地开发库**播种账号；生产环境不播种，注册需邀请码。
 
-- 令牌为 HS256 JWT，`sub` 是用户 UUID，有效期由 `JWT_EXPIRE_MINUTES` 控制（默认 7 天）
+- 令牌为 HS256 JWT，`sub` 是用户 UUID，有效期由 `JWT_EXPIRE_MINUTES` 控制（默认 7 天）；
+  管理员令牌由 `ADMIN_JWT_EXPIRE_MINUTES` 控制（默认 12 小时）
+- JWT 带 `sv`（token_version）声明；密码重置或账号被禁用后 `token_version += 1`，旧令牌返回 `401`
+- `/api/v1/admin/*` **全部要求 `is_admin=true`**，普通用户返回 `403`；
+  `is_admin` 仅在 `UserResponse` 中用于展示，权限每次请求都查库
 - 密码用 **bcrypt** 哈希（`pwdlib`）入库；`password_hash` **绝不出现在任何响应里**
 - `password` 上限是 **72 字节**（不是字符数）：24 个汉字即达上限，超出返回 `422`
 - `username` 不允许换行等控制字符（避免日志注入）；注册为 3-32 字符，登录（用户名或邮箱）上限 254

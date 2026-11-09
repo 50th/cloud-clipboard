@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -16,10 +17,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import security
 from app.core.config import settings
 from app.core.logging_utils import safe_log_value
+from app.crud import audit as audit_crud
 from app.crud import invite as invite_crud
 from app.crud import user as user_crud
 from app.db.models.user import User
 from app.db.session import get_db
+from app.schemas.common import utc_now
 from app.schemas.user import (
     AuthResponse,
     TokenResponse,
@@ -78,16 +81,30 @@ def to_user_response(user: User) -> UserResponse:
         email=user.email,
         nickname=user.nickname,
         avatar_url=user.avatar_url,
+        is_admin=user.is_admin,
         created_at=user.created_at,
     )
 
 
 def issue_token(user: User) -> TokenResponse:
-    """为用户签发访问令牌。"""
+    """为用户签发访问令牌。
+
+    管理员使用更短的有效期；`sv`（token_version）用于密码重置/禁用后的即时撤销。
+    """
+    expires_minutes = (
+        settings.ADMIN_JWT_EXPIRE_MINUTES
+        if user.is_admin
+        else settings.JWT_EXPIRE_MINUTES
+    )
+    expires_delta = timedelta(minutes=expires_minutes)
     return TokenResponse(
-        access_token=security.create_access_token(user.id),
+        access_token=security.create_access_token(
+            user.id,
+            expires_delta=expires_delta,
+            extra_claims={"sv": user.token_version},
+        ),
         token_type="bearer",
-        expires_in=security.access_token_expires_in(),
+        expires_in=int(expires_delta.total_seconds()),
         user=to_user_response(user),
     )
 
@@ -113,20 +130,51 @@ async def get_current_user(
         _log_auth_failure(request, "missing token")
         raise _unauthorized("未提供访问令牌，请在 Authorization 头中携带 Bearer token")
 
-    subject = security.get_token_subject(credentials.credentials)
-    if subject is None:
+    claims = security.decode_access_token(credentials.credentials)
+    if claims is None:
         _log_auth_failure(request, "invalid token")
         raise _unauthorized("访问令牌无效或已过期")
 
-    user = await user_crud.get_by_id(session, subject)
+    subject = claims.get("sub")
+    if not subject:
+        _log_auth_failure(request, "invalid token")
+        raise _unauthorized("访问令牌无效或已过期")
+
+    user = await user_crud.get_by_id(session, str(subject))
     if user is None:
         _log_auth_failure(request, "user not found")
         raise _unauthorized("访问令牌对应的用户不存在")
+
+    if not user.is_active:
+        _log_auth_failure(request, "account disabled")
+        raise _unauthorized("账号已被禁用")
+
+    # 缺失 sv 视为 0，兼容升级前的用户令牌；密码重置/禁用会 +1。
+    if int(claims.get("sv", 0) or 0) != user.token_version:
+        _log_auth_failure(request, "token revoked")
+        raise _unauthorized("登录状态已失效，请重新登录")
 
     return user
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+async def get_current_admin(current_user: CurrentUser) -> User:
+    """认证依赖：在普通认证之上要求管理员权限。
+
+    **权限每次请求都查库**，因此取消管理员后立即生效，不依赖 JWT 内的角色声明。
+    """
+    if not current_user.is_admin:
+        logger.info("管理权限拒绝: user=%s", current_user.id)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要管理员权限",
+        )
+    return current_user
+
+
+AdminUser = Annotated[User, Depends(get_current_admin)]
 
 
 @router.post(
@@ -186,7 +234,10 @@ async def register(
     response_model=AuthResponse,
     summary="用户登录",
     description="`username` 支持用户名或邮箱。凭证错误统一返回 401，不区分是哪一个错。",
-    responses={401: {"description": "用户名或密码错误"}},
+    responses={
+        401: {"description": "用户名或密码错误"},
+        403: {"description": "账号已被禁用"},
+    },
 )
 async def login(
     payload: UserLoginRequest, session: DbSession, request: Request
@@ -207,9 +258,32 @@ async def login(
         )
         raise _unauthorized("用户名或密码错误")
 
+    if not user.is_active:
+        logger.warning(
+            "登录被拒: reason=account disabled user=%s client=%s",
+            safe_log_value(user.username),
+            _client_ip(request),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="账号已被禁用",
+        )
+
+    user.last_login_at = utc_now()
+    await session.commit()
+
     logger.info(
-        "登录成功: user=%s id=%s", safe_log_value(user.username), user.id
+        "登录成功: user=%s id=%s admin=%s",
+        safe_log_value(user.username),
+        user.id,
+        user.is_admin,
     )
+    if user.is_admin:
+        # 管理员登录需要单独留痕；审计失败不影响登录本身（低危操作 fail-open）。
+        await audit_crud.record_admin_action(session, user, audit_crud.ACTION_ADMIN_LOGIN)
+        # 审计失败时 record_admin_action 会 rollback，使 user 过期；
+        # 这里重新加载，保证后续同步序列化不会触发异步懒加载。
+        await session.refresh(user)
     return AuthResponse(**to_user_response(user).model_dump(), token=issue_token(user))
 
 

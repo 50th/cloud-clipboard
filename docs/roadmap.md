@@ -29,7 +29,8 @@
 | 5 WebSocket 实时同步 | ✅ | 踩坑见下；**强制单 worker**（P3 已决策） |
 | 6 内容去重 | ✅ | 代码在第 3／5 步已落地，本步骤补齐验收覆盖 |
 | 7 鸿蒙 App | ⏸️ 暂停 | 移动端交付改走 Web；代码完成、**编译通过**，暂不签名上机（踩坑见下） |
-| 8 联调与测试 | 🚧 | 后端 220 项 + Web 60 项已就位；**Web 桌面/移动人工验收**待做，鸿蒙联调暂缓 |
+| 8 联调与测试 | 🚧 | 后端 247 项 + Web 62 项已就位；**Web 桌面/移动人工验收**待做，鸿蒙联调暂缓 |
+| 9 后台管理页 | ✅ | `/admin` 用户/剪贴板/邀请码管理 + 审计；见 [`admin.md`](admin.md) |
 
 ---
 
@@ -37,9 +38,9 @@
 
 | 套件 | 数量 | 目标库 | 怎么跑 |
 |------|------|--------|--------|
-| 后端 pytest | **220** | `clipboard_test` | `cd server; python -m pytest` |
-| Web 端（隔离模式，推荐） | **60** | `clipboard_web_test` | `.\scripts\run_web_tests.ps1` |
-| Web 端（安全模式） | **60** | 当前后端所连的库 | `cd web; pnpm test` |
+| 后端 pytest | **247** | `clipboard_test` | `cd server; python -m pytest` |
+| Web 端（隔离模式，推荐） | **62** | `clipboard_web_test` | `.\scripts\run_web_tests.ps1` |
+| Web 端（安全模式） | **62** | 当前后端所连的库 | `cd web; pnpm test` |
 
 - **两套测试各用一个库**，可任意并行（后端 pytest 每用例 `drop_all` 重建表，
   共用库时并行会互相删表——实测踩过）
@@ -49,7 +50,8 @@
 后端覆盖：`crud/clipboard.py` 纯函数（时区回退、标题换算、哈希、预览截断）、
 `core/security.py`（哈希、JWT 及伪造/篡改/alg=none 降级攻击）、
 `core/single_worker.py` 与 `core/logging_utils.py`、
-auth 与 clipboard 接口（含**跨用户越权隔离**、去重契约、分页校验）。
+auth 与 clipboard 接口（含**跨用户越权隔离**、去重契约、分页校验）、
+后台管理（**普通用户 403、禁用/重置后旧令牌失效、WS 禁用校验、审计失败回滚**）。
 
 **后端日志（2026-11-04）**：统一走 `app/core/logging_config.py`，默认写
 `server/logs/app.log`（`RotatingFileHandler`，10MB × 5 份，UTF-8），
@@ -359,6 +361,21 @@ Web 端新增 `utils/logger.ts`（开发 `debug`、生产 `warn`，可用 `VITE_
 ---
 
 ## 下一步行动
+
+### 后台管理页（已实现，2026-11-08）
+
+- **实现范围**：同站 `/admin`、用户/剪贴板/邀请码管理、概览统计、操作审计；
+  禁用优先 + 物理删除；应用日志 + `admin_audit_logs` 双审计。
+- **安全 P0 已落地**：WS 禁用即断开、`token_version` 令牌撤销、
+  高危操作审计同事务、管理端不落盘密码、管理员令牌 12 小时。
+- **验证**：后端 247 项、Web 62 项通过；`typecheck` / `build` 通过；浏览器手工验证各视图无报错。
+- **界面调整（2026-11-09）**：概览卡片可跳转、移除 Top 用户、用户角色筛选、
+  筛选条单行、剪贴板详情模态框、日志时间框对齐、搜索框收窄、详情补全字段、
+  分页大小可选（默认 10）、新增邀请码管理（最大使用次数必填）。
+- **设计与步骤**：见 [`admin.md`](admin.md)。
+- **待部署**：迁移 `0003` → 重建镜像 → `scripts.set_admin` → 按 §10.3 启用 IP 白名单/VPN。
+- **未纳入本轮（P1）**：CSP、最后管理员保护、管理员间提权限制、明文查看审计、
+  422 密码回显脱敏、管理 API 限流。
 
 ### v1.0.0 发版收尾（仅文字剪贴板）
 

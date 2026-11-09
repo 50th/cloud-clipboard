@@ -27,7 +27,7 @@ def _check_no_log_control_chars(value: str) -> str:
     return value
 
 
-def _check_password_bytes(value: str) -> str:
+def validate_password_bytes(value: str) -> str:
     """按 UTF-8 字节数校验密码长度。
 
     ⚠️ 不能只靠 `max_length`：Pydantic 的 `max_length` 数的是**字符数**，
@@ -67,8 +67,8 @@ class UserRegisterRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def _validate_password_bytes(cls, value: str) -> str:
-        """按 UTF-8 字节数校验密码长度（见 `_check_password_bytes` 的说明）。"""
-        return _check_password_bytes(value)
+        """按 UTF-8 字节数校验密码长度（见 `validate_password_bytes` 的说明）。"""
+        return validate_password_bytes(value)
 
 
 class UserLoginRequest(BaseModel):
@@ -98,6 +98,7 @@ class UserResponse(BaseModel):
     email: str = Field(..., description="邮箱")
     nickname: str | None = Field(None, description="昵称")
     avatar_url: str | None = Field(None, description="头像地址")
+    is_admin: bool = Field(False, description="是否管理员（仅用于展示，权限仍由服务端校验）")
     created_at: datetime = Field(..., description="注册时间（ISO 8601 UTC）")
 
 

@@ -74,6 +74,7 @@ server/
 | DELETE | `/api/v1/clipboard/items` | 清空 |
 | POST | `/api/v1/dev/reset` | ⚠️ 删数据重建种子（仅 dev 路由开启时） |
 | GET | `/api/v1/dev/db` | 探测当前连的是哪个库（仅 dev 路由开启时） |
+| GET/PATCH/DELETE | `/api/v1/admin/*` | 后台管理：用户 / 剪贴板 / 统计 / 审计（需 `is_admin`，普通用户 403） |
 | WS | `/api/v1/clipboard/ws?token=<JWT>` | 实时同步（协议见 [`../docs/ws-protocol.md`](../docs/ws-protocol.md)） |
 | GET | `/health` | 健康检查 |
 
@@ -101,6 +102,10 @@ $env:PYTHONUTF8 = '1'   # Windows 上跑 Alembic 必需（否则 configparser �
 # --drop 会清库；目标库名不含 test 时需显式 ALLOW_DROP_DEV=1
 
 # 注册邀请码的 create / list / revoke 见 docs/deployment.md 的「邀请码管理」
+
+# 后台管理员：指定 / 撤销（设计与步骤见 ../docs/admin.md）
+.\venv\Scripts\python.exe -m scripts.set_admin --username <用户名>
+.\venv\Scripts\python.exe -m scripts.set_admin --username <用户名> --revoke
 ```
 
 改契约的完整流程见 [`../AGENTS.md`](../AGENTS.md) 的「数据契约」。
