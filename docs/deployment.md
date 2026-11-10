@@ -134,12 +134,13 @@ WebSocket 广播是进程内实现，单机单容器即可满足，无需 Redis�
    脚本会依次：解压源码 → 更新 `IMAGE_TAG` → `docker load` → 备份数据库 →
    `alembic upgrade head` → `up -d` → 健康检查。
 6. **创建首个账号**，并按第 9 节验收。
-7. **（后台管理）设置管理员**：账号创建后执行
+7. **（后台管理）初始化管理员**：一条命令完成建号 + 授权
    ```bash
    cd /opt/cloud-clipboard
-   sudo docker compose -f deploy/docker-compose.prod.yml run --rm api \
-     python -m scripts.set_admin --username <用户名>
+   sudo docker compose -f deploy/docker-compose.prod.yml run --rm -it api \
+     python -m scripts.set_admin --username admin --email admin@example.com --create
    ```
+   已有账号时去掉 `--create` 只做授权；非交互场景追加 `--password-stdin` 并从 stdin 传密码。
    然后按 [`admin.md`](admin.md) 的 §8.3 配置管理端网络边界。
 
 > 首次部署时数据库为空，脚本里的 `pg_dump` 只是空库备份，属正常。
