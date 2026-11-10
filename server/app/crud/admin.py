@@ -468,6 +468,26 @@ async def get_stats(session: AsyncSession) -> dict[str, Any]:
         or 0
     )
 
+    invite_code_count = int(
+        await session.scalar(select(func.count()).select_from(InviteCode)) or 0
+    )
+    active_invite_count = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(InviteCode)
+            .where(
+                *_invite_status_conditions(AdminInviteCodeStatus.ACTIVE)
+            )
+        )
+        or 0
+    )
+    invite_used_count = int(
+        await session.scalar(
+            select(func.coalesce(func.sum(InviteCode.used_count), 0))
+        )
+        or 0
+    )
+
     return {
         "user_count": user_count,
         "active_user_count": active_user_count,
@@ -476,6 +496,9 @@ async def get_stats(session: AsyncSession) -> dict[str, Any]:
         "total_bytes": total_bytes,
         "new_users_7d": new_users_7d,
         "new_items_7d": new_items_7d,
+        "invite_code_count": invite_code_count,
+        "active_invite_count": active_invite_count,
+        "invite_used_count": invite_used_count,
     }
 
 
@@ -630,6 +653,28 @@ async def create_invite_code(
     await session.commit()
     await session.refresh(row)
     return plaintext, row
+
+
+async def list_invite_code_usages(
+    session: AsyncSession,
+    code_id: uuid.UUID,
+    *,
+    page: int,
+    size: int,
+) -> tuple[list[User], int]:
+    """查询通过某邀请码注册的用户，按注册时间倒序。"""
+    conditions = [User.invite_code_id == code_id]
+    total = await session.scalar(
+        select(func.count()).select_from(User).where(*conditions)
+    )
+    rows = await session.scalars(
+        select(User)
+        .where(*conditions)
+        .order_by(User.created_at.desc())
+        .offset((page - 1) * size)
+        .limit(size)
+    )
+    return list(rows), int(total or 0)
 
 
 async def revoke_invite_code(

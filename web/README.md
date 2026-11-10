@@ -42,6 +42,13 @@ Web 端不提供「同步剪贴板」按钮：读取系统剪贴板在移动浏�
 不再出现「右侧输入框」这类只适合桌面的描述。移动端没有独立工程，复用同一套组件、
 store、composables 与 API 封装。
 
+### 后台管理（`/admin`）
+
+同一构建产物按路径分发：用户端在 `/`，管理端在 `/admin`。管理端是独立入口
+（`src/admin/main.ts` + 独立 Pinia），**不使用 vue-router**，用 store 内的视图状态切换；
+令牌只存 `sessionStorage`，不保存密码。页面包括：概览、用户管理、用户详情、
+剪贴板管理、邀请码、操作日志。设计、接口与权限说明见 [`../docs/admin.md`](../docs/admin.md)。
+
 **列表默认按「修改时间」倒序**（下拉框可切「最近修改 / 最早修改」）：
 编辑过的记录会立刻上移。注意后端 `sort_by` 默认是 `created_at`，
 所以 `clipboardStore.fetchItems` **必须显式传 `sort_by: 'updated_at'`**——不传的话
@@ -140,6 +147,7 @@ pnpm run gen:api   # 契约变更后重新生成 src/types/api.d.ts
 - `autosave.test.ts`：纯前端。自动保存**倒计时**必须真实递减、到点保存一次、
   继续输入会重置、`markSaved`/关闭开关会取消，以及「保存过之后再编辑仍应显示待保存」
 - `notice.test.ts`：纯前端，覆盖顶部提示必须**自动消失**
+- `admin.test.ts`：管理端纯逻辑，`/admin` 路径判定与 `sessionStorage` 不可用时的内存兜底
 
 ### 安全守卫（重要）
 
@@ -174,10 +182,12 @@ web/
 ├── package.json                 # imports: #src/* → ./src/*
 ├── pnpm-workspace.yaml          # allowBuilds 放行 esbuild / vue-demi
 ├── scripts/generate-api-types.mjs
-├── tests/                       # e2e / websocket / notice（见上）
+├── tests/                       # e2e / websocket / autosave / notice / logger / admin
 └── src/
-    ├── main.ts                  # 挂载应用 + Pinia + 401 登出回调
+    ├── main.ts                  # 按路径分发：/admin → admin/main，其余 → bootstrap
+    ├── bootstrap.ts             # 用户端启动：Pinia + 401 登出回调 + 挂载 App.vue
     ├── App.vue                  # 登录门禁 + 桌面两栏 / 移动页签 + 实时连接状态
+    ├── admin/                   # 管理端（独立入口、store、api、views、组件与样式）
     ├── api/client.ts            # axios 封装 + token 拦截器 + 401 处理 + 错误归一化
     ├── types/api.d.ts           # 由 openapi-typescript 生成，勿手改
     ├── utils/clipboard.ts       # 剪贴板写入（自身写入标志 + execCommand 降级）
@@ -201,8 +211,8 @@ web/
 
 | 别名 | 解析方式 | 用在哪 |
 |------|----------|--------|
-| `@/*` | Vite `resolve.alias` + tsconfig `paths` | 所有 `.vue` 组件、`main.ts` |
-| `#src/*` | `package.json` 的 `imports` 字段 | store / composables / api / utils |
+| `@/*` | Vite `resolve.alias` + tsconfig `paths` | 所有 `.vue` 组件（含管理端）、`main.ts`、`bootstrap.ts` |
+| `#src/*` | `package.json` 的 `imports` 字段 | store / composables / api / utils（用户端与管理端共用） |
 
 **为什么不全用一套**：Node 直接运行时**不读 tsconfig `paths`**，`@/xxx` 会被当成裸包名报
 `ERR_MODULE_NOT_FOUND`；而 `#src/*` 走 `package.json` 的 `imports`，Node 原生支持，

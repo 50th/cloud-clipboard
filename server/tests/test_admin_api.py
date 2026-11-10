@@ -669,6 +669,72 @@ class TestAdminInviteCodes:
         )
         assert active.json()["total"] == 0
 
+    async def test_使用详情列出注册用户(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        admin_headers, _ = await make_admin(client, session, "admin-invite-usage")
+        monkeypatch.setattr(settings, "REGISTRATION_REQUIRE_INVITE", True)
+        created = (
+            await client.post(
+                "/api/v1/admin/invite-codes",
+                json={"max_uses": 5, "expires_days": 0},
+                headers=admin_headers,
+            )
+        ).json()
+
+        for name in ("usage-one", "usage-two"):
+            response = await client.post(
+                "/api/v1/auth/register",
+                json={
+                    "username": name,
+                    "email": f"{name}@example.com",
+                    "password": PASSWORD,
+                    "invite_code": created["code"],
+                },
+            )
+            assert response.status_code == 201
+
+        usages = await client.get(
+            f"/api/v1/admin/invite-codes/{created['id']}/usages",
+            headers=admin_headers,
+        )
+        assert usages.status_code == 200
+        body = usages.json()
+        assert body["total"] == 2
+        assert {item["username"] for item in body["items"]} == {
+            "usage-one",
+            "usage-two",
+        }
+        assert all(item["email"].endswith("@example.com") for item in body["items"])
+
+        listing = await client.get(
+            "/api/v1/admin/invite-codes", headers=admin_headers
+        )
+        assert listing.json()["items"][0]["used_count"] == 2
+
+        missing = await client.get(
+            f"/api/v1/admin/invite-codes/{uuid.uuid4()}/usages",
+            headers=admin_headers,
+        )
+        assert missing.status_code == 404
+
+    async def test_概览包含邀请码统计(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        admin_headers, _ = await make_admin(client, session, "admin-invite-stats")
+        await client.post(
+            "/api/v1/admin/invite-codes",
+            json={"max_uses": 2, "expires_days": 7},
+            headers=admin_headers,
+        )
+        body = (await client.get("/api/v1/admin/stats", headers=admin_headers)).json()
+        assert body["invite_code_count"] == 1
+        assert body["active_invite_count"] == 1
+        assert body["invite_used_count"] == 0
+
     async def test_撤销邀请码(
         self,
         client: AsyncClient,

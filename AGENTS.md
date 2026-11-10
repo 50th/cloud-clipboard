@@ -11,6 +11,8 @@
 **云剪贴板（Cloud Clipboard）**：多设备间文字剪贴板内容实时同步。
 
 - 当前交付：**Web 端**（桌面两栏 / `≤900px` 单栏页签），用户手动粘贴/输入后保存。
+- 同一构建产物包含 **`/admin` 后台管理**（管理员专用）：用户 / 剪贴板 / 邀请码 / 审计；
+  权限由后端 `is_admin` 校验，前端判断只用于展示。
 - 范围：阶段一只做文字；图片、文件剪贴板属后续阶段。
 - Web 端**不读取系统剪贴板**，也不做后台监听。
 - 移动端复用同一个 SPA；本期只做响应式，不做 PWA 或平板专项。
@@ -35,9 +37,9 @@
 ```
 cloud-clipboard/
 ├── server/   # FastAPI：路由、schemas、crud、services、模型/迁移、pytest
-├── web/      # Vue SPA：桌面/移动响应式、store、composables、测试
+├── web/      # Vue SPA：用户端 + /admin 管理端、store、composables、测试
 ├── harmony/  # 鸿蒙 App（暂停上架，代码保留）
-├── docs/     # api.md / ws-protocol.md / roadmap.md
+├── docs/     # api.md / ws-protocol.md / admin.md / roadmap.md / deployment.md
 ├── infra/    # PostgreSQL 容器
 └── scripts/  # 连通性、局域网启动、Web 隔离测试
 ```
@@ -74,6 +76,8 @@ cloud-clipboard/
 
 - **绝不**硬编码密钥，一律走 `.env`；`.env` 必须被 `.gitignore` 忽略，迁移配置不写连接串。
 - 生产必须 HTTPS / WSS；JWT 密钥生产必须更换。
+- **后台管理端只允许内网 / VPN / IP 白名单访问**（`/admin` 与 `/api/v1/admin/` 同时限制），
+  管理员令牌使用 `ADMIN_JWT_EXPIRE_MINUTES`（默认 12 小时）；普通用户访问管理接口返回 403。
 - 会删数据的开发辅助接口必须由**独立开关**控制，不要复用 `DEBUG`。
 
 ### 4.4 测试隔离
@@ -136,7 +140,7 @@ cloud-clipboard/
 | [`docs/roadmap.md`](docs/roadmap.md) | **进度、踩坑、技术债、环境前置条件、下一步行动** |
 | [`docs/api.md`](docs/api.md) | API 契约摘要（含 OpenAPI 导出脚本） |
 | [`docs/ws-protocol.md`](docs/ws-protocol.md) | WebSocket 协议 |
-| [`docs/admin.md`](docs/admin.md) | 后台管理页设计与开发步骤（用户/剪贴板管理、审计） |
+| [`docs/admin.md`](docs/admin.md) | 后台管理设计与实现（用户/剪贴板/邀请码/审计） |
 | [`docs/deployment.md`](docs/deployment.md) | 生产部署方案（Docker Compose + Nginx） |
 | [`docs/deploy-image-transfer.md`](docs/deploy-image-transfer.md) | 方案 B：本地出包、制品传输与回滚 |
 | [`server/README.md`](server/README.md) | 后端启动、迁移、数据库结构、排错 |

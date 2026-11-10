@@ -6,11 +6,12 @@
 
 ## 项目进度
 
-**v1.0.0 只包含文字剪贴板同步**；图片与文件剪贴板安排在下一版本（v1.1）。
+**已发布 v1.0.0（文字剪贴板）**；后台管理与图片 / 文件剪贴板安排在下一版本。
 
 | 阶段 | 内容 | 版本 | 状态 |
 |------|------|------|------|
 | 阶段一 | 文字：保存 / 查询 / 删除 + 实时同步 + 登录 + 去重 | **v1.0.0** | ✅ 已完成，已部署生产 |
+| 后台管理 | `/admin`：用户 / 剪贴板 / 邀请码管理 + 审计 | 随下个版本 | ✅ 已完成开发，待部署 |
 | 阶段二 | 图片 + 对象存储 | **v1.1（下一版本）** | 📋 计划中 |
 | 阶段三 | 文件 + 体验优化 | **v1.1（下一版本）** | 📋 计划中 |
 | 阶段四 | 端到端加密 + 生产加固 | 后续 | 📋 计划中 |
@@ -18,6 +19,7 @@
 | 客户端 | 状态 |
 |--------|------|
 | Web 端 | ✅ 桌面 + 移动自适应；登录、手动粘贴/输入、保存、历史、复制、多设备实时同步 |
+| 后台管理 | ✅ 同站 `/admin`，管理员登录；概览、用户、剪贴板、邀请码、操作日志 |
 | 鸿蒙 App | ⏸️ 暂停上架；代码保留且编译通过，安装运行仍需签名，见 [`harmony/README.md`](harmony/README.md) |
 
 细节（含踩坑记录与技术债）见 [`docs/roadmap.md`](docs/roadmap.md)。
@@ -43,6 +45,7 @@
 ```
 
 鸿蒙 App 已暂停上架，代码保留在 [`harmony/`](harmony/README.md)，不在当前交付架构内。
+后台管理 `/admin` 复用同一个 Web 构建产物，由后端 `is_admin` 权限控制，详见 [`docs/admin.md`](docs/admin.md)。
 Redis 与 MinIO 属后续阶段，本阶段**不要安装**（见 [`docs/roadmap.md`](docs/roadmap.md)）。
 
 ---
@@ -102,6 +105,16 @@ pnpm dev                              # http://127.0.0.1:5273
 （口令由 `server/.env` 的 `DEMO_PASSWORD` 控制）。
 **生产环境不播种演示账号**，注册需要邀请码（见 [`docs/deployment.md`](docs/deployment.md)）。
 
+后台管理需要管理员账号，本地首次使用先执行：
+
+```powershell
+cd server
+.\venv\Scripts\python.exe -m scripts.set_admin --username demo
+```
+
+然后访问 <http://127.0.0.1:5273/admin> 登录。管理端 token 只存 `sessionStorage`，
+有效期由 `ADMIN_JWT_EXPIRE_MINUTES` 控制（默认 12 小时）。
+
 ---
 
 ## 使用流程
@@ -122,12 +135,12 @@ pnpm dev                              # http://127.0.0.1:5273
 ## 测试
 
 ```powershell
-# 后端：220 项（纯函数 + 接口集成，打独立测试库 clipboard_test）
+# 后端：纯函数 + 接口集成，打独立测试库 clipboard_test
 cd server
 $env:PYTHONUTF8='1'
 .\venv\Scripts\python.exe -m pytest
 
-# Web 端隔离模式（推荐，60 项）：自动起一个指向测试库的独立后端，跑完自动停
+# Web 端隔离模式（推荐）：自动起一个指向测试库的独立后端，跑完自动停
 .\scripts\run_web_tests.ps1
 
 # Web 端安全模式：打当前后端，不删除任何既有数据
@@ -136,8 +149,9 @@ pnpm test
 pnpm typecheck
 ```
 
-> 两套测试各用独立测试库（`clipboard_test` / `clipboard_web_test`）；
-> 数据库隔离细节与安全守卫见 [`server/README.md`](server/README.md)、[`web/README.md`](web/README.md)。
+> 两套测试各用独立测试库（`clipboard_test` / `clipboard_web_test`），隔离细节见
+> [`server/README.md`](server/README.md)、[`web/README.md`](web/README.md)；
+> 当前数量与最近验证结果统一记在 [`docs/roadmap.md`](docs/roadmap.md) 的「测试现状」。
 
 ---
 
@@ -148,6 +162,7 @@ pnpm typecheck
 | [`AGENTS.md`](AGENTS.md) | 项目约定：技术栈、数据契约、开发规范与顺序 |
 | [`docs/roadmap.md`](docs/roadmap.md) | **当前进度、踩坑记录、技术债、下一步行动** |
 | [`docs/api.md`](docs/api.md) | API 契约摘要 |
+| [`docs/admin.md`](docs/admin.md) | 后台管理设计与实现（用户 / 剪贴板 / 邀请码 / 审计） |
 | [`docs/ws-protocol.md`](docs/ws-protocol.md) | WebSocket 协议 |
 | [`docs/deployment.md`](docs/deployment.md) | 生产部署方案（Docker Compose + Nginx） |
 | [`docs/deploy-image-transfer.md`](docs/deploy-image-transfer.md) | 方案 B：本地出包、制品传输与回滚 |

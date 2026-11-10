@@ -40,6 +40,9 @@ const cards: {
   { key: 'item_count', label: '剪贴板条数', view: 'clipboards' },
   { key: 'new_users_7d', label: '近 7 天新增用户', view: 'users' },
   { key: 'new_items_7d', label: '近 7 天新增记录', view: 'clipboards' },
+  { key: 'invite_code_count', label: '邀请码总数', view: 'inviteCodes' },
+  { key: 'active_invite_count', label: '可用邀请码', view: 'inviteCodes' },
+  { key: 'invite_used_count', label: '邀请码使用次数', view: 'inviteCodes' },
 ]
 
 function valueOf(key: (typeof cards)[number]['key']): number {

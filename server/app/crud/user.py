@@ -41,6 +41,7 @@ async def create(
     password_hash: str | None = None,
     nickname: str | None = None,
     user_id: uuid.UUID | None = None,
+    invite_code_id: uuid.UUID | None = None,
 ) -> User:
     """创建用户并提交。"""
     user = User(
@@ -49,6 +50,7 @@ async def create(
         email=email,
         password_hash=password_hash,
         nickname=nickname,
+        invite_code_id=invite_code_id,
     )
     session.add(user)
     await session.commit()

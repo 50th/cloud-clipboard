@@ -299,6 +299,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/invite-codes/{code_id}/usages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 邀请码使用详情
+         * @description 列出通过该邀请码注册的用户，按注册时间倒序。
+         */
+        get: operations["list_invite_code_usages_api_v1_admin_invite_codes__code_id__usages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dev/reset": {
         parameters: {
             query?: never;
@@ -620,6 +640,42 @@ export interface components {
          */
         AdminInviteCodeStatus: "all" | "active" | "exhausted" | "expired" | "revoked";
         /**
+         * AdminInviteCodeUsage
+         * @description 邀请码使用详情：通过该码注册的用户。
+         */
+        AdminInviteCodeUsage: {
+            /** User Id */
+            user_id: string;
+            /** Username */
+            username: string;
+            /** Email */
+            email: string;
+            /**
+             * Registered At
+             * Format: date-time
+             */
+            registered_at: string;
+        };
+        /**
+         * AdminInviteCodeUsageList
+         * @description 邀请码使用详情分页列表。
+         */
+        AdminInviteCodeUsageList: {
+            /**
+             * Items
+             * @description 当前页数据
+             */
+            items: components["schemas"]["AdminInviteCodeUsage"][];
+            /** Page */
+            page: number;
+            /** Size */
+            size: number;
+            /** Total */
+            total: number;
+            /** Pages */
+            pages: number;
+        };
+        /**
          * AdminPasswordResetRequest
          * @description 重置密码请求。
          */
@@ -649,6 +705,21 @@ export interface components {
             new_users_7d: number;
             /** New Items 7D */
             new_items_7d: number;
+            /**
+             * Invite Code Count
+             * @description 邀请码总数
+             */
+            invite_code_count: number;
+            /**
+             * Active Invite Count
+             * @description 当前可用的邀请码数
+             */
+            active_invite_count: number;
+            /**
+             * Invite Used Count
+             * @description 邀请码累计使用次数
+             */
+            invite_used_count: number;
         };
         /**
          * AdminUserList
@@ -2026,6 +2097,49 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminInviteCodeResponse"];
+                };
+            };
+            /** @description 邀请码不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_invite_code_usages_api_v1_admin_invite_codes__code_id__usages_get: {
+        parameters: {
+            query?: {
+                /** @description 页码，从 1 开始 */
+                page?: number;
+                /** @description 每页条数，最大 100 */
+                size?: number;
+            };
+            header?: never;
+            path: {
+                code_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminInviteCodeUsageList"];
                 };
             };
             /** @description 邀请码不存在 */
