@@ -195,9 +195,13 @@ async def register(
     payload: UserRegisterRequest, session: DbSession, request: Request
 ) -> AuthResponse:
     """注册新用户：先校验邀请码，再校验用户名与邮箱唯一性。"""
+    invite_code_id = None
     if settings.REGISTRATION_REQUIRE_INVITE:
         provided = (payload.invite_code or "").strip()
-        if not provided or await invite_crud.consume_code(session, provided) is None:
+        invite_row = (
+            await invite_crud.consume_code(session, provided) if provided else None
+        )
+        if invite_row is None:
             # 只记来源与原因，绝不记录邀请码本身
             logger.warning(
                 "注册被拒: reason=invalid_invite_code client=%s", _client_ip(request)
@@ -205,6 +209,7 @@ async def register(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="邀请码无效"
             )
+        invite_code_id = invite_row.id
 
     if await user_crud.get_by_username(session, payload.username) is not None:
         raise HTTPException(
@@ -222,6 +227,7 @@ async def register(
         username=payload.username,
         email=payload.email,
         password_hash=security.hash_password(payload.password),
+        invite_code_id=invite_code_id,
     )
     logger.info(
         "注册成功: user=%s id=%s", safe_log_value(user.username), user.id

@@ -6,6 +6,7 @@ import {
   type AdminInviteCode,
   type AdminInviteCodeList,
   type AdminInviteCodeStatus,
+  type AdminInviteCodeUsageList,
 } from '@/admin/api/inviteCodes.ts'
 import Pagination from '@/admin/components/Pagination.vue'
 import ModalDialog from '@/admin/components/ModalDialog.vue'
@@ -28,6 +29,12 @@ const form = ref({ label: '', maxUses: 1, expiresDays: 7 })
 
 const createdCode = ref<string | null>(null)
 const copied = ref(false)
+
+const usageCode = ref<AdminInviteCode | null>(null)
+const usages = ref<AdminInviteCodeUsageList | null>(null)
+const usagePage = ref(1)
+const usageSize = ref(10)
+const usageLoading = ref(false)
 
 const statusOptions: { value: AdminInviteCodeStatus; label: string }[] = [
   { value: 'all', label: '全部状态' },
@@ -154,6 +161,47 @@ function closeCreated(): void {
   void load()
 }
 
+async function loadUsages(): Promise<void> {
+  if (!usageCode.value) {
+    return
+  }
+  usageLoading.value = true
+  error.value = ''
+  try {
+    usages.value = await adminInviteCodesApi.usages(usageCode.value.id, {
+      page: usagePage.value,
+      size: usageSize.value,
+    })
+  } catch (err) {
+    error.value = getErrorMessage(err)
+  } finally {
+    usageLoading.value = false
+  }
+}
+
+async function openUsages(item: AdminInviteCode): Promise<void> {
+  usageCode.value = item
+  usagePage.value = 1
+  usages.value = null
+  await loadUsages()
+}
+
+function changeUsagePage(next: number): void {
+  usagePage.value = next
+  void loadUsages()
+}
+
+function changeUsageSize(next: number): void {
+  usageSize.value = next
+  usagePage.value = 1
+  void loadUsages()
+}
+
+function closeUsages(): void {
+  usageCode.value = null
+  usages.value = null
+}
+
 async function revoke(item: AdminInviteCode): Promise<void> {
   if (
     !window.confirm(
@@ -237,6 +285,13 @@ onMounted(load)
               <div class="admin-table__actions">
                 <button
                   type="button"
+                  class="btn btn--small"
+                  @click="openUsages(item)"
+                >
+                  使用详情
+                </button>
+                <button
+                  type="button"
                   class="btn btn--small btn--danger"
                   :disabled="busyId === item.id || item.status === 'revoked'"
                   @click="revoke(item)"
@@ -317,6 +372,53 @@ onMounted(load)
         {{ copied ? '已复制' : '复制' }}
       </button>
       <button type="button" class="btn btn--small" @click="closeCreated">
+        关闭
+      </button>
+    </template>
+  </ModalDialog>
+
+  <ModalDialog
+    :open="Boolean(usageCode)"
+    :title="`使用详情 · ${usageCode?.code_hint ?? ''}`"
+    @close="closeUsages"
+  >
+    <p class="admin-form__hint">
+      共 {{ usages?.total ?? 0 }} 个用户通过该邀请码注册（已用
+      {{ usageCode?.used_count ?? 0 }} 次）。
+    </p>
+    <div v-if="usages && usages.items.length" class="admin-table__wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>用户名</th>
+            <th>邮箱</th>
+            <th>注册时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="usage in usages.items" :key="usage.user_id">
+            <td>{{ usage.username }}</td>
+            <td>{{ usage.email }}</td>
+            <td>{{ formatDate(usage.registered_at) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p v-else-if="!usageLoading" class="admin-empty">
+      暂无用户通过该邀请码注册
+    </p>
+
+    <Pagination
+      :page="usagePage"
+      :pages="usages?.pages ?? 0"
+      :total="usages?.total ?? 0"
+      :size="usageSize"
+      @update:page="changeUsagePage"
+      @update:size="changeUsageSize"
+    />
+
+    <template #footer>
+      <button type="button" class="btn btn--small" @click="closeUsages">
         关闭
       </button>
     </template>

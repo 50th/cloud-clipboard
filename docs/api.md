@@ -35,7 +35,7 @@ cd server
 | PATCH | `/api/v1/clipboard/items/{id}` | 更新（只改显式传入的字段）。内容与**另一条**重复时返回 `409` |
 | DELETE | `/api/v1/clipboard/items/{id}` | 删除单条 |
 | DELETE | `/api/v1/clipboard/items` | 清空 |
-| GET | `/api/v1/admin/stats` | 后台概览：用户 / 剪贴板 / 总占用 / 近 7 天新增 |
+| GET | `/api/v1/admin/stats` | 后台概览：用户 / 剪贴板 / 总占用 / 近 7 天新增 / 邀请码总数、可用数、累计使用次数 |
 | GET | `/api/v1/admin/users` | 用户分页：搜索用户名/邮箱、状态筛选、角色筛选、排序 |
 | GET | `/api/v1/admin/users/{id}` | 用户详情与剪贴板统计 |
 | PATCH | `/api/v1/admin/users/{id}` | 修改昵称 / 邮箱 / 启用状态 / 管理员标记 |
@@ -49,6 +49,7 @@ cd server
 | GET | `/api/v1/admin/invite-codes` | 邀请码分页；`status=all/active/exhausted/expired/revoked` |
 | POST | `/api/v1/admin/invite-codes` | 生成邀请码；`max_uses` 必填，明文仅返回一次 |
 | POST | `/api/v1/admin/invite-codes/{id}/revoke` | 撤销邀请码 |
+| GET | `/api/v1/admin/invite-codes/{id}/usages` | 使用详情：通过该码注册的用户，分页 |
 | POST | `/api/v1/dev/reset` | ⚠️ 删数据并重建种子（仅 `ENABLE_DEV_ROUTES=true` 时注册） |
 | GET | `/api/v1/dev/db` | 探测当前连接的数据库（同上，仅开发路由开启时） |
 | GET | `/health` / `/` | 健康检查 / 服务信息 |
@@ -81,7 +82,8 @@ Authorization: Bearer <JWT>
 - `password` 上限是 **72 字节**（不是字符数）：24 个汉字即达上限，超出返回 `422`
 - `username` 不允许换行等控制字符（避免日志注入）；注册为 3-32 字符，登录（用户名或邮箱）上限 254
 - 注册可选携带 `invite_code`：服务端开启 `REGISTRATION_REQUIRE_INVITE` 时，必须是
-  `invite_codes` 表中未过期、未撤销且未用尽的邀请码，否则返回 `403`
+  `invite_codes` 表中未过期、未撤销且未用尽的邀请码，否则返回 `403`；
+  注册成功后会把 `users.invite_code_id` 指向该码，供后台查询使用详情
 - 登录失败时"用户不存在"与"密码错误"返回**同一条提示**，避免枚举出已注册用户名
 
 ---

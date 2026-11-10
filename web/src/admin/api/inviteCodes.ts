@@ -8,6 +8,10 @@ export type AdminInviteCodeCreated =
   components['schemas']['AdminInviteCodeCreated']
 export type AdminInviteCodeList = components['schemas']['AdminInviteCodeList']
 export type AdminInviteCodeStatus = components['schemas']['AdminInviteCodeStatus']
+export type AdminInviteCodeUsage =
+  components['schemas']['AdminInviteCodeUsage']
+export type AdminInviteCodeUsageList =
+  components['schemas']['AdminInviteCodeUsageList']
 
 export interface AdminInviteCodeQuery {
   page?: number
@@ -46,6 +50,18 @@ export const adminInviteCodesApi = {
   revoke: async (id: string): Promise<AdminInviteCode> => {
     const { data } = await adminHttp.post<AdminInviteCode>(
       `/admin/invite-codes/${id}/revoke`,
+    )
+    return data
+  },
+
+  /** 使用详情：通过该邀请码注册的用户列表。 */
+  usages: async (
+    id: string,
+    params: { page?: number; size?: number } = {},
+  ): Promise<AdminInviteCodeUsageList> => {
+    const { data } = await adminHttp.get<AdminInviteCodeUsageList>(
+      `/admin/invite-codes/${id}/usages`,
+      { params },
     )
     return data
   },

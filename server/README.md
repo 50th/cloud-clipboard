@@ -18,12 +18,13 @@ server/
 │   ├── db/
 │   │   ├── base.py          # 声明式 Base + 约束命名约定
 │   │   ├── session.py       # 异步引擎 / session 工厂 / get_db 依赖 / ping
-│   │   └── models/          # User、ClipboardItem
-│   ├── schemas/             # 数据契约（唯一事实来源）
-│   ├── crud/                # 数据访问层（异步，路由不写 SQL）
+│   │   └── models/          # User、ClipboardItem、InviteCode、AdminAuditLog
+│   ├── schemas/             # 数据契约（唯一事实来源，含 admin.py）
+│   ├── crud/                # 数据访问层（路由不写 SQL；admin.py / audit.py 供后台）
 │   ├── routers/
-│   │   ├── auth.py          # 注册 / 登录 / 当前用户
+│   │   ├── auth.py          # 注册 / 登录 / 当前用户 / 管理员依赖
 │   │   ├── clipboard.py     # 剪贴板 CRUD + 广播
+│   │   ├── admin.py         # 后台管理：用户 / 剪贴板 / 邀请码 / 统计 / 审计
 │   │   ├── ws.py            # WebSocket 端点
 │   │   └── dev.py           # 仅 ENABLE_DEV_ROUTES=true 时注册
 │   └── services/
@@ -31,6 +32,8 @@ server/
 │       └── events.py        # 事件序列化（与 REST 共用）
 ├── alembic/                 # 迁移（env.py 走异步引擎）
 ├── scripts/init_db.py       # 建表 + 演示账号 + 种子数据
+├── scripts/invite_code.py   # 邀请码 CLI（create / list / revoke）
+├── scripts/set_admin.py     # 设置 / 撤销后台管理员
 ├── scripts/ensure_database.py  # 按需建库（测试用，幂等）
 ├── tests/                   # pytest（打 clipboard_test 库）
 ├── alembic.ini              # ⚠️ 保持纯 ASCII
@@ -52,9 +55,23 @@ server/
 
 **表**
 
-- `users`：id / username / email / password_hash / nickname / avatar_url / created_at
+- `users`：id / username / email / password_hash / nickname / avatar_url /
+  `is_admin` / `is_active` / `token_version` / `last_login_at` / `invite_code_id`(FK) / created_at
 - `clipboard_items`：id / user_id(FK) / title / content_type / content / preview /
   metadata(JSONB) / `content_hash` / created_at / updated_at
+- `invite_codes`：id / `code_hash`（SHA-256）/ `code_hint` / label / max_uses /
+  used_count / expires_at / revoked_at / last_used_at / created_at
+- `admin_audit_logs`：id / admin_id(FK, 删管理员后置空) / admin_username / action /
+  target_type / target_id / detail(JSONB) / created_at
+
+**迁移**
+
+| revision | 内容 |
+|----------|------|
+| `0001_initial` | users + clipboard_items |
+| `0002_invite_codes` | invite_codes |
+| `0003_admin_users_and_audit_logs` | 用户管理列 + admin_audit_logs |
+| `0004_user_invite_code` | users.invite_code_id（邀请码使用详情） |
 
 **去重**：`UNIQUE(user_id, content_hash)` —— 同一用户提交相同 `content` 命中同一行，
 只刷新 `updated_at`、不新建记录；`content_hash` **不对外暴露**。
@@ -74,7 +91,7 @@ server/
 | DELETE | `/api/v1/clipboard/items` | 清空 |
 | POST | `/api/v1/dev/reset` | ⚠️ 删数据重建种子（仅 dev 路由开启时） |
 | GET | `/api/v1/dev/db` | 探测当前连的是哪个库（仅 dev 路由开启时） |
-| GET/PATCH/DELETE | `/api/v1/admin/*` | 后台管理：用户 / 剪贴板 / 统计 / 审计（需 `is_admin`，普通用户 403） |
+| GET/PATCH/DELETE | `/api/v1/admin/*` | 后台管理：用户 / 剪贴板 / 邀请码 / 统计 / 审计（需 `is_admin`，普通用户 403；详见 [`../docs/admin.md`](../docs/admin.md)） |
 | WS | `/api/v1/clipboard/ws?token=<JWT>` | 实时同步（协议见 [`../docs/ws-protocol.md`](../docs/ws-protocol.md)） |
 | GET | `/health` | 健康检查 |
 
@@ -101,7 +118,10 @@ $env:PYTHONUTF8 = '1'   # Windows 上跑 Alembic 必需（否则 configparser �
 .\venv\Scripts\python.exe -m scripts.init_db --no-seed  # 只建表
 # --drop 会清库；目标库名不含 test 时需显式 ALLOW_DROP_DEV=1
 
-# 注册邀请码的 create / list / revoke 见 docs/deployment.md 的「邀请码管理」
+# 注册邀请码（也可以直接用后台 /admin 的「邀请码」页管理）
+.\venv\Scripts\python.exe -m scripts.invite_code create --days 7 --max-uses 1 --label "alice"
+.\venv\Scripts\python.exe -m scripts.invite_code list
+.\venv\Scripts\python.exe -m scripts.invite_code revoke --hint ABCD1234
 
 # 后台管理员：指定 / 撤销（设计与步骤见 ../docs/admin.md）
 .\venv\Scripts\python.exe -m scripts.set_admin --username <用户名>

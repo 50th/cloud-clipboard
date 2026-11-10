@@ -8,8 +8,9 @@
 > 服务器构建保留为回退路径。
 > 进度与验收记录仍以 [`roadmap.md`](roadmap.md) 为准。
 
-**最后更新**：2026-11-08
-**目标版本**：v1.0.0（仅文字剪贴板）
+**最后更新**：2026-11-10
+**当前线上版本**：v1.0.0（文字剪贴板）
+**待发布**：后台管理 `/admin`（迁移 `0003` + `0004`，需 `scripts.set_admin` 指定管理员）
 
 ## 1. 已确认的前提
 
@@ -94,6 +95,7 @@ WebSocket 广播是进程内实现，单机单容器即可满足，无需 Redis�
 | `CORS_ORIGINS` | 站点自身 origin | 同源反代下可保持最小列表 |
 | `DEMO_PASSWORD` | 不播种 | 生产**不执行**带种子数据的初始化 |
 | `REGISTRATION_REQUIRE_INVITE` | `true` | 开启后注册必须使用 `invite_codes` 表中的有效邀请码 |
+| `ADMIN_JWT_EXPIRE_MINUTES` | `720` | 管理员令牌有效期（默认 12 小时），比普通用户更短 |
 
 `deploy/.env` 额外变量：
 
@@ -113,7 +115,7 @@ WebSocket 广播是进程内实现，单机单容器即可满足，无需 Redis�
 1. **初始化服务器**：Docker Engine、镜像源；云安全组放行站点端口。
 2. **部署源码与配置**：
    - 把已提交源码解压到 `/opt/cloud-clipboard`（`git archive` 或 `scp`）；
-   - 按第 5 节创建 `server/.env`；
+   - 按第 5 节创建 `server/.env`；如需后台管理，设置 `ADMIN_JWT_EXPIRE_MINUTES`；
    - 复制 `deploy/.env.example` 为 `deploy/.env`，填写 `POSTGRES_*`、`IMAGE_TAG`、
      `VITE_API_BASE_URL`；
    - 生成自签证书（见本节末尾）。
@@ -123,15 +125,22 @@ WebSocket 广播是进程内实现，单机单容器即可满足，无需 Redis�
    ```
 4. **本地出包**：
    ```powershell
-   .\scripts\build_release.ps1 -ApiBaseUrl "https://<服务器IP>:8443" -Tag "1.0.0"
+   .\scripts\build_release.ps1 -ApiBaseUrl "https://<服务器IP>:8443" -Tag "<new-tag>"
    ```
 5. **上传并部署**：
    ```powershell
-   .\scripts\deploy_release.ps1 -Tag "1.0.0"
+   .\scripts\deploy_release.ps1 -Tag "<new-tag>"
    ```
    脚本会依次：解压源码 → 更新 `IMAGE_TAG` → `docker load` → 备份数据库 →
    `alembic upgrade head` → `up -d` → 健康检查。
 6. **创建首个账号**，并按第 9 节验收。
+7. **（后台管理）设置管理员**：账号创建后执行
+   ```bash
+   cd /opt/cloud-clipboard
+   sudo docker compose -f deploy/docker-compose.prod.yml run --rm api \
+     python -m scripts.set_admin --username <用户名>
+   ```
+   然后按 [`admin.md`](admin.md) 的 §8.3 配置管理端网络边界。
 
 > 首次部署时数据库为空，脚本里的 `pg_dump` 只是空库备份，属正常。
 
@@ -206,16 +215,19 @@ chmod 600 deploy/certs/privkey.pem
 6. 「复制」按钮可用（HTTPS 或 `execCommand` 降级路径）。
 7. 后端日志中 WS 令牌显示为 `token=***`；Nginx 访问日志无明文 token。
 8. 重启服务器后容器自动拉起，数据仍在。
+9. （后台管理）`scripts.set_admin` 后 `/admin` 可登录；普通用户访问返回 403；
+   非白名单网络无法访问管理端与 `/api/v1/admin/`。
 
 ## 10. 运维
 
 ### 邀请码管理
 
 邀请码存放在 `invite_codes` 表，明文只在生成时输出一次（库里只存哈希）。
-默认有效期 7 天、最多使用 1 次；`--days 0` 表示不过期，`--max-uses 0` 表示不限次数。
+推荐用后台 `/admin` 的「邀请码」页：可设置**最大使用次数**、有效期、查看使用详情与撤销。
+CLI 作为兜底（生产容器内执行）：
 
 ```bash
-# 生成（可加 --label 备注邀请对象）
+# 生成（--label 备注邀请对象；--max-uses 0 表示不限次数）
 sudo docker compose -f deploy/docker-compose.prod.yml run --rm api \
   python -m scripts.invite_code create --days 7 --max-uses 1 --label "alice"
 
@@ -244,11 +256,11 @@ sudo docker compose -f deploy/docker-compose.prod.yml run --rm api \
 1. 本地跑完后端 + Web 测试。
 2. 出包：
    ```powershell
-   .\scripts\build_release.ps1 -ApiBaseUrl "https://43.134.121.173:8443" -Tag "1.1.0"
+   .\scripts\build_release.ps1 -ApiBaseUrl "https://<服务器IP>:8443" -Tag "<new-tag>"
    ```
 3. 部署：
    ```powershell
-   .\scripts\deploy_release.ps1 -Tag "1.1.0"
+   .\scripts\deploy_release.ps1 -Tag "<new-tag>"
    ```
 4. 脚本自动完成备份、迁移、切换与健康检查。
 
@@ -270,6 +282,8 @@ sudo docker compose -f deploy/docker-compose.prod.yml run --rm api \
 - 容器以非 root 运行，`restart: unless-stopped`。
 - 确认 `server/.env` 与 `deploy/.env` 权限 600 且未被提交到仓库。
 - 生产关闭 `DEBUG` 与 `ENABLE_DEV_ROUTES`，Nginx 再兜底拦截 dev 路由与文档入口。
+- **后台管理端仅允许内网 / VPN / IP 白名单访问**（`/admin` 与 `/api/v1/admin/` 同时限制），
+  具体配置见 [`admin.md`](admin.md) 的 §8.3；管理端令牌默认 12 小时。
 - **本次实际部署按用户要求暂未修改系统安全配置**（SSH 密码登录与 UFW 保持现状），
   上线后建议尽快补做：禁用 SSH 密码登录、启用 UFW、安装 fail2ban。
 

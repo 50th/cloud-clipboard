@@ -159,6 +159,9 @@ class AdminStatsResponse(BaseModel):
     total_bytes: int = Field(..., ge=0)
     new_users_7d: int = Field(..., ge=0)
     new_items_7d: int = Field(..., ge=0)
+    invite_code_count: int = Field(..., ge=0, description="邀请码总数")
+    active_invite_count: int = Field(..., ge=0, description="当前可用的邀请码数")
+    invite_used_count: int = Field(..., ge=0, description="邀请码累计使用次数")
 
 
 class AdminInviteCodeCreate(BaseModel):
@@ -236,6 +239,49 @@ class AdminInviteCodeListParams:
         self.page = page
         self.size = size
         self.status = status
+
+
+class AdminInviteCodeUsage(BaseModel):
+    """邀请码使用详情：通过该码注册的用户。"""
+
+    user_id: str
+    username: str
+    email: str
+    registered_at: datetime
+
+
+class AdminInviteCodeUsageList(BaseModel):
+    """邀请码使用详情分页列表。"""
+
+    items: list[AdminInviteCodeUsage] = Field(..., description="当前页数据")
+    page: int = Field(..., ge=1)
+    size: int = Field(..., ge=1)
+    total: int = Field(..., ge=0)
+    pages: int = Field(..., ge=0)
+
+    @classmethod
+    def build(
+        cls,
+        items: list[AdminInviteCodeUsage],
+        *,
+        page: int,
+        size: int,
+        total: int,
+    ) -> "AdminInviteCodeUsageList":
+        pages = (total + size - 1) // size if total > 0 else 0
+        return cls(items=items, page=page, size=size, total=total, pages=pages)
+
+
+class AdminInviteCodeUsageListParams:
+    """`GET /admin/invite-codes/{id}/usages` 查询参数。"""
+
+    def __init__(
+        self,
+        page: Annotated[int, Query(ge=1, description="页码，从 1 开始")] = 1,
+        size: Annotated[int, Query(ge=1, le=100, description="每页条数，最大 100")] = 20,
+    ) -> None:
+        self.page = page
+        self.size = size
 
 
 class AdminAuditLogResponse(BaseModel):

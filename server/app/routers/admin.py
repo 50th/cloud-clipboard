@@ -30,6 +30,9 @@ from app.schemas.admin import (
     AdminInviteCodeList,
     AdminInviteCodeListParams,
     AdminInviteCodeResponse,
+    AdminInviteCodeUsage,
+    AdminInviteCodeUsageList,
+    AdminInviteCodeUsageListParams,
     AdminPasswordResetRequest,
     AdminStatsResponse,
     AdminUserList,
@@ -513,3 +516,44 @@ async def revoke_invite_code(
         "admin revoke invite: admin=%s hint=%s", current_admin.id, row.code_hint
     )
     return _to_invite_response(row)
+
+
+@router.get(
+    "/invite-codes/{code_id}/usages",
+    response_model=AdminInviteCodeUsageList,
+    summary="邀请码使用详情",
+    description="列出通过该邀请码注册的用户，按注册时间倒序。",
+    responses={404: {"description": "邀请码不存在"}},
+)
+async def list_invite_code_usages(
+    code_id: uuid.UUID,
+    session: DbSession,
+    _current_admin: AdminUser,
+    params: Annotated[AdminInviteCodeUsageListParams, Depends()],
+) -> AdminInviteCodeUsageList:
+    code = await session.get(InviteCode, code_id)
+    if code is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"邀请码不存在: {code_id}",
+        )
+    rows, total = await admin_crud.list_invite_code_usages(
+        session,
+        code_id,
+        page=params.page,
+        size=params.size,
+    )
+    return AdminInviteCodeUsageList.build(
+        [
+            AdminInviteCodeUsage(
+                user_id=str(user.id),
+                username=user.username,
+                email=user.email,
+                registered_at=user.created_at,
+            )
+            for user in rows
+        ],
+        page=params.page,
+        size=params.size,
+        total=total,
+    )
