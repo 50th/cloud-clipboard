@@ -105,11 +105,17 @@ pnpm dev                              # http://127.0.0.1:5273
 （口令由 `server/.env` 的 `DEMO_PASSWORD` 控制）。
 **生产环境不播种演示账号**，注册需要邀请码（见 [`docs/deployment.md`](docs/deployment.md)）。
 
-后台管理需要管理员账号，本地首次使用先执行：
+后台管理需要管理员账号。本地已有 `demo` 时直接授权：
 
 ```powershell
 cd server
 .\venv\Scripts\python.exe -m scripts.set_admin --username demo
+```
+
+没有可用账号时，一条命令建号并授权：
+
+```powershell
+.\venv\Scripts\python.exe -m scripts.set_admin --username admin --email admin@example.com --create
 ```
 
 然后访问 <http://127.0.0.1:5273/admin> 登录。管理端 token 只存 `sessionStorage`，

@@ -105,6 +105,7 @@
 | action | target_type | 触发点 |
 |--------|-------------|--------|
 | `admin.login` | - | 管理员成功登录 |
+| `user.create` | `user` | CLI 创建管理员账号 |
 | `user.update` | `user` | 修改昵称/邮箱 |
 | `user.enable` / `user.disable` | `user` | 启用 / 禁用账号 |
 | `user.promote` / `user.demote` | `user` | 设为 / 取消管理员 |
@@ -206,14 +207,17 @@
 .\scripts\deploy_release.ps1 -Tag "<new-tag>"
 ```
 
-3. 首次部署后设置管理员：
+3. 首次部署后初始化管理员（**一条命令完成建号 + 授权**）：
 
-```powershell
-ssh ubuntu@43.134.121.173
+```bash
 cd /opt/cloud-clipboard
-docker compose -f deploy/docker-compose.prod.yml run --rm api \
-  python -m scripts.set_admin --username <用户名>
+sudo docker compose -f deploy/docker-compose.prod.yml run --rm -it api \
+  python -m scripts.set_admin --username admin --email admin@example.com --create
 ```
+
+- 交互式输入密码；非交互场景用 `printf '密码' | ... --create --password-stdin`
+- 账号已存在时退化为「只授权」，可省略 `--create`
+- 密码不接受命令行参数，避免进入 shell 历史
 
 4. 访问 `https://<host>:8443/admin`，用管理员账号完成一次查看/禁用/删除验证。
 

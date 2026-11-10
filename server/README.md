@@ -123,9 +123,11 @@ $env:PYTHONUTF8 = '1'   # Windows 上跑 Alembic 必需（否则 configparser �
 .\venv\Scripts\python.exe -m scripts.invite_code list
 .\venv\Scripts\python.exe -m scripts.invite_code revoke --hint ABCD1234
 
-# 后台管理员：指定 / 撤销（设计与步骤见 ../docs/admin.md）
+# 后台管理员：创建并授权 / 仅授权 / 撤销（设计与步骤见 ../docs/admin.md）
+.\venv\Scripts\python.exe -m scripts.set_admin --username <用户名> --email <邮箱> --create
 .\venv\Scripts\python.exe -m scripts.set_admin --username <用户名>
 .\venv\Scripts\python.exe -m scripts.set_admin --username <用户名> --revoke
+# 非交互：'密码' | ... --username <用户名> --email <邮箱> --create --password-stdin
 ```
 
 改契约的完整流程见 [`../AGENTS.md`](../AGENTS.md) 的「数据契约」。
