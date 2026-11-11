@@ -28,6 +28,7 @@ cd server
 |------|------|------|
 | POST | `/api/v1/auth/register` | 注册：先校验邀请码，再落库并校验唯一性，**直接返回令牌**；邀请码无效 403，重名/重邮箱 409 |
 | POST | `/api/v1/auth/login` | 登录：`username` 支持用户名或邮箱，凭证错误统一 401 |
+| POST | `/api/v1/auth/change-password` | 修改密码：校验当前密码，成功后该账号**全部令牌与 WebSocket 立即失效**，需用新密码重新登录 |
 | GET | `/api/v1/auth/me` | 当前用户，依据 `Authorization: Bearer <token>` |
 | POST | `/api/v1/clipboard/items` | 创建；`title` 留空时自动生成，按 `timezone` 显示本地时间 |
 | GET | `/api/v1/clipboard/items` | 列表：分页 / 类型筛选 / 按标题或内容搜索 / 排序。`sort_by` 默认 `created_at`；**Web 端（及保留的鸿蒙端）都显式传 `updated_at`**（按修改时间排，编辑后会上移） |
@@ -75,11 +76,15 @@ Authorization: Bearer <JWT>
 
 - 令牌为 HS256 JWT，`sub` 是用户 UUID，有效期由 `JWT_EXPIRE_MINUTES` 控制（默认 7 天）；
   管理员令牌由 `ADMIN_JWT_EXPIRE_MINUTES` 控制（默认 12 小时）
-- JWT 带 `sv`（token_version）声明；密码重置或账号被禁用后 `token_version += 1`，旧令牌返回 `401`
+- JWT 带 `sv`（token_version）声明；密码重置、用户修改密码或账号被禁用后 `token_version += 1`，旧令牌返回 `401`
 - `/api/v1/admin/*` **全部要求 `is_admin=true`**，普通用户返回 `403`；
   `is_admin` 仅在 `UserResponse` 中用于展示，权限每次请求都查库
 - 密码用 **bcrypt** 哈希（`pwdlib`）入库；`password_hash` **绝不出现在任何响应里**
-- `password` 上限是 **72 字节**（不是字符数）：24 个汉字即达上限，超出返回 `422`
+- 密码策略（注册、修改密码、管理员重置、`set_admin` 创建账号统一适用）：
+  **至少 8 个字符**、**同时包含字母和数字**、**不能包含用户名**（不区分大小写）；
+  上限是 **72 字节**（不是字符数）：24 个汉字即达上限，超出返回 `422`
+- 修改密码必须提供 `old_password`，当前密码错误返回 `400`（不触发登出）；
+  成功后 `token_version += 1` 并关闭该用户全部 WebSocket，所有设备都需重新登录
 - `username` 不允许换行等控制字符（避免日志注入）；注册为 3-32 字符，登录（用户名或邮箱）上限 254
 - 注册可选携带 `invite_code`：服务端开启 `REGISTRATION_REQUIRE_INVITE` 时，必须是
   `invite_codes` 表中未过期、未撤销且未用尽的邀请码，否则返回 `403`；

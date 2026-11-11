@@ -12,7 +12,7 @@ export interface paths {
          * 用户注册
          * @description 创建账号并**直接返回令牌**，前端无需再登录一次。
          *
-         *     `password` 上限 72 字节是 bcrypt 的硬限制（超出会抛错，不会被截断）。
+         *     `password` 需至少 8 个字符、同时包含字母和数字、不能包含用户名；上限 72 字节是 bcrypt 的硬限制（超出会抛错，不会被截断）。
          */
         post: operations["register_api_v1_auth_register_post"];
         delete?: never;
@@ -35,6 +35,28 @@ export interface paths {
          * @description `username` 支持用户名或邮箱。凭证错误统一返回 401，不区分是哪一个错。
          */
         post: operations["login_api_v1_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/change-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 修改密码
+         * @description 校验当前密码后更新密码，并使该账号的**全部旧令牌与 WebSocket 连接立即失效**。
+         *
+         *     新密码需满足：至少 8 个字符、同时包含字母和数字、不能包含用户名、不超过 72 字节（bcrypt 上限）。修改成功后需用新密码重新登录。
+         */
+        post: operations["change_password_api_v1_auth_change_password_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -181,7 +203,7 @@ export interface paths {
         put?: never;
         /**
          * 重置用户密码
-         * @description 重置后该用户的全部旧令牌与 WebSocket 连接立即失效。
+         * @description 重置后该用户的全部旧令牌与 WebSocket 连接立即失效。新密码至少 8 个字符、同时包含字母和数字、不能包含目标用户名。
          */
         post: operations["reset_password_api_v1_admin_users__user_id__reset_password_post"];
         delete?: never;
@@ -682,7 +704,7 @@ export interface components {
         AdminPasswordResetRequest: {
             /**
              * Password
-             * @description 新密码，至少 6 字符且不超过 72 字节
+             * @description 新密码，至少 8 个字符，必须同时包含字母和数字，不能包含目标用户名，且不超过 72 字节（bcrypt 上限）
              */
             password: string;
         };
@@ -1130,6 +1152,22 @@ export interface components {
             password: string;
         };
         /**
+         * UserPasswordChangeRequest
+         * @description 修改密码请求。新密码的复杂度由 Schema 校验，用户名包含检查在路由层完成。
+         */
+        UserPasswordChangeRequest: {
+            /**
+             * Old Password
+             * @description 当前密码
+             */
+            old_password: string;
+            /**
+             * New Password
+             * @description 新密码，至少 8 个字符，必须同时包含字母和数字，不能包含用户名，且不超过 72 字节（bcrypt 上限）
+             */
+            new_password: string;
+        };
+        /**
          * UserRegisterRequest
          * @description 注册请求。
          */
@@ -1146,7 +1184,7 @@ export interface components {
             email: string;
             /**
              * Password
-             * @description 密码，至少 6 字符，且不超过 72 字节（bcrypt 上限）
+             * @description 密码，至少 8 个字符，必须同时包含字母和数字，不能包含用户名，且不超过 72 字节（bcrypt 上限）
              */
             password: string;
             /**
@@ -1298,6 +1336,53 @@ export interface operations {
             };
             /** @description 账号已被禁用 */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_password_api_v1_auth_change_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserPasswordChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description 当前密码错误，或新密码不满足策略 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 未提供令牌，或令牌无效/已过期 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

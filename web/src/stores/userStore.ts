@@ -71,6 +71,22 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  /**
+   * 修改密码。
+   *
+   * 服务端成功后会使该账号的全部令牌失效（包括当前设备），
+   * 因此这里同步清空本地登录态，由界面引导用户用新密码重新登录。
+   */
+  async function changePassword(oldPassword: string, newPassword: string): Promise<void> {
+    loading.value = true
+    try {
+      await authApi.changePassword(oldPassword, newPassword)
+    } finally {
+      loading.value = false
+    }
+    logout()
+  }
+
   function logout() {
     setToken(null)
     user.value = null
@@ -84,6 +100,7 @@ export const useUserStore = defineStore('user', () => {
     restoreSession,
     login,
     register,
+    changePassword,
     logout,
   }
 })

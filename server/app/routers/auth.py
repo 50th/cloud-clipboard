@@ -22,14 +22,17 @@ from app.crud import invite as invite_crud
 from app.crud import user as user_crud
 from app.db.models.user import User
 from app.db.session import get_db
-from app.schemas.common import utc_now
+from app.schemas.common import MessageResponse, utc_now
 from app.schemas.user import (
     AuthResponse,
     TokenResponse,
     UserLoginRequest,
+    UserPasswordChangeRequest,
     UserRegisterRequest,
     UserResponse,
+    validate_password_against_username,
 )
+from app.services.ws_manager import manager
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +187,8 @@ AdminUser = Annotated[User, Depends(get_current_admin)]
     summary="用户注册",
     description=(
         "创建账号并**直接返回令牌**，前端无需再登录一次。\n\n"
-        "`password` 上限 72 字节是 bcrypt 的硬限制（超出会抛错，不会被截断）。"
+        "`password` 需至少 8 个字符、同时包含字母和数字、不能包含用户名；"
+        "上限 72 字节是 bcrypt 的硬限制（超出会抛错，不会被截断）。"
     ),
     responses={
         403: {"description": "邀请码无效（服务端已开启注册验证）"},
@@ -291,6 +295,60 @@ async def login(
         # 这里重新加载，保证后续同步序列化不会触发异步懒加载。
         await session.refresh(user)
     return AuthResponse(**to_user_response(user).model_dump(), token=issue_token(user))
+
+
+@router.post(
+    "/change-password",
+    response_model=MessageResponse,
+    summary="修改密码",
+    description=(
+        "校验当前密码后更新密码，并使该账号的**全部旧令牌与 WebSocket 连接立即失效**。\n\n"
+        "新密码需满足：至少 8 个字符、同时包含字母和数字、不能包含用户名、"
+        "不超过 72 字节（bcrypt 上限）。修改成功后需用新密码重新登录。"
+    ),
+    responses={
+        400: {"description": "当前密码错误，或新密码不满足策略"},
+        401: {"description": "未提供令牌，或令牌无效/已过期"},
+    },
+)
+async def change_password(
+    payload: UserPasswordChangeRequest,
+    current_user: CurrentUser,
+    session: DbSession,
+    request: Request,
+) -> MessageResponse:
+    """用户自助修改密码；成功后全部会话失效。"""
+    if not security.verify_password(payload.old_password, current_user.password_hash):
+        logger.warning(
+            "修改密码失败: reason=old password mismatch user=%s client=%s",
+            safe_log_value(current_user.username),
+            _client_ip(request),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="当前密码错误"
+        )
+
+    try:
+        validate_password_against_username(payload.new_password, current_user.username)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+    current_user.password_hash = security.hash_password(payload.new_password)
+    current_user.token_version += 1
+    await session.commit()
+
+    # 令牌版本已递增：旧令牌的下一次 HTTP 请求会 401。
+    # 已建立的 WebSocket 不会被 token 校验自动断开，这里主动关闭，保证“全部退出”立即生效。
+    await manager.close_user(current_user.id, reason="password changed")
+
+    logger.info(
+        "修改密码成功: user=%s id=%s",
+        safe_log_value(current_user.username),
+        current_user.id,
+    )
+    return MessageResponse(success=True, message="密码已修改，请使用新密码重新登录")
 
 
 @router.get(

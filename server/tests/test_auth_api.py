@@ -79,8 +79,27 @@ class TestRegister:
         assert status == 422, "应在契约层被拒，不能冒泡成服务端错误"
 
     async def test_恰好_72_字节的密码可用(self, client: AsyncClient) -> None:
-        status, _ = await register(client, "exact72", password="密" * 24)
+        # 6 个 ASCII 字符（含字母与数字）+ 22 个汉字 = 6 + 66 = 72 字节
+        status, _ = await register(
+            client, "exact72", password="Aa1!ab" + "密" * 22
+        )
         assert status == 201
+
+    async def test_密码缺少字母返回_422(self, client: AsyncClient) -> None:
+        status, _ = await register(client, "only-digits", password="12345678")
+        assert status == 422
+
+    async def test_密码缺少数字返回_422(self, client: AsyncClient) -> None:
+        status, _ = await register(client, "only-letters", password="onlyletters")
+        assert status == 422
+
+    async def test_密码不能包含用户名(self, client: AsyncClient) -> None:
+        status, _ = await register(client, "alice-pw", password="Alice-pw123")
+        assert status == 422
+
+    async def test_密码不能包含用户名且不区分大小写(self, client: AsyncClient) -> None:
+        status, _ = await register(client, "bob-pw", password="xxBOB-PW123")
+        assert status == 422
 
     async def test_用户名含换行被拒(self, client: AsyncClient) -> None:
         """换行会破坏日志行结构（日志注入），必须在契约层拒绝。"""
@@ -290,6 +309,94 @@ class TestLogin:
             "/api/v1/auth/login", json={"username": "nobody", "password": PASSWORD}
         )
         assert response.headers.get("www-authenticate") == "Bearer"
+
+
+class TestChangePassword:
+    """用户自助修改密码：凭证校验、密码策略与令牌撤销。"""
+
+    NEW_PASSWORD = "changed-password-456"
+
+    async def test_修改成功后旧令牌与旧密码全部失效(
+        self, client: AsyncClient
+    ) -> None:
+        _, body = await register(client, "pw-change")
+        headers = {"Authorization": f"Bearer {body['token']['access_token']}"}
+
+        response = await client.post(
+            "/api/v1/auth/change-password",
+            json={"old_password": PASSWORD, "new_password": self.NEW_PASSWORD},
+            headers=headers,
+        )
+        assert response.status_code == 200
+        assert "重新登录" in response.json()["message"]
+
+        # 当前令牌因 token_version +1 立即失效
+        assert (await client.get("/api/v1/auth/me", headers=headers)).status_code == 401
+
+        old_login = await client.post(
+            "/api/v1/auth/login", json={"username": "pw-change", "password": PASSWORD}
+        )
+        assert old_login.status_code == 401
+
+        new_login = await client.post(
+            "/api/v1/auth/login",
+            json={"username": "pw-change", "password": self.NEW_PASSWORD},
+        )
+        assert new_login.status_code == 200
+
+    async def test_当前密码错误返回_400_且不修改密码(
+        self, client: AsyncClient
+    ) -> None:
+        _, body = await register(client, "pw-wrong-old")
+        headers = {"Authorization": f"Bearer {body['token']['access_token']}"}
+
+        response = await client.post(
+            "/api/v1/auth/change-password",
+            json={"old_password": "wrong-password", "new_password": self.NEW_PASSWORD},
+            headers=headers,
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "当前密码错误"
+
+        # 原密码仍然有效
+        login = await client.post(
+            "/api/v1/auth/login",
+            json={"username": "pw-wrong-old", "password": PASSWORD},
+        )
+        assert login.status_code == 200
+
+    async def test_新密码不能包含用户名(self, client: AsyncClient) -> None:
+        _, body = await register(client, "pw-username")
+        headers = {"Authorization": f"Bearer {body['token']['access_token']}"}
+
+        response = await client.post(
+            "/api/v1/auth/change-password",
+            json={
+                "old_password": PASSWORD,
+                "new_password": "Pw-Username-456",
+            },
+            headers=headers,
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "密码不能包含用户名"
+
+    async def test_新密码不满足复杂度返回_422(self, client: AsyncClient) -> None:
+        _, body = await register(client, "pw-weak-new")
+        headers = {"Authorization": f"Bearer {body['token']['access_token']}"}
+
+        response = await client.post(
+            "/api/v1/auth/change-password",
+            json={"old_password": PASSWORD, "new_password": "onlyletters"},
+            headers=headers,
+        )
+        assert response.status_code == 422
+
+    async def test_未登录返回_401(self, client: AsyncClient) -> None:
+        response = await client.post(
+            "/api/v1/auth/change-password",
+            json={"old_password": PASSWORD, "new_password": self.NEW_PASSWORD},
+        )
+        assert response.status_code == 401
 
 
 class TestCurrentUser:

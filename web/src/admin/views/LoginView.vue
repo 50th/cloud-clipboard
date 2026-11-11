@@ -4,6 +4,8 @@ import { computed, ref } from 'vue'
 import { getErrorMessage } from '#src/api/client.ts'
 import { useAdminStore } from '@/admin/stores/adminStore'
 
+const props = defineProps<{ notice?: string }>()
+
 const store = useAdminStore()
 
 const username = ref('')
@@ -36,6 +38,7 @@ async function submit(): Promise<void> {
     <p class="hint">
       仅管理员账号可进入。管理端不会保存密码，关闭标签页后需重新登录。
     </p>
+    <p v-if="props.notice" class="login-notice" role="status">{{ props.notice }}</p>
 
     <form class="admin-login__form" @submit.prevent="submit">
       <label>
@@ -77,6 +80,12 @@ async function submit(): Promise<void> {
   flex-direction: column;
   gap: 12px;
   margin-top: 16px;
+}
+
+.login-notice {
+  margin: 8px 0 0;
+  color: var(--success);
+  font-size: 13px;
 }
 
 .admin-login__form label {

@@ -238,7 +238,10 @@ async def update_user(
     "/users/{user_id}/reset-password",
     response_model=MessageResponse,
     summary="重置用户密码",
-    description="重置后该用户的全部旧令牌与 WebSocket 连接立即失效。",
+    description=(
+        "重置后该用户的全部旧令牌与 WebSocket 连接立即失效。"
+        "新密码至少 8 个字符、同时包含字母和数字、不能包含目标用户名。"
+    ),
     responses={404: {"description": "用户不存在"}},
 )
 async def reset_password(
@@ -247,9 +250,14 @@ async def reset_password(
     session: DbSession,
     current_admin: AdminUser,
 ) -> MessageResponse:
-    row = await admin_crud.reset_password(
-        session, current_admin, user_id, payload.password
-    )
+    try:
+        row = await admin_crud.reset_password(
+            session, current_admin, user_id, payload.password
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

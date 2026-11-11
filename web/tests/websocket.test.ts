@@ -46,8 +46,8 @@ const TAG = `[ws-${Date.now()}]`
  * 在目标库里无限累积（实测跑几次就多出几个 `ws_e2e_*`）。
  * 现在改为"能注册就注册，已存在就登录"——无论跑多少次都只占一行。
  */
-const WS_USERNAME = 'ws_e2e_account'
-const WS_PASSWORD = 'ws-e2e-password'
+const WS_USERNAME = 'ws_e2e_account_pw'
+const WS_PASSWORD = 'ws-e2e-password1'
 
 /** 注册；已存在（409）则改为登录。两种情况都能拿到可用令牌。 */
 async function ensureAccount(username: string, password: string): Promise<string> {

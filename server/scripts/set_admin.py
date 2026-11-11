@@ -8,8 +8,8 @@
     # 账号不存在：创建并授权（交互输入密码）
     python -m scripts.set_admin --username admin --email admin@example.com --create
 
-    # 非交互：密码从 stdin 读取
-    printf 'password' | python -m scripts.set_admin --username admin \
+    # 非交互：密码从 stdin 读取（至少 8 个字符，需含字母和数字，不能包含用户名）
+    printf 'AdminPass2026' | python -m scripts.set_admin --username admin \
         --email admin@example.com --create --password-stdin
 
     python -m scripts.set_admin --username alice --revoke
@@ -44,9 +44,11 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
 from app.core import security  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.db.models import AdminAuditLog, User  # noqa: E402
-from app.schemas.user import validate_password_bytes  # noqa: E402
-
-PASSWORD_MIN_LENGTH = 6
+from app.schemas.user import (  # noqa: E402
+    validate_password_against_username,
+    validate_password_bytes,
+    validate_password_strength,
+)
 
 
 class AdminSetupError(RuntimeError):
@@ -79,10 +81,10 @@ async def run_set_admin(
     if create and not revoke:
         if password is None:
             raise AdminSetupError("创建账号需要密码")
-        if len(password) < PASSWORD_MIN_LENGTH:
-            raise AdminSetupError(f"密码至少 {PASSWORD_MIN_LENGTH} 位")
         try:
             validate_password_bytes(password)
+            validate_password_strength(password)
+            validate_password_against_username(password, username)
         except ValueError as exc:
             raise AdminSetupError(str(exc)) from exc
 

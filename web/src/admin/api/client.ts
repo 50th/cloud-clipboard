@@ -110,3 +110,15 @@ export async function adminMe(): Promise<User> {
   const { data } = await adminHttp.get<User>('/auth/me')
   return data
 }
+
+/** 修改当前管理员的密码；成功后服务端会撤销全部令牌，需要重新登录。 */
+export async function adminChangePassword(
+  oldPassword: string,
+  newPassword: string,
+): Promise<MessageResponse> {
+  const { data } = await adminHttp.post<MessageResponse>('/auth/change-password', {
+    old_password: oldPassword,
+    new_password: newPassword,
+  })
+  return data
+}
