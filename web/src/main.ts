@@ -7,5 +7,10 @@
 
 import { isAdminPath } from '@/admin/path'
 
-const admin = isAdminPath(window.location.pathname)
-void (admin ? import('@/admin/main') : import('@/bootstrap'))
+// 两个 import() 必须分开写：写在同一个三元表达式里时，Vite 只会为整条语句
+// 绑定一份依赖表，导致管理端 CSS 不被预加载。
+if (isAdminPath(window.location.pathname)) {
+  void import('@/admin/main')
+} else {
+  void import('@/bootstrap')
+}
