@@ -9,6 +9,11 @@ import { computed, ref } from 'vue'
 
 import { getErrorMessage } from '#src/api/client.ts'
 import { useUserStore } from '#src/stores/userStore.ts'
+import {
+  REMEMBERED_CREDENTIALS_KEY,
+  clearRememberedCredentials,
+} from '#src/utils/rememberedCredentials.ts'
+import { validatePassword } from '#src/utils/passwordPolicy.ts'
 
 const emit = defineEmits<{ (e: 'notice', value: { kind: 'ok' | 'err'; text: string }): void }>()
 
@@ -16,9 +21,6 @@ const userStore = useUserStore()
 
 type Mode = 'login' | 'register'
 const mode = ref<Mode>('login')
-
-/** 「记住密码」的本地存储键（只存在本机浏览器，不上传服务端） */
-const REMEMBER_KEY = 'cloud-clipboard.remembered-credentials'
 
 interface RememberedCredentials {
   username: string
@@ -35,7 +37,7 @@ const remember = ref(false)
 /** 读取上次保存的登录信息；解析失败时忽略并保持空表单。 */
 function loadRememberedCredentials(): void {
   try {
-    const raw = localStorage.getItem(REMEMBER_KEY)
+    const raw = localStorage.getItem(REMEMBERED_CREDENTIALS_KEY)
     if (!raw) {
       return
     }
@@ -65,20 +67,12 @@ function persistRememberedCredentials(): void {
   try {
     if (remember.value) {
       localStorage.setItem(
-        REMEMBER_KEY,
+        REMEMBERED_CREDENTIALS_KEY,
         JSON.stringify({ username: username.value.trim(), password: password.value }),
       )
     } else {
-      localStorage.removeItem(REMEMBER_KEY)
+      clearRememberedCredentials()
     }
-  } catch {
-    /* localStorage 不可用时忽略 */
-  }
-}
-
-function clearRememberedCredentials(): void {
-  try {
-    localStorage.removeItem(REMEMBER_KEY)
   } catch {
     /* localStorage 不可用时忽略 */
   }
@@ -98,11 +92,16 @@ const canSubmit = computed(() => {
   if (submitting.value) {
     return false
   }
-  if (username.value.trim().length < 3 || password.value.length < 6) {
+  // 登录不限制密码长度：历史账号可能是 6-7 位密码
+  if (username.value.trim().length < 3 || password.value.length === 0) {
     return false
   }
   if (isRegister.value) {
-    return email.value.trim().length >= 3
+    // 注册按后端策略预校验长度、字母/数字与用户名包含
+    return (
+      validatePassword(password.value, username.value.trim()) === '' &&
+      email.value.trim().length >= 3
+    )
   }
   return true
 })
@@ -201,7 +200,7 @@ async function handleSubmit() {
       </label>
 
       <label class="field">
-        <span>密码（至少 6 字符，且不超过 72 字节）</span>
+        <span>{{ isRegister ? '密码（至少 8 个字符，需含字母和数字，不能包含用户名）' : '密码' }}</span>
         <input
           v-model="password"
           type="password"

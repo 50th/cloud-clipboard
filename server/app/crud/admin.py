@@ -31,6 +31,7 @@ from app.schemas.admin import (
     AdminUserUpdate,
 )
 from app.schemas.common import ContentType, SortOrder, utc_now
+from app.schemas.user import validate_password_against_username
 
 
 @dataclass
@@ -255,6 +256,9 @@ async def reset_password(
     user = await session.get(User, user_id)
     if user is None:
         return None
+    # 复杂度由 Schema 校验；这里补上需要目标用户名的“不能包含用户名”检查。
+    # 策略不通过时抛 ValueError，由路由层转成 400。
+    validate_password_against_username(password, user.username)
     user.password_hash = security.hash_password(password)
     user.token_version += 1
     audit_crud.build_audit_entry(

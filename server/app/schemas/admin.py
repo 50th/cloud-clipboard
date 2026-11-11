@@ -14,7 +14,11 @@ from fastapi import Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.common import ContentType, SortOrder
-from app.schemas.user import validate_password_bytes
+from app.schemas.user import (
+    MIN_PASSWORD_LENGTH,
+    validate_password_bytes,
+    validate_password_strength,
+)
 
 
 class AdminUserStatus(str, Enum):
@@ -104,12 +108,19 @@ class AdminUserUpdate(BaseModel):
 class AdminPasswordResetRequest(BaseModel):
     """重置密码请求。"""
 
-    password: str = Field(..., min_length=6, description="新密码，至少 6 字符且不超过 72 字节")
+    password: str = Field(
+        ...,
+        min_length=MIN_PASSWORD_LENGTH,
+        description=(
+            "新密码，至少 8 个字符，必须同时包含字母和数字，不能包含目标用户名，"
+            "且不超过 72 字节（bcrypt 上限）"
+        ),
+    )
 
     @field_validator("password")
     @classmethod
-    def _validate_password_bytes(cls, value: str) -> str:
-        return validate_password_bytes(value)
+    def _validate_password(cls, value: str) -> str:
+        return validate_password_strength(validate_password_bytes(value))
 
 
 class AdminClipboardItemResponse(BaseModel):

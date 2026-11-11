@@ -11,6 +11,7 @@ import type {
 import Pagination from '@/admin/components/Pagination.vue'
 import { useAdminStore } from '@/admin/stores/adminStore'
 import { getErrorMessage } from '#src/api/client.ts'
+import { validatePassword } from '#src/utils/passwordPolicy.ts'
 import { formatBytes, formatDateTime } from '@/utils/format.ts'
 
 const store = useAdminStore()
@@ -97,8 +98,9 @@ async function submitReset(): Promise<void> {
   if (!user.value) {
     return
   }
-  if (newPassword.value.length < 6) {
-    error.value = '新密码至少 6 位'
+  const policyError = validatePassword(newPassword.value, user.value.username)
+  if (policyError) {
+    error.value = policyError
     return
   }
   if (
@@ -313,7 +315,7 @@ watch(
             v-model="newPassword"
             type="password"
             autocomplete="new-password"
-            placeholder="新密码（至少 6 位）"
+            placeholder="新密码（至少 8 位，含字母和数字）"
           />
           <button type="submit" class="btn btn--small btn--primary" :disabled="busy">
             确认重置

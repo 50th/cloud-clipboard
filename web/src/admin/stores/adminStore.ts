@@ -4,12 +4,13 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
 import {
+  adminChangePassword,
   adminLogin,
   adminMe,
   getAdminToken,
   setAdminToken,
-} from '@/admin/api/client.ts'
-import type { User } from '@/admin/api/client.ts'
+} from '#src/admin/api/client.ts'
+import type { User } from '#src/admin/api/client.ts'
 import { logger } from '#src/utils/logger.ts'
 
 export type AdminView =
@@ -83,6 +84,21 @@ export const useAdminStore = defineStore('admin', () => {
     selectedUserId.value = null
   }
 
+  /**
+   * 修改当前管理员自己的密码。
+   *
+   * 服务端会撤销该账号的全部令牌（包括当前管理端），因此成功后立即清理会话。
+   */
+  async function changePassword(oldPassword: string, newPassword: string): Promise<void> {
+    loading.value = true
+    try {
+      await adminChangePassword(oldPassword, newPassword)
+    } finally {
+      loading.value = false
+    }
+    logout()
+  }
+
   function setView(view: AdminView): void {
     activeView.value = view
     if (view !== 'userDetail') {
@@ -105,6 +121,7 @@ export const useAdminStore = defineStore('admin', () => {
     isAdmin,
     restoreSession,
     login,
+    changePassword,
     logout,
     setView,
     openUser,

@@ -80,6 +80,26 @@ class TestSetAdminCreate:
                 password="12345",
             )
 
+    async def test_密码缺少数字被拒(self, engine) -> None:
+        with pytest.raises(AdminSetupError, match="数字"):
+            await run_set_admin(
+                TEST_DATABASE_URL,
+                "cli-letter-pw",
+                create=True,
+                email="cli-letter-pw@example.com",
+                password="cli-letter-pw",
+            )
+
+    async def test_密码不能包含用户名(self, engine) -> None:
+        with pytest.raises(AdminSetupError, match="用户名"):
+            await run_set_admin(
+                TEST_DATABASE_URL,
+                "cli-contain",
+                create=True,
+                email="cli-contain@example.com",
+                password="Cli-Contain-123",
+            )
+
     async def test_密码超过_72_字节被拒(self, engine) -> None:
         with pytest.raises(AdminSetupError, match="字节"):
             await run_set_admin(

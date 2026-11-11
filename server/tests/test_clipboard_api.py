@@ -10,7 +10,7 @@ import logging
 import pytest
 from httpx import AsyncClient
 
-PASSWORD = "clipboard-test-pw"
+PASSWORD = "clipboard-test-pw1"
 
 
 async def make_user(client: AsyncClient, username: str) -> dict[str, str]:

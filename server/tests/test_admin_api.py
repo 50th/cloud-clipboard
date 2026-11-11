@@ -19,7 +19,7 @@ from app.db.models import AdminAuditLog, ClipboardItem, User
 from app.routers import ws as ws_router
 from app.services.ws_manager import ConnectionManager, manager
 
-PASSWORD = "admin-test-pw"
+PASSWORD = "admin-test-pw1"
 NEW_PASSWORD = "new-password-123"
 
 
@@ -210,6 +210,20 @@ class TestAdminAuth:
             )
         ).all()
         assert len(entries) == 1
+
+    async def test_重置密码不能包含目标用户名(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        admin_headers, _ = await make_admin(client, session, "admin-reset-policy")
+        _, user = await make_user_items(client, "target-reset-policy", [])
+
+        response = await client.post(
+            f"/api/v1/admin/users/{user['id']}/reset-password",
+            json={"password": "Target-Reset-Policy-1"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "密码不能包含用户名"
 
     async def test_ws_鉴权拒绝禁用与撤销的令牌(
         self,

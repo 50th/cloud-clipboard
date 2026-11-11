@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 
 import LoginPanel from '@/components/LoginPanel.vue'
+import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import ClipboardHistory from '@/components/ClipboardHistory.vue'
 import InputPanel from '@/components/InputPanel.vue'
 import { getErrorMessage } from '@/api/client'
@@ -16,6 +17,8 @@ import { logger } from '@/utils/logger'
 const { notice, showNotice, clearNotice } = useNotice()
 
 const searchInput = ref('')
+/** 「修改密码」弹窗开关（仅登录后可用） */
+const passwordDialogOpen = ref(false)
 
 /**
  * 当前可见的视图。
@@ -139,14 +142,18 @@ async function handleClearAll() {
     <header class="app__header">
       <div class="app__titlebar">
         <h1>云剪贴板</h1>
-        <button
-          v-if="isAuthenticated"
-          type="button"
-          class="btn btn--small"
-          @click="handleLogout"
-        >
-          退出登录
-        </button>
+        <div v-if="isAuthenticated" class="app__actions">
+          <button
+            type="button"
+            class="btn btn--small"
+            @click="passwordDialogOpen = true"
+          >
+            修改密码
+          </button>
+          <button type="button" class="btn btn--small" @click="handleLogout">
+            退出登录
+          </button>
+        </div>
       </div>
       <p v-if="isAuthenticated" class="app__subtitle">
         <template v-if="user">当前用户 {{ user.username }}</template>
@@ -232,6 +239,14 @@ async function handleClearAll() {
         文字剪贴板 v1.0.0
       </footer>
     </template>
+
+    <ChangePasswordDialog
+      v-if="isAuthenticated"
+      :open="passwordDialogOpen"
+      :username="user?.username ?? ''"
+      @close="passwordDialogOpen = false"
+      @notice="handleNotice"
+    />
   </div>
 </template>
 
@@ -241,6 +256,11 @@ async function handleClearAll() {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.app__actions {
+  display: flex;
+  gap: 8px;
 }
 
 .realtime--on {

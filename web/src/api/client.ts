@@ -188,6 +188,19 @@ export const authApi = {
     })
     return data
   },
+
+  /**
+   * 修改密码。
+   *
+   * 成功后服务端会撤销该账号的全部令牌，本机也必须用新密码重新登录，
+   * 因此这里不返回新令牌。
+   */
+  changePassword: async (oldPassword: string, newPassword: string): Promise<void> => {
+    await http.post('/auth/change-password', {
+      old_password: oldPassword,
+      new_password: newPassword,
+    })
+  },
 }
 
 /** 剪贴板接口 */

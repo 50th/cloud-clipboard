@@ -5,13 +5,20 @@
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # bcrypt 只处理密码的前 72 **字节**（5.x 起超出直接抛错，不再静默截断）。
 MAX_PASSWORD_BYTES = 72
+
+# 密码长度下限。注册、修改密码、管理员重置、CLI 创建账号统一使用该值。
+MIN_PASSWORD_LENGTH = 8
+
+_ASCII_LETTER_RE = re.compile(r"[A-Za-z]")
+_ASCII_DIGIT_RE = re.compile(r"[0-9]")
 
 
 def _check_no_log_control_chars(value: str) -> str:
@@ -39,6 +46,29 @@ def validate_password_bytes(value: str) -> str:
     return value
 
 
+def validate_password_strength(value: str) -> str:
+    """密码复杂度：至少 8 个字符，且同时包含字母和数字。
+
+    字母只认 ASCII（`A-Z`/`a-z`）：中文等字符会被当作普通字符，
+    不能替代字母，避免“纯中文 + 数字”被误判为满足复杂度。
+    """
+    if len(value) < MIN_PASSWORD_LENGTH:
+        raise ValueError(f"密码至少 {MIN_PASSWORD_LENGTH} 个字符")
+    if not _ASCII_LETTER_RE.search(value):
+        raise ValueError("密码必须包含字母")
+    if not _ASCII_DIGIT_RE.search(value):
+        raise ValueError("密码必须包含数字")
+    return value
+
+
+def validate_password_against_username(password: str, username: str) -> str:
+    """密码不能包含用户名（不区分大小写）。"""
+    normalized = username.strip().casefold()
+    if normalized and normalized in password.casefold():
+        raise ValueError("密码不能包含用户名")
+    return password
+
+
 class UserRegisterRequest(BaseModel):
     """注册请求。"""
 
@@ -46,8 +76,11 @@ class UserRegisterRequest(BaseModel):
     email: str = Field(..., min_length=3, max_length=254, description="邮箱")
     password: str = Field(
         ...,
-        min_length=6,
-        description="密码，至少 6 字符，且不超过 72 字节（bcrypt 上限）",
+        min_length=MIN_PASSWORD_LENGTH,
+        description=(
+            "密码，至少 8 个字符，必须同时包含字母和数字，不能包含用户名，"
+            "且不超过 72 字节（bcrypt 上限）"
+        ),
     )
     invite_code: str | None = Field(
         None,
@@ -66,9 +99,35 @@ class UserRegisterRequest(BaseModel):
 
     @field_validator("password")
     @classmethod
-    def _validate_password_bytes(cls, value: str) -> str:
-        """按 UTF-8 字节数校验密码长度（见 `validate_password_bytes` 的说明）。"""
-        return validate_password_bytes(value)
+    def _validate_password(cls, value: str) -> str:
+        """按字节数校验长度，并检查字母 + 数字的复杂度。"""
+        return validate_password_strength(validate_password_bytes(value))
+
+    @model_validator(mode="after")
+    def _validate_password_not_username(self) -> "UserRegisterRequest":
+        """密码不能包含用户名，避免“用户名 + 数字”之类的弱口令。"""
+        validate_password_against_username(self.password, self.username)
+        return self
+
+
+class UserPasswordChangeRequest(BaseModel):
+    """修改密码请求。新密码的复杂度由 Schema 校验，用户名包含检查在路由层完成。"""
+
+    old_password: str = Field(..., description="当前密码")
+    new_password: str = Field(
+        ...,
+        min_length=MIN_PASSWORD_LENGTH,
+        description=(
+            "新密码，至少 8 个字符，必须同时包含字母和数字，不能包含用户名，"
+            "且不超过 72 字节（bcrypt 上限）"
+        ),
+    )
+
+    @field_validator("new_password")
+    @classmethod
+    def _validate_new_password(cls, value: str) -> str:
+        """按字节数校验长度，并检查字母 + 数字的复杂度。"""
+        return validate_password_strength(validate_password_bytes(value))
 
 
 class UserLoginRequest(BaseModel):

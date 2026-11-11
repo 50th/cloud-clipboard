@@ -47,7 +47,8 @@ store、composables 与 API 封装。
 同一构建产物按路径分发：用户端在 `/`，管理端在 `/admin`。管理端是独立入口
 （`src/admin/main.ts` + 独立 Pinia），**不使用 vue-router**，用 store 内的视图状态切换；
 令牌只存 `sessionStorage`，不保存密码。页面包括：概览、用户管理、用户详情、
-剪贴板管理、邀请码、操作日志。设计、接口与权限说明见 [`../docs/admin.md`](../docs/admin.md)。
+剪贴板管理、邀请码、操作日志；顶部提供「修改密码」与「退出登录」。
+设计、接口与权限说明见 [`../docs/admin.md`](../docs/admin.md)。
 
 **列表默认按「修改时间」倒序**（下拉框可切「最近修改 / 最早修改」）：
 编辑过的记录会立刻上移。注意后端 `sort_by` 默认是 `created_at`，
@@ -193,7 +194,7 @@ web/
     ├── utils/clipboard.ts       # 剪贴板写入（自身写入标志 + execCommand 降级）
     ├── stores/
     │   ├── clipboardStore.ts    # 列表、分页、保存、去重识别、实时事件处理
-    │   └── userStore.ts         # 登录 / 注册 / 会话恢复
+    │   └── userStore.ts         # 登录 / 注册 / 修改密码 / 会话恢复
     ├── composables/
     │   ├── useClipboard.ts      # 系统剪贴板读取编排（当前未接入 UI）
     │   ├── useCopy.ts           # 复制回剪贴板 + 「已复制」状态
@@ -202,6 +203,7 @@ web/
     │   └── useWebSocket.ts      # 实时同步：心跳、退避重连、事件分发
     └── components/
         ├── LoginPanel.vue       # 登录 / 注册
+        ├── ChangePasswordDialog.vue # 修改密码弹窗（成功后全部设备重新登录）
         ├── ClipboardHistory.vue # 历史面板（桌面左栏 / 移动「历史记录」页）
         ├── ClipboardItemCard.vue
         └── InputPanel.vue       # 输入面板（桌面右栏 / 移动「剪贴板输入」页）

@@ -14,6 +14,11 @@
   margin-bottom: 16px;
 }
 
+.admin__header-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .admin__header h1 {
   margin: 0 0 4px;
   font-size: 22px;
