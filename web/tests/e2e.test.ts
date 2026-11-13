@@ -241,7 +241,7 @@ describe('Web 端单端闭环（真实后端）', () => {
     })
     assert.equal(
       viaBeijing.title,
-      `demo · ${expected}`,
+      `剪贴板 · ${expected}`,
       `标题应按 Asia/Shanghai 展示，实际为 ${viaBeijing.title}`,
     )
 
@@ -250,7 +250,7 @@ describe('Web 端单端闭环（真实后端）', () => {
       content_type: 'text',
       timezone: 'UTC',
     })
-    assert.match(viaUtc.title, /^demo · \d{2}-\d{2} \d{2}:\d{2}$/)
+    assert.match(viaUtc.title, /^剪贴板 · \d{2}-\d{2} \d{2}:\d{2}$/)
     assert.notEqual(viaUtc.title, viaBeijing.title, 'UTC 与北京时间的标题不应相同')
 
     await clipboardApi.remove(viaBeijing.id).catch(() => undefined)
@@ -315,9 +315,13 @@ describe('Web 端单端闭环（真实后端）', () => {
     await clipboardApi.remove(first.item.id).catch(() => undefined)
     await clipboardApi.remove(second.item.id).catch(() => undefined)
   })
-  it('不传标题：服务端自动生成 `<用户名> · <月-日 时:分>`', async () => {
+  it('不传标题：服务端自动生成 `剪贴板 · <月-日 时:分>`', async () => {
     const { item } = await upload(`${TAG} 自动标题`)
-    assert.match(item.title, /^demo · \d{2}-\d{2} \d{2}:\d{2}$/, `自动标题格式不符：${item.title}`)
+    assert.match(
+      item.title,
+      /^剪贴板 · \d{2}-\d{2} \d{2}:\d{2}$/,
+      `自动标题格式不符：${item.title}`,
+    )
   })
 
   it('传标题：原样保存并展示', async () => {

@@ -489,8 +489,10 @@ class TestTimezoneTitle:
             )
         ).json()
         assert utc["title"] != shanghai["title"]
-        assert utc["title"].startswith("tz_user · ")
-        assert shanghai["title"].startswith("tz_user · ")
+        assert utc["title"].startswith("剪贴板 · ")
+        assert shanghai["title"].startswith("剪贴板 · ")
+        assert "tz_user" not in utc["title"]
+        assert "tz_user" not in shanghai["title"]
 
     async def test_非法时区回退默认而非报错(self, client: AsyncClient) -> None:
         headers = await make_user(client, "tz_bad")
@@ -500,4 +502,5 @@ class TestTimezoneTitle:
             headers=headers,
         )
         assert response.status_code == 201
-        assert response.json()["title"].startswith("tz_bad · ")
+        assert response.json()["title"].startswith("剪贴板 · ")
+        assert "tz_bad" not in response.json()["title"]
