@@ -35,8 +35,8 @@ class ClipboardItemCreate(BaseModel):
         None,
         max_length=TITLE_MAX_LENGTH,
         description=(
-            "标题。留空时由服务端自动生成，格式 `<用户名> · <月-日 时:分>`，"
-            "时间按 `timezone` 指定的时区展示，例如 `demo · 10-05 21:56`"
+            "标题。留空时由服务端自动生成，格式 `剪贴板 · <月-日 时:分>`，"
+            "时间按 `timezone` 指定的时区展示，例如 `剪贴板 · 10-05 21:56`"
         ),
     )
     timezone: str | None = Field(

@@ -20,7 +20,7 @@ import asyncpg
 DSN = "postgresql://clipboard:clipboard@127.0.0.1:5433/clipboard"
 
 CASES: list[tuple[str, str]] = [
-    ("自动标题样例", "demo · 10-04 14:30"),
+    ("自动标题样例", "剪贴板 · 10-04 14:30"),
     ("中文与标点", "云剪贴板：上传、查询、删除。"),
     ("特殊字符", "emoji 🚀 ✓ \"quotes\" 'apos' <tag> & amp"),
     ("多行文本", "line1\nline2\ttabbed"),

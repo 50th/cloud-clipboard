@@ -309,7 +309,7 @@ const statusText = computed(() => {
     </div>
 
     <label class="field field--tight">
-      <span>标题（留空将自动生成，如「demo · 10-05 21:56」，按本机时区）</span>
+      <span>标题（留空将自动生成，如「剪贴板 · 10-05 21:56」，按本机时区）</span>
       <input
         v-model="title"
         maxlength="200"

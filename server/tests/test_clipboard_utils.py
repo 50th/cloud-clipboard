@@ -38,45 +38,47 @@ class TestResolveTimezone:
 
 
 class TestGenerateDefaultTitle:
-    """自动标题格式：`<用户名> · <月-日 时:分>`，时间按指定时区展示。"""
+    """自动标题格式：`剪贴板 · <月-日 时:分>`，时间按指定时区展示。"""
 
-    def test_格式与用户名(self) -> None:
+    def test_格式(self) -> None:
         moment = datetime(2026, 10, 5, 14, 30, tzinfo=timezone.utc)
-        title = generate_default_title("demo", moment, resolve_timezone("UTC"))
-        assert title == "demo · 10-05 14:30"
+        title = generate_default_title(moment, resolve_timezone("UTC"))
+        assert title == "剪贴板 · 10-05 14:30"
 
     def test_按指定时区换算(self) -> None:
         # 2026-10-05 14:30 UTC = 北京 22:30（UTC+8）
         moment = datetime(2026, 10, 5, 14, 30, tzinfo=timezone.utc)
-        title = generate_default_title("demo", moment, resolve_timezone("Asia/Shanghai"))
-        assert title == "demo · 10-05 22:30"
+        title = generate_default_title(moment, resolve_timezone("Asia/Shanghai"))
+        assert title == "剪贴板 · 10-05 22:30"
 
     def test_不同时区产生不同标题(self) -> None:
         moment = datetime(2026, 10, 5, 14, 30, tzinfo=timezone.utc)
-        utc_title = generate_default_title("demo", moment, resolve_timezone("UTC"))
-        cn_title = generate_default_title("demo", moment, resolve_timezone("Asia/Shanghai"))
+        utc_title = generate_default_title(moment, resolve_timezone("UTC"))
+        cn_title = generate_default_title(moment, resolve_timezone("Asia/Shanghai"))
         assert utc_title != cn_title
 
     def test_不传时区时使用默认时区(self) -> None:
         moment = datetime(2026, 10, 5, 14, 30, tzinfo=timezone.utc)
-        assert generate_default_title("demo", moment) == generate_default_title(
-            "demo", moment, resolve_timezone(None)
+        assert generate_default_title(moment) == generate_default_title(
+            moment, resolve_timezone(None)
         )
 
     def test_跨日边界按目标时区计算(self) -> None:
         # UTC 的 10-05 23:30 在北京是 10-06 07:30
         moment = datetime(2026, 10, 5, 23, 30, tzinfo=timezone.utc)
-        title = generate_default_title("demo", moment, resolve_timezone("Asia/Shanghai"))
-        assert title == "demo · 10-06 07:30", "跨日时日期应跟随时区变化"
+        title = generate_default_title(moment, resolve_timezone("Asia/Shanghai"))
+        assert title == "剪贴板 · 10-06 07:30", "跨日时日期应跟随时区变化"
 
-    def test_用户名会出现在标题里(self) -> None:
+    def test_不包含用户名(self) -> None:
         moment = datetime(2026, 1, 2, 3, 4, tzinfo=timezone.utc)
-        assert generate_default_title("alice", moment).startswith("alice · ")
+        title = generate_default_title(moment)
+        assert title.startswith("剪贴板 · ")
+        assert "demo" not in title
 
     def test_非_utc_输入也能正确处理(self) -> None:
         # 带 +08:00 的输入，换算到 UTC 应减 8 小时
         moment = datetime(2026, 10, 5, 22, 30, tzinfo=timezone(timedelta(hours=8)))
-        assert generate_default_title("demo", moment, resolve_timezone("UTC")) == "demo · 10-05 14:30"
+        assert generate_default_title(moment, resolve_timezone("UTC")) == "剪贴板 · 10-05 14:30"
 
 
 class TestContentHash:

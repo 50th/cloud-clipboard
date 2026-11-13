@@ -58,7 +58,6 @@ async def reset_store(session: AsyncSession = Depends(get_db)) -> MessageRespons
             session,
             user.id,
             ClipboardItemCreate(content=content, title=title),
-            username=user.username,
         )
     total = await clipboard_crud.count_items(session, user.id)
     # 会删数据的接口必须留下审计痕迹：日志里要能看出"谁在什么时候清了库"。

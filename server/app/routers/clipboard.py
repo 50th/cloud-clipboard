@@ -74,8 +74,8 @@ async def _get_owned_item(
     status_code=status.HTTP_201_CREATED,
     summary="创建剪贴板项",
     description=(
-        "提交文字内容。`title` 留空时由服务端自动生成（`<用户名> · <月-日 时:分>`），"
-        "时间按 `timezone`（IANA 时区名，前端会传浏览器时区）展示，例如 `demo · 10-05 21:56`。\n\n"
+        "提交文字内容。`title` 留空时由服务端自动生成（`剪贴板 · <月-日 时:分>`），"
+        "时间按 `timezone`（IANA 时区名，前端会传浏览器时区）展示，例如 `剪贴板 · 10-05 21:56`。\n\n"
         "**已内置内容去重**：同一用户提交相同 `content` 时不创建新记录，"
         "只更新 `updated_at`；此时仅当显式传了 `title` 才覆盖标题"
         "（去重命中时对应广播 `clipboard.updated`）。"
@@ -90,7 +90,6 @@ async def create_item(
         session,
         current_user.id,
         payload,
-        username=current_user.username,
     )
     # ⚠️ 去重命中的分支必须发 `updated`——最容易漏的一条（见 docs/ws-protocol.md）
     event = events.EVENT_CREATED if created else events.EVENT_UPDATED
@@ -177,7 +176,6 @@ async def update_item(
             current_user.id,
             id,
             payload,
-            username=current_user.username,
         )
     except clipboard_crud.ContentConflictError as exc:
         # 唯一约束冲突给 409 而不是让它冒成 500：编辑已有记录时很容易撞上

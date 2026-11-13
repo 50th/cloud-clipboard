@@ -69,7 +69,6 @@ async def run(database_url: str, *, drop: bool, seed: bool) -> int:
                     session,
                     user.id,
                     ClipboardItemCreate(content=content, title=title),
-                    username=user.username,
                 )
             total = await clipboard_crud.count_items(session, user.id)
             print(f"[init_db] 写入种子数据: {total} 条")

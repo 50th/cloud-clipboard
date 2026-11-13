@@ -49,16 +49,15 @@ def resolve_timezone(name: str | None) -> ZoneInfo:
 
 
 def generate_default_title(
-    username: str,
     moment: datetime,
     tz: ZoneInfo | None = None,
 ) -> str:
-    """用户未填标题时的自动标题，按指定时区展示：`demo · 10-05 21:56`。
+    """用户未填标题时的自动标题，按指定时区展示：`剪贴板 · 10-05 21:56`。
 
     `moment` 是带时区的 UTC 时间；未指定 `tz` 时使用 `DEFAULT_TIMEZONE`。
     """
     zone = tz or resolve_timezone(None)
-    return f"{username} · {moment.astimezone(zone).strftime('%m-%d %H:%M')}"
+    return f"剪贴板 · {moment.astimezone(zone).strftime('%m-%d %H:%M')}"
 
 
 async def list_items(
@@ -146,12 +145,8 @@ async def create_item(
     session: AsyncSession,
     user_id: uuid.UUID,
     payload: ClipboardItemCreate,
-    *,
-    username: str = "demo",
 ) -> tuple[ClipboardItem, bool]:
     """创建剪贴板项。
-
-    `username` 用于在用户未填标题时生成自动标题。
 
     返回 (item, created)：
     - `created=True`：新建记录 → 广播 `clipboard.created`
@@ -178,7 +173,7 @@ async def create_item(
         id=uuid.uuid4(),
         user_id=user_id,
         title=(payload.title or "").strip()
-        or generate_default_title(username, now, resolve_timezone(payload.timezone)),
+        or generate_default_title(now, resolve_timezone(payload.timezone)),
         content_type=payload.content_type.value,
         content=payload.content,
         preview=payload.preview or make_preview(payload.content),
@@ -199,8 +194,6 @@ async def update_item(
     user_id: uuid.UUID,
     item_id: str | uuid.UUID,
     payload: ClipboardItemUpdate,
-    *,
-    username: str = "demo",
 ) -> ClipboardItem | None:
     """更新已有剪贴板项（只更新显式传入的字段）。
 
@@ -230,7 +223,7 @@ async def update_item(
         # 内容变了但用户没给标题 → 标题跟随内容重新生成（时间取更新时刻）
         if not (payload.title or "").strip():
             item.title = generate_default_title(
-                username, now, resolve_timezone(payload.timezone)
+                now, resolve_timezone(payload.timezone)
             )
 
     if (payload.title or "").strip():
