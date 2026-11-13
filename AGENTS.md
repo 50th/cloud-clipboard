@@ -141,6 +141,7 @@ cloud-clipboard/
 | [`docs/api.md`](docs/api.md) | API 契约摘要（含 OpenAPI 导出脚本） |
 | [`docs/ws-protocol.md`](docs/ws-protocol.md) | WebSocket 协议 |
 | [`docs/admin.md`](docs/admin.md) | 后台管理设计与实现（用户/剪贴板/邀请码/审计） |
+| [`docs/share.md`](docs/share.md) | 剪贴板分享设计与执行清单（单条、公开链接、密码、有效期、撤销） |
 | [`docs/deployment.md`](docs/deployment.md) | 生产部署方案（Docker Compose + Nginx） |
 | [`docs/deploy-image-transfer.md`](docs/deploy-image-transfer.md) | 方案 B：本地出包、制品传输与回滚 |
 | [`server/README.md`](server/README.md) | 后端启动、迁移、数据库结构、排错 |

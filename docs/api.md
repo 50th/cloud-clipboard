@@ -99,7 +99,7 @@ Authorization: Bearer <JWT>
 class ClipboardItemResponse(BaseModel):
     id: str                    # uuid
     user_id: str               # uuid
-    title: str                 # 用户填写；留空时服务端生成 "demo · 10-05 21:56"
+    title: str                 # 用户填写；留空时服务端生成 "剪贴板 · 10-05 21:56"
     content_type: ContentType  # text | image | file
     content: str               # 文字内容或文件 URL
     preview: Optional[str]     # 预览文本
@@ -114,7 +114,7 @@ class ClipboardItemResponse(BaseModel):
 
 - 时间统一 ISO 8601 UTC，形如 `2026-09-27T10:00:00Z`；数据库列用 `timestamptz`
 - `content_hash` **不对外暴露**，仅服务端用于去重
-- `title` 留空时服务端生成 `<用户名> · <月-日 时:分>`，时间按请求里的 `timezone`（IANA 名）
+- `title` 留空时服务端生成 `剪贴板 · <月-日 时:分>`，时间按请求里的 `timezone`（IANA 名）
   展示；数据库**始终存 UTC**，时区只影响标题文本。未传或非法时回退 `DEFAULT_TIMEZONE`
 - 去重：同一用户提交相同 `content` → 刷新 `updated_at`、不新建记录，且**不覆盖已有标题**
   （除非本次显式传 `title`）
