@@ -56,13 +56,20 @@ server/
 **表**
 
 - `users`：id / username / email / password_hash / nickname / avatar_url /
-  `is_admin` / `is_active` / `token_version` / `last_login_at` / `invite_code_id`(FK) / created_at
+  `is_admin` / `is_active` / `token_version` / `last_login_at` / `invite_code_id`(FK) /
+  `share_limit`（单独分享上限，null = 跟随全局）/ created_at
 - `clipboard_items`：id / user_id(FK) / title / content_type / content / preview /
   metadata(JSONB) / `content_hash` / created_at / updated_at
 - `invite_codes`：id / `code_hash`（SHA-256）/ `code_hint` / label / max_uses /
   used_count / expires_at / revoked_at / last_used_at / created_at
 - `admin_audit_logs`：id / admin_id(FK, 删管理员后置空) / admin_username / action /
   target_type / target_id / detail(JSONB) / created_at
+- `clipboard_shares`：id / user_id(FK) / item_id(FK) / mode / token(唯一) / title /
+  content(快照) / content_type / password_hash / expires_at / max_views / view_count /
+  revoked_at / created_at / last_viewed_at
+- `clipboard_share_access_logs`：id / share_id(FK, 级联) / accessed_at / result /
+  ip(INET) / user_agent
+- `share_settings`：单行表（id=1）：user_share_limit（默认 50）/ updated_at / updated_by(FK)
 
 **迁移**
 
@@ -72,6 +79,10 @@ server/
 | `0002_invite_codes` | invite_codes |
 | `0003_admin_users_and_audit_logs` | 用户管理列 + admin_audit_logs |
 | `0004_user_invite_code` | users.invite_code_id（邀请码使用详情） |
+| `0005_clipboard_shares` | clipboard_shares（分享） |
+| `0006_share_settings` | share_settings（单行限额配置，默认 50） |
+| `0007_share_access_logs` | clipboard_share_access_logs（成功/失败访问记录） |
+| `0008_user_share_limit` | users.share_limit（用户单独分享上限，null = 跟随全局） |
 
 **去重**：`UNIQUE(user_id, content_hash)` —— 同一用户提交相同 `content` 命中同一行，
 只刷新 `updated_at`、不新建记录；`content_hash` **不对外暴露**。
@@ -89,6 +100,8 @@ server/
 | PATCH | `/api/v1/clipboard/items/{id}` | 更新（只改传入字段） |
 | DELETE | `/api/v1/clipboard/items/{id}` | 删除单条 |
 | DELETE | `/api/v1/clipboard/items` | 清空 |
+| POST/GET/DELETE | `/api/v1/clipboard/shares*` | 单条分享的创建 / 我的分享 / 撤销 / 访问记录（见 [`../docs/share.md`](../docs/share.md)） |
+| GET/POST | `/api/v1/public/shares/*` | 公开只读访问：元信息 / 查看正文（唯一计数入口） |
 | POST | `/api/v1/dev/reset` | ⚠️ 删数据重建种子（仅 dev 路由开启时） |
 | GET | `/api/v1/dev/db` | 探测当前连的是哪个库（仅 dev 路由开启时） |
 | GET/PATCH/DELETE | `/api/v1/admin/*` | 后台管理：用户 / 剪贴板 / 邀请码 / 统计 / 审计（需 `is_admin`，普通用户 403；详见 [`../docs/admin.md`](../docs/admin.md)） |

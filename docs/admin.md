@@ -4,10 +4,10 @@
 > 进度与验证记录写 [`roadmap.md`](roadmap.md)；接口摘要同步 [`api.md`](api.md)；
 > 数据契约以 `server/app/schemas/` 为准。
 
-**最后更新**：2026-11-13
+**最后更新**：2026-11-14
 **状态**：已实现并部署生产（镜像 `1.0.5`，迁移 `0003` + `0004` 已应用）；
 待初始化管理员与配置网络边界，P1 安全项未纳入本轮；
-新增「分享限额设置」设计，待随分享功能实现
+「分享限额设置」「分享管理」「分享访问记录」已随分享功能实现（迁移 `0005`–`0008`）
 **入口**：`/admin`（与用户端同一构建产物）
 
 ---
@@ -16,18 +16,20 @@
 
 管理员登录后可查看、搜索和管理**所有用户及其剪贴板内容**。
 
-- 概览统计：用户、剪贴板、总占用、近 7 天新增、邀请码总数/可用数/使用次数
+- 概览统计：用户、剪贴板、分享总数与有效分享、总占用、近 7 天新增、邀请码总数/可用数/使用次数
   （统计卡片可点击进入对应页面）
-- 用户管理：列表、搜索、分页、详情、禁用/启用、重置密码、删除
+- 用户管理：列表、搜索、分页、详情、禁用/启用、重置密码、删除；
+  用户详情中的剪贴板与分享记录均通过模态框查看
 - 剪贴板管理：全局列表、按用户/关键字筛选、查看完整正文、删除、按用户清空
 - 邀请码管理：列表、按状态筛选、生成（**必须设置最大使用次数**）、使用详情、撤销
 - 操作审计：管理员登录与全部写操作同时写应用日志与 `admin_audit_logs` 表
-- 分享设置：配置每用户有效分享上限（默认 50，范围 1–10000），更新写审计
+- 网站设置：集中管理全站配置（当前为全局分享上限，默认 50，范围 1–10000），更新写审计
+- 分享管理：全局分享列表（只读），按状态与分享者用户名筛选，可分页查看
 - 分享访问记录：查看成功与失败尝试；失败记录只有管理员能看
 - 自身账号：顶部「修改密码」可修改当前管理员密码，成功后管理端会话失效需重新登录
 
 **不在本期**：图片/文件管理、多级 RBAC、审批流、管理端移动端专项适配、
-分享管理（撤销/编辑分享，P1）。
+管理员撤销/编辑分享（P1；只读列表已实现）。
 
 ---
 
@@ -35,7 +37,7 @@
 
 | 项 | 决策 |
 |----|------|
-| 管理能力 | 查看/搜索、禁用/启用、重置密码、删除用户、删除/清空剪贴板、邀请码生成/撤销 |
+| 管理能力 | 查看/搜索、禁用/启用、重置密码、删除用户、删除/清空剪贴板、邀请码生成/撤销、分享只读列表与访问记录 |
 | 入口形态 | 同站 `/admin`，复用现有 Web 工程与构建产物 |
 | 删除策略 | **禁用优先**；物理删除为独立操作，二次确认后级联删除剪贴板 |
 | 审计方式 | 应用日志 + 独立 `admin_audit_logs` 表，并提供后台「操作日志」页 |
@@ -77,6 +79,7 @@
 | `token_version` | integer, not null | 0 | 令牌版本；密码重置 / 禁用时 +1 |
 | `last_login_at` | timestamptz, null | null | 最后登录时间 |
 | `invite_code_id` | UUID, null, FK `invite_codes.id` `ON DELETE SET NULL` | null | 注册时使用的邀请码 |
+| `share_limit` | integer, null | null | 单独设置的分享上限；null = 跟随 `share_settings` 全局值 |
 
 ### 4.2 新表 `admin_audit_logs`
 
@@ -98,13 +101,15 @@
 
 `server/app/schemas/admin.py`：
 
-- `AdminUserResponse` / `AdminUserList` / `AdminUserUpdate` / `AdminPasswordResetRequest`
+- `AdminUserResponse` / `AdminUserList` / `AdminUserUpdate`（含 `share_limit`）/ `AdminPasswordResetRequest`
 - `AdminClipboardItemResponse` / `AdminClipboardItemList`
-- `AdminStatsResponse`：用户、剪贴板与邀请码统计
+- `AdminStatsResponse`：用户、剪贴板、分享与邀请码统计
 - `AdminInviteCodeResponse` / `AdminInviteCodeCreated` / `AdminInviteCodeList`
 - `AdminInviteCodeUsage` / `AdminInviteCodeUsageList`
 - `AdminAuditLogResponse` / `AdminAuditLogList`
 - `ShareSettingsResponse` / `ShareSettingsUpdate`
+- `AdminShareResponse` / `AdminShareList` / `AdminShareListParams`（全局分享）
+- `AdminUserShareResponse` / `AdminUserShareList` / `AdminUserShareListParams`（用户分享）
 - `AdminShareAccessLogResponse` / `AdminShareAccessLogList` / `AdminShareAccessLogParams`
 - 各列表查询参数类（分页、筛选、排序）
 
@@ -124,7 +129,8 @@
 | `user.clipboards.clear` | `user` | 清空某用户剪贴板 |
 | `clipboard.delete` | `clipboard` | 删除单条剪贴板 |
 | `invite.create` / `invite.revoke` | `invite` | 生成 / 撤销邀请码 |
-| `settings.share_quota.update` | `settings` | 修改每用户分享限额，detail 记 old/new |
+| `settings.share_quota.update` | `settings` | 修改全局分享限额，detail 记 old/new |
+| `user.share_limit.update` | `user` | 修改用户单独分享上限，detail 记 old/new（null 表示跟随全局） |
 
 ### 4.5 表 `share_settings`
 
@@ -179,10 +185,12 @@
 | GET | `/stats` | 概览：用户 / 剪贴板 / 邀请码统计 |
 | GET | `/settings/shares` | 读取每用户分享限额、最近更新信息 |
 | PUT | `/settings/shares` | 更新分享限额；body `user_share_limit`，范围 1–10000 |
+| GET | `/shares` | 全局分享分页；`status`、`username` 筛选，不返回 token / 链接 |
 | GET | `/share-access-logs` | 分享访问记录；`result=all/success/failure`、`share_id`、`username`、时间范围 |
+| GET | `/users/{id}/shares` | 指定用户的分享记录分页；支持 `status` 筛选，不返回 token / 链接 |
 | GET | `/users` | 分页；`search`、`status=all/active/disabled`、`role=all/admin/user` |
 | GET | `/users/{id}` | 用户详情与统计；不存在 404 |
-| PATCH | `/users/{id}` | 修改昵称/邮箱/启用状态/管理员标记；邮箱冲突 409 |
+| PATCH | `/users/{id}` | 修改昵称/邮箱/启用状态/管理员标记/单独分享上限；邮箱冲突 409 |
 | POST | `/users/{id}/reset-password` | 重置密码；旧令牌立即失效 |
 | DELETE | `/users/{id}` | 物理删除用户并级联删除剪贴板；不能删除自己 |
 | DELETE | `/users/{id}/clipboards` | 清空该用户剪贴板 |
@@ -209,8 +217,9 @@
 **后端**
 
 - 契约：`server/app/schemas/admin.py`；`UserResponse.is_admin`
-- 数据：`users` 新增 5 列；`admin_audit_logs`；迁移 `0003`（管理列 + 审计）、
-  `0004`（`users.invite_code_id`）、`0006_share_settings`（分享限额）
+- 数据：`users` 新增 6 列（含 `share_limit`）；`admin_audit_logs`；迁移 `0003`（管理列 + 审计）、
+  `0004`（`users.invite_code_id`）、`0006_share_settings`（全局分享限额）、
+  `0008_user_share_limit`（用户单独分享上限）
 - 权限：`get_current_admin`；HTTP 与 WebSocket 校验 `is_active` / `token_version`
 - 接口：`app/routers/admin.py`、`app/crud/admin.py`、`app/crud/audit.py`、
   `app/crud/share_setting.py`
@@ -220,8 +229,9 @@
 **前端**
 
 - 入口：`web/src/main.ts` 按路径分发；用户端启动逻辑在 `web/src/bootstrap.ts`
-- 管理端：`web/src/admin/`（独立 Pinia、`sessionStorage` 令牌、八个视图）；
-  新增「分享设置」`SettingsView.vue` / `api/settings.ts`，
+- 管理端：`web/src/admin/`（独立 Pinia、`sessionStorage` 令牌、九个视图）；
+  新增「网站设置」`SiteSettingsView.vue` / `api/settings.ts`，
+  「分享管理」`SharesView.vue` / `api/shares.ts`，
   「分享访问记录」`ShareAccessLogsView.vue` / `api/shareAccessLogs.ts`
 - 剪贴板正文统一用 `<pre>` 文本插值，未引入 `v-html`；模态框默认不显示右上角关闭按钮
 
@@ -301,7 +311,13 @@ ADMIN_JWT_EXPIRE_MINUTES=720
 - [ ] 全局剪贴板可搜索、查看全文、删除，删除后用户端实时收到事件
 - [ ] 邀请码明文只显示一次；达到最大使用次数后无法继续注册
 - [ ] 邀请码「使用详情」列出通过该码注册的用户
-- [ ] 管理员可在「分享设置」读取/保存每用户分享限额，普通用户访问返回 403
+- [ ] 「分享管理」列出全局分享，支持状态/分享者筛选与分页，且不含 token
+- [ ] 概览的「分享总数」「有效分享」卡片可点击跳转到「分享管理」
+- [ ] 管理员可在「网站设置」读取/保存全局分享限额，普通用户访问返回 403
+- [ ] 用户详情中「查看剪贴板」「查看分享记录」均以模态框展示，支持分页
+- [ ] 分享记录展示标题、模式、状态、查看次数、到期时间，且不含 token
+- [ ] 管理员可在用户详情单独设置分享上限；留空（显式 `null`）表示跟随全局
+- [ ] 用户单独限额优先于全局值，修改写入审计（old/new）
 - [ ] 分享限额更新写入审计（old/new）；用户达到限额后创建分享返回 409
 - [ ] 管理员可在「分享访问记录」查看成功与失败记录，并按结果/分享/用户/时间筛选
 - [ ] 用户端「我的分享」访问记录只显示成功记录；失败记录只有管理员能看到
