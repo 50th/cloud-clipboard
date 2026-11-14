@@ -272,6 +272,12 @@
   gap: 6px;
 }
 
+/* 表格内的操作按钮保持单行：列被日期等内容撑宽时由外层横向滚动，
+   而不是把按钮挤换行（仅限表格内，详情页的按钮组仍允许换行） */
+.admin-table td .admin-table__actions {
+  flex-wrap: nowrap;
+}
+
 .badge {
   display: inline-block;
   padding: 1px 7px;
