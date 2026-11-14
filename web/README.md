@@ -47,8 +47,20 @@ store、composables 与 API 封装。
 同一构建产物按路径分发：用户端在 `/`，管理端在 `/admin`。管理端是独立入口
 （`src/admin/main.ts` + 独立 Pinia），**不使用 vue-router**，用 store 内的视图状态切换；
 令牌只存 `sessionStorage`，不保存密码。页面包括：概览、用户管理、用户详情、
-剪贴板管理、邀请码、操作日志；顶部提供「修改密码」与「退出登录」。
+剪贴板管理、分享管理、邀请码、分享访问记录、网站设置、操作日志；
+顶部提供「修改密码」与「退出登录」。
 设计、接口与权限说明见 [`../docs/admin.md`](../docs/admin.md)。
+
+### 分享公开页（`/s/<token>`）
+
+同一构建产物按路径分发：`src/main.ts` 先判 `/admin`，再判 `/s`，其余走用户端。
+公开页是独立入口（`src/share/main.ts` + `ShareView.vue`），**不加载 Pinia、
+用户 store 或主应用 `App.vue`**；页面加载只取元信息，只有点击「查看内容」或
+提交正确密码才调用计数接口。正文用 `<pre>` 文本插值，不提供列表/搜索/编辑。
+
+用户端历史卡片新增「分享」按钮，顶部「我的分享」可复制链接、查看成功访问记录、
+撤销。删除有有效分享的记录前会提示链接将立即失效。设计与边界见
+[`../docs/share.md`](../docs/share.md)。
 
 **列表默认按「修改时间」倒序**（下拉框可切「最近修改 / 最早修改」）：
 编辑过的记录会立刻上移。注意后端 `sort_by` 默认是 `created_at`，
@@ -149,6 +161,9 @@ pnpm run gen:api   # 契约变更后重新生成 src/types/api.d.ts
   继续输入会重置、`markSaved`/关闭开关会取消，以及「保存过之后再编辑仍应显示待保存」
 - `notice.test.ts`：纯前端，覆盖顶部提示必须**自动消失**
 - `admin.test.ts`：管理端纯逻辑，`/admin` 路径判定与 `sessionStorage` 不可用时的内存兜底
+- `sharePath.test.ts`：`/s` 路径判断
+- `shares.test.ts`：分享端到端（独立账号）：快照/跟随、密码、撤销、次数用尽、
+  删除级联、跨账号、计数规则与访问记录
 
 ### 安全守卫（重要）
 
@@ -183,12 +198,13 @@ web/
 ├── package.json                 # imports: #src/* → ./src/*
 ├── pnpm-workspace.yaml          # allowBuilds 放行 esbuild / vue-demi
 ├── scripts/generate-api-types.mjs
-├── tests/                       # e2e / websocket / autosave / notice / logger / admin
+├── tests/                       # e2e / websocket / autosave / notice / logger / admin / share
 └── src/
-    ├── main.ts                  # 按路径分发：/admin → admin/main，其余 → bootstrap
+    ├── main.ts                  # 按路径分发：/admin → admin/main，/s → share/main，其余 → bootstrap
     ├── bootstrap.ts             # 用户端启动：Pinia + 401 登出回调 + 挂载 App.vue
     ├── App.vue                  # 登录门禁 + 桌面两栏 / 移动页签 + 实时连接状态
     ├── admin/                   # 管理端（独立入口、store、api、views、组件与样式）
+    ├── share/                   # 分享公开页（独立入口，不依赖 Pinia / 用户 store）
     ├── api/client.ts            # axios 封装 + token 拦截器 + 401 处理 + 错误归一化
     ├── types/api.d.ts           # 由 openapi-typescript 生成，勿手改
     ├── utils/clipboard.ts       # 剪贴板写入（自身写入标志 + execCommand 降级）

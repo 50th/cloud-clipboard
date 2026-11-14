@@ -7,8 +7,8 @@
 > **新会话怎么用**：先读第 3、4、6 节确认契约，再按第 11 节顺序实现，最后用第 10、12 节验收。
 > 管理端限额 / 访问记录见 6.6、6.7、8.7、8.8 与 [`admin.md`](admin.md)。
 
-**最后更新**：2026-11-13
-**状态**：设计定稿（含分享限额、计数规则、删除确认），待实现
+**最后更新**：2026-11-14
+**状态**：已实现（后端 312 项 / Web 85 项测试通过，迁移 `0005`–`0008`），待人工验收与生产部署
 **入口**：用户端历史卡片「分享」；公开页 `/s/<token>`
 
 ---
@@ -30,13 +30,15 @@
 - 内容模式：快照 / 跟随最新
 - 有效期：1 小时 / 1 天 / 7 天 / 30 天，默认 7 天
 - 最大查看次数：可选 1–10000
-- 我的分享：列表、复制链接、撤销
+- 我的分享：列表、状态筛选（默认有效）、标题/内容搜索、复制链接、撤销
 - 公开查看页 `/s/<token>`：查看、解锁、复制、失效提示
-- 每用户有效分享上限：默认 50，管理端可调（范围 1–10000）
+- 每用户有效分享上限：全局默认 50，管理端可调；用户详情可单独覆盖
+- 同一条记录最多 5 个有效分享，超出返回 409，需先撤销旧链接
 - 删除原记录时，如存在有效分享，前端提示链接将立即失效
 - 分享访问记录：成功获取正文时记录时间、IP、User-Agent；我的分享可分页查看
 - 失败尝试记录：密码错误、已过期、已撤销、次数用尽、分享者禁用；仅管理员可查看
 - 管理员访问记录：可查看全部成功/失败记录，支持按结果、分享、用户、时间筛选
+- 管理端分享列表：全局分享与用户详情分享记录均为只读，不返回 token
 - 限流、`noindex`、日志访问控制
 
 ### 2.2 不做
@@ -47,8 +49,7 @@
 - 公开分享列表 / 搜索
 - 修改已有分享（只能撤销后重建）
 - 永久分享
-- 管理员分享管理（撤销/编辑分享，P1；访问记录查看除外）
-- 按用户单独设置不同限额（P0 只做全局统一上限）
+- 管理员分享管理（撤销/编辑分享，P1；全局列表、用户分享记录、访问记录只读）
 - 访客级去重计数（P0 不做；见 5.4）
 - 访问记录自动清理 / 保留策略（P1）
 - WebSocket 分享事件
@@ -71,8 +72,9 @@
 | 分享者信息 | 不在公开页展示 |
 | 密码规则 | 4–24 字符，UTF-8 不超过 72 字节（bcrypt 上限） |
 | 修改分享 | 不支持；撤销后重新创建 |
-| 管理端 | P0 只做「分享限额」设置与访问记录查看；分享撤销/编辑为 P1 |
-| 分享限额 | 每用户有效分享数；全局设置，默认 50，管理端可调，范围 1–10000 |
+| 管理端 | 分享限额设置、网站设置、全局/用户分享记录只读、访问记录查看；撤销/编辑分享为 P1 |
+| 分享限额 | 全局默认每用户有效分享数（默认 50，范围 1–10000）；支持在用户详情单独设置，非空时优先于全局 |
+| 单条分享限额 | 同一条记录最多 5 个有效分享，超出 409；不自动撤销旧链接 |
 | 计数规则 | 只有主动点击「查看内容」并成功获取正文才计数；页面加载、刷新、meta、密码错误不计数；P0 不做访客去重 |
 | 删除确认 | 删除原记录前查询有效分享数；有分享时提示链接将立即失效 |
 | 访问记录 | 记录成功访问与失败尝试；字段 `accessed_at`、`result`、原始 IP、User-Agent |
@@ -184,7 +186,8 @@ class ShareAccessResult(str, Enum):
 - 在 `server/app/db/models/__init__.py` 导入并加入 `__all__`
 - 迁移：`0005_clipboard_shares`（`down_revision = "0004_user_invite_code"`）、
   `0006_share_settings`（`down_revision = "0005_clipboard_shares"`）、
-  `0007_share_access_logs`（`down_revision = "0006_share_settings"`）
+  `0007_share_access_logs`（`down_revision = "0006_share_settings"`）、
+  `0008_user_share_limit`（`down_revision = "0007_share_access_logs"`，用户单独限额）
 - 迁移后逐行检查，确认没有把开发库里的测试表当成删除项
 - 不建 ORM relationship，公开访问用显式查询取原记录，避免异步懒加载 `MissingGreenlet`
 
@@ -307,12 +310,20 @@ return row.view_count, row.max_views
 
 ### 5.8 分享限额
 
-- `share_settings.user_share_limit` 是每用户**有效分享**上限，默认 50，范围 1–10000。
+- `share_settings.user_share_limit` 是**全局默认**的每用户有效分享上限，默认 50，范围 1–10000。
+- `users.share_limit` 是**用户单独设置**的上限（可空）：
+  - 非空时优先于全局值；
+  - 为空时跟随 `share_settings.user_share_limit`；
+  - 管理端在「用户详情」设置，显式传 `null` 表示清除并跟随全局。
 - 有效定义与 5.1 的 `active` 一致；已撤销、已过期、次数用尽不占额度。
 - 创建分享时在同一事务内锁定用户行（`SELECT ... FOR UPDATE` 或 advisory lock），
-  再统计有效分享数；达到上限返回 `409`，detail 包含上限值。
+  读取该用户的单独限额（空则读全局），再统计有效分享数；达到上限返回 `409`，
+  detail 包含生效的上限值。
 - 管理端调低限额不会删除已有分享；只阻止新建，直到有效分享数低于限额。
-- P0 为全局统一上限；按用户单独覆盖列为 P1。
+- **单条上限**：同一条记录最多 `5` 个 `active` 分享（常量
+  `SHARE_PER_ITEM_LIMIT`，见 `app/schemas/share.py`）；超出返回 `409`，
+  detail 为「同一条记录最多 5 个有效分享，请先撤销旧链接」。
+  撤销、过期、次数用尽后不占该额度；创建前在用户行锁内统计，避免并发越过上限。
 
 ### 5.9 访问记录
 
@@ -350,7 +361,7 @@ return row.view_count, row.max_views
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/api/v1/clipboard/items/{id}/shares` | 创建分享；返回 token 与完整 URL |
-| GET | `/api/v1/clipboard/shares` | 我的分享分页；`page` 从 1 开始，`size` 默认 20、最大 100 |
+| GET | `/api/v1/clipboard/shares` | 我的分享分页；`page` 从 1 开始，`size` 默认 10、最大 100 |
 | DELETE | `/api/v1/clipboard/shares/{id}` | 撤销分享 |
 | GET | `/api/v1/clipboard/shares/{id}/access-logs` | 我的成功访问记录分页；仅所有者可查，不含失败记录 |
 
@@ -392,14 +403,15 @@ return row.view_count, row.max_views
 {
   "items": [],
   "page": 1,
-  "size": 20,
+  "size": 10,
   "total": 0,
   "pages": 0
 }
 ```
 
 查询参数：`page`、`size`、`status`（`active|expired|exhausted|revoked`，可空）、
-`item_id`（可选，按原记录过滤；删除确认用它统计有效分享数）。
+`item_id`（可选，按原记录过滤；删除确认用它统计有效分享数）、
+`search`（可选，匹配分享标题或正文；快照读分享副本，跟随回退到原记录正文）。
 筛选顺序与 5.1 一致：已撤销的行只算 `revoked`，不同时算 `expired` 或 `exhausted`。
 
 撤销响应：
@@ -422,13 +434,13 @@ return row.view_count, row.max_views
     }
   ],
   "page": 1,
-  "size": 20,
+  "size": 10,
   "total": 1,
   "pages": 1
 }
 ```
 
-查询参数：`page`、`size`（默认 20、最大 100）。按 `accessed_at DESC` 排序；
+查询参数：`page`、`size`（默认 10、最大 100）。按 `accessed_at DESC` 排序；
 只返回 `result="success"`；分享不存在或不属于本人返回 `404`。
 
 ### 6.2 公开接口（无需登录）
@@ -487,6 +499,7 @@ return row.view_count, row.max_views
 | 原记录不存在或不属于本人 | 404 | 剪贴板项不存在 |
 | 分享不存在或不属于本人 | 404 | 分享不存在 |
 | 有效分享数达到上限 | 409 | 分享数量已达上限（N 条），请先撤销或等待过期 |
+| 同一条记录有效分享数达到上限 | 409 | 同一条记录最多 5 个有效分享，请先撤销旧链接 |
 | 非文字记录 | 400 | 阶段一仅支持文字分享 |
 
 ### 6.4 响应头
@@ -532,7 +545,7 @@ Referrer-Policy: no-referrer
 
 查询参数：
 
-- `page` / `size`：默认 20，最大 100。
+- `page` / `size`：默认 10，最大 100。
 - `result`：`all` / `success` / `failure`；默认 `all`。
 - `share_id?`：按分享过滤。
 - `username?`：按分享者用户名过滤。
@@ -556,7 +569,7 @@ Referrer-Policy: no-referrer
     }
   ],
   "page": 1,
-  "size": 20,
+  "size": 10,
   "total": 1,
   "pages": 1
 }
@@ -565,6 +578,16 @@ Referrer-Policy: no-referrer
 - 按 `accessed_at DESC` 排序；`failure` 表示 `result != "success"`。
 - 原始 IP 只在该接口返回；管理端仅内网 / VPN 访问。
 - 普通用户访问返回 `403`；失败记录只有管理员能查看。
+
+### 6.8 管理端分享列表
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/admin/shares` | 全局分享分页；`status`、`username` 筛选 |
+| GET | `/api/v1/admin/users/{id}/shares` | 指定用户分享记录分页；`status` 筛选 |
+
+- 仅管理员；返回标题、分享者、模式、状态、查看次数、到期/创建时间、是否设密码。
+- **不返回 token / 链接**；只读，不提供撤销/编辑（P1）。
 
 ---
 
@@ -581,10 +604,11 @@ Referrer-Policy: no-referrer
 | `server/alembic/versions/20261112_1200_0005_clipboard_shares.py` | 建表迁移 |
 | `server/alembic/versions/20261113_1200_0006_share_settings.py` | 分享限额表迁移 |
 | `server/alembic/versions/20261113_1200_0007_share_access_logs.py` | 访问记录表迁移 |
+| `server/alembic/versions/20261114_1200_0008_user_share_limit.py` | `users.share_limit`（单独限额）迁移 |
 | `server/app/crud/share.py` | 数据访问、状态/计数、有效分享数、访问记录 |
 | `server/app/crud/share_setting.py` | 读取/更新分享限额 |
 | `server/app/routers/share.py` | 登录态路由与公开路由 |
-| `server/app/routers/admin.py` | 管理端分享限额、访问记录接口 |
+| `server/app/routers/admin.py` | 管理端分享限额、全局/用户分享列表、访问记录接口 |
 | `server/app/services/rate_limit.py` | 进程内滑动窗口限流 |
 | `server/app/core/config.py` | `PUBLIC_BASE_URL` |
 | `server/app/core/logging_utils.py` | 分享 token 路径脱敏 |
@@ -620,16 +644,16 @@ Referrer-Policy: no-referrer
 | `ClipboardShareCreate` | `mode`、`expires_in`、`password?`、`max_views?` |
 | `ClipboardShareResponse` | `id`、`item_id`、`mode`、`status`、`title`、`token`、`url`、`password_protected`、`expires_at?`、`max_views?`、`view_count`、`remaining_views?`、`created_at`、`last_viewed_at?` |
 | `ClipboardShareList` | `items`、`page`、`size`、`total`、`pages`；`pages = (total + size - 1) // size if total else 0` |
-| `ClipboardShareListParams` | `page=1`、`size=20`、`status?`、`item_id?` |
+| `ClipboardShareListParams` | `page=1`、`size=10`、`status?`、`item_id?`、`search?` |
 | `PublicShareMeta` | `title?`、`mode`、`content_type`、`password_required`、`expires_at?`、`remaining_views?` |
 | `PublicShareAccessRequest` | `password?` |
 | `PublicShareContent` | `title`、`content`、`content_type`、`created_at`、`expires_at?`、`remaining_views?` |
 | `ShareAccessLogResponse` | `id`、`accessed_at`、`result`、`ip_masked?`、`user_agent?` |
 | `ShareAccessLogList` | `items`、`page`、`size`、`total`、`pages` |
-| `ShareAccessLogListParams` | `page=1`、`size=20`（最大 100） |
+| `ShareAccessLogListParams` | `page=1`、`size=10`（最大 100） |
 | `AdminShareAccessLogResponse` | `id`、`share_id`、`share_title`、`owner_id`、`owner_username`、`accessed_at`、`result`、`ip?`、`user_agent?` |
 | `AdminShareAccessLogList` | `items`、`page`、`size`、`total`、`pages` |
-| `AdminShareAccessLogParams` | `page=1`、`size=20`、`result=all`、`share_id?`、`username?`、`start?`、`end?` |
+| `AdminShareAccessLogParams` | `page=1`、`size=10`、`result=all`、`share_id?`、`username?`、`start?`、`end?` |
 | `ShareSettingsResponse` | `user_share_limit`、`updated_at?`、`updated_by?`、`updated_by_username?` |
 | `ShareSettingsUpdate` | `user_share_limit`（1–10000） |
 
@@ -641,11 +665,12 @@ Referrer-Policy: no-referrer
 
 ```python
 async def create_share(session, user_id, item, payload) -> ClipboardShare
-async def list_shares(session, user_id, *, page, size, status, item_id) -> tuple[list[ClipboardShare], int]
+async def list_shares(session, user_id, *, page, size, status, item_id, search=None) -> tuple[list[ClipboardShare], int]
 async def get_share(session, user_id, share_id) -> ClipboardShare | None
 async def revoke_share(session, user_id, share_id) -> bool
 async def get_by_token(session, token) -> ClipboardShare | None
 async def count_active_shares(session, user_id) -> int
+async def count_active_shares_for_item(session, user_id, item_id) -> int
 def share_status(share, now) -> ShareStatus
 def remaining_views(share) -> int | None
 async def consume_view(session, share, *, ip, user_agent) -> tuple[int, int | None] | None
@@ -672,6 +697,7 @@ async def update_share_settings(session, user_share_limit, admin_id) -> ShareSet
   `access` 路由先 `resolve_content`，再调用 `consume_view`，确保正文可取才计数和记录。
 - `resolve_content` 对 `live` 模式显式 `session.get(ClipboardItem, share.item_id)`；不存在返回 `None`。
 - `count_active_shares` 统计状态为 `active` 的分享（口径同 5.1），用于限额和删除确认。
+- `count_active_shares_for_item` 统计某条记录的有效分享数，用于单条上限。
 - `create_share` 在同一事务内锁定用户行、读取 `share_settings`、统计有效分享数；
   达到上限时抛业务异常，由路由转成 `409`。
 - `get_share_settings` 在配置行缺失时回退默认 50；`update_share_settings`
@@ -782,11 +808,15 @@ _SHARE_PAGE_PATH = re.compile(r"(/s/)[A-Za-z0-9_-]+")
 | `web/src/App.vue` | 弹窗状态、顶部「我的分享」入口 |
 | `web/src/main.ts` | `/s/` 路由分发 |
 | `web/src/admin/api/settings.ts` | 管理端分享限额 API |
-| `web/src/admin/views/SettingsView.vue` | 分享限额设置页 |
+| `web/src/admin/views/SiteSettingsView.vue` | 网站设置页（全局分享限额，后续配置项在此扩展） |
 | `web/src/admin/api/shareAccessLogs.ts` | 管理端访问记录 API |
+| `web/src/admin/api/shares.ts` | 管理端全局分享列表 API |
+| `web/src/admin/api/userShares.ts` | 管理端用户分享记录 API |
+| `web/src/admin/views/SharesView.vue` | 分享管理页（全局分享列表） |
 | `web/src/admin/views/ShareAccessLogsView.vue` | 管理端访问记录页 |
-| `web/src/admin/AdminApp.vue` | 增加「分享设置」「分享访问记录」导航与视图 |
-| `web/src/admin/stores/adminStore.ts` | `AdminView` 增加 `settings` / `shareAccessLogs` |
+| `web/src/admin/views/UserDetailView.vue` | 用户详情；剪贴板/分享记录用模态框展示 |
+| `web/src/admin/AdminApp.vue` | 增加「分享管理」「网站设置」「分享访问记录」导航与视图 |
+| `web/src/admin/stores/adminStore.ts` | `AdminView` 增加 `shares` / `settings` / `shareAccessLogs` |
 | `web/tests/sharePath.test.ts` | 路径判断单测 |
 | `web/tests/shares.test.ts` | 分享 API 端到端测试 |
 
@@ -797,7 +827,7 @@ _SHARE_PAGE_PATH = re.compile(r"(/s/)[A-Za-z0-9_-]+")
 
 - `shareApi` 用现有 `http`（自动带 JWT）：
   - `create(itemId, payload)`
-  - `list({ page, size, status, item_id })`
+  - `list({ page, size, status, item_id, search })`
   - `revoke(id)`
   - `accessLogs(id, { page, size })`
 - `publicShareApi` 用**独立 axios 实例**，不挂 JWT 与 401 拦截器：
@@ -816,20 +846,23 @@ _SHARE_PAGE_PATH = re.compile(r"(/s/)[A-Za-z0-9_-]+")
 
 交互：
 
-1. 提交前做本地校验；密码为空时不发送该字段。
-2. 创建成功后在同一弹窗展示完整链接与「复制」按钮。
-3. 提示「链接可随时在“我的分享”中再次复制；撤销后立即失效」。
-4. 失败用顶部 notice 显示错误；`409` 直接展示「分享数量已达上限（N 条）」。
+1. 打开弹窗时查询该记录的有效分享数并展示「已有 N 个有效分享（单条最多 5 个）」；
+   达到 5 个时禁用「创建分享」并提示先在「我的分享」撤销旧链接。
+2. 提交前做本地校验；密码为空时不发送该字段。
+3. 创建成功后在同一弹窗展示完整链接与「复制」按钮。
+4. 提示「链接可随时在“我的分享”中再次复制；撤销后立即失效」。
+5. 失败用顶部 notice 显示错误；`409` 直接展示后端 detail（全局或单条上限）。
 
 ### 8.3 我的分享
 
-- 顶部按钮打开，分页每页 20。
+- 顶部按钮打开，分页默认每页 10（可选 10 / 20 / 50）。
+- 筛选：状态默认「有效」，可选已过期 / 次数用尽 / 已撤销 / 全部；
+  搜索框按**标题或内容**过滤，停止输入 300ms 后查询。
 - 每行展示：标题、模式、状态、到期时间、查看次数、复制链接、访问记录、撤销。
 - 状态文案：有效 / 已过期 / 次数用尽 / 已撤销。
 - 撤销前 `window.confirm`，文案明确「撤销后链接立即失效」；成功后刷新列表。
-- 「访问记录」打开 `ShareAccessLogsDialog`，分页每页 20，展示时间、脱敏 IP、UA；
+- 「访问记录」打开 `ShareAccessLogsDialog`，分页每页 10，展示时间、脱敏 IP、UA；
   空状态显示「暂无访问记录」；**失败记录不会出现在这里，只有管理员能看**。
-- P0 不做状态筛选 UI；接口保留 `status` 参数。
 
 ### 8.4 公开页
 
@@ -879,9 +912,10 @@ if (isAdminPath(window.location.pathname)) {
 6. 「清空全部」同样先查当前用户有效分享总数；`total > 0` 时提示
    `你有 N 个有效分享，清空后这些链接将立即失效。确定清空？`
 
-### 8.7 管理端分享设置
+### 8.7 管理端网站设置
 
-- 导航新增「分享设置」，`AdminView` 增加 `settings`，对应 `SettingsView.vue`。
+- 导航新增「网站设置」，`AdminView` 增加 `settings`，对应 `SiteSettingsView.vue`；
+  页面按 section 组织，当前只有「分享设置」，后续配置项继续追加。
 - 页面展示当前 `user_share_limit`、最近更新时间和更新人；数字输入范围 1–10000，默认 50。
 - 保存后提示成功并刷新；失败用顶部 notice 显示错误。
 - 只有管理员可访问；`403` 时按现有管理端未授权逻辑处理。
@@ -891,9 +925,16 @@ if (isAdminPath(window.location.pathname)) {
 - 导航新增「分享访问记录」，`AdminView` 增加 `shareAccessLogs`，
   对应 `ShareAccessLogsView.vue`。
 - 列表展示：时间、结果、分享标题、分享者、原始 IP、UA；按 `accessed_at DESC`。
-- 筛选：`result=all|success|failure`、分享 ID、用户名、时间范围；分页每页 20。
+- 筛选：`result=all|success|failure`、分享 ID、用户名、时间范围；分页每页 10。
 - 失败记录只有该页面能查看；用户端「我的分享」只返回成功记录。
 - 只有管理员可访问；普通用户 `403`。
+
+### 8.9 管理端分享管理
+
+- 导航新增「分享管理」，`AdminView` 增加 `shares`，对应 `SharesView.vue`。
+- 列表展示：标题、分享者、模式、状态、查看次数、到期/创建时间、是否设密码；
+  支持状态与分享者用户名筛选、分页（默认 10）。
+- 只读；操作列提供「查看用户」跳转用户详情。概览的「分享总数」「有效分享」卡片直达本页。
 
 ---
 
@@ -994,7 +1035,7 @@ location ^~ /api/v1/public/shares/ {
 PUBLIC_BASE_URL=http://localhost:5273
 ```
 
-生产当前为 `https://43.134.121.173:8443`（换域名后改为正式域名）。
+生产环境改为实际 HTTPS 地址（见 `deploy/.env`，不写入仓库）。
 
 ---
 
@@ -1010,6 +1051,7 @@ PUBLIC_BASE_URL=http://localhost:5273
 - 只调 meta 不计数；主动调 access 才计数
 - 有密码分享：meta 的 title 为 null；缺少/错误密码 403；正确密码 200
 - 有效分享达到限额：创建返回 409；撤销/过期/次数用尽后不再占额度
+- 单条记录达到 5 个有效分享：第 6 个返回 409；撤销一个后可继续创建
 - `item_id` 筛选只返回该原记录的分享
 - 过期：把 `expires_at` 改到过去，meta/access 返回 410
 - 撤销：撤销后 410；重复撤销幂等
@@ -1030,6 +1072,11 @@ PUBLIC_BASE_URL=http://localhost:5273
 - 删除原记录后分享与访问记录级联删除
 - 管理端分享限额：普通用户 403；GET 返回默认 50；PUT 更新后新创建生效；
   审计记录 old/new；范围外返回 422
+- 单条记录最多 5 个有效分享：第 6 个返回 409，撤销后可继续创建
+- 我的分享搜索：标题、快照正文、跟随模式的原记录正文均可命中
+- 用户单独限额优先于全局；显式 `null` 清除后回落到全局值
+- 管理端全局分享列表 / 用户分享记录 / 概览分享统计
+- 管理员设置用户单独限额写入审计（old/new）
 
 ### 10.2 Web
 
@@ -1046,9 +1093,11 @@ PUBLIC_BASE_URL=http://localhost:5273
   - 点击「查看内容」后，我的分享「访问记录」新增一条
   - 访问记录弹窗只显示成功记录；分页、空状态、失败提示
   - 管理端分享访问记录页可筛选失败记录并分页
+  - 我的分享默认「有效」、状态筛选、标题/内容搜索、分页
+  - 管理端分享管理页与概览卡片跳转；用户详情剪贴板/分享记录模态框
   - 删除有有效分享的记录：提示包含分享数量；取消不删除；确认后分享失效
   - 清空全部时如有有效分享，提示总数与链接失效
-  - 管理端分享设置页可读取/保存限额
+  - 管理端网站设置页可读取/保存限额
 - `pnpm test`、`pnpm typecheck`、`pnpm build` 通过
 
 ### 10.3 人工验收
@@ -1067,7 +1116,7 @@ PUBLIC_BASE_URL=http://localhost:5273
   确认后记录删除、分享链接显示已失效
 - 清空全部：有有效分享时提示总数；确认后所有记录与分享链接失效
 - 分享限额：管理端把上限设为 1，用户再创建第二条返回「已达上限」；调回 50 后恢复
-- 管理端「分享设置」可读取/保存限额，保存后审计日志有 old/new
+- 管理端「网站设置」可读取/保存限额，保存后审计日志有 old/new
 - 移动端 375px：分享弹窗、我的分享、公开页可滚动、按钮可点
 - 日志：`server/logs/app.log` 中无 token、正文、密码；Nginx access log 若保留 token，
   确认其访问权限、保留周期与外送范围符合预期
@@ -1094,12 +1143,12 @@ PUBLIC_BASE_URL=http://localhost:5273
    生成后逐行检查，把 `revision` 改为 `0005_clipboard_shares`，文件名改为
    `20261112_1200_0005_clipboard_shares.py`，确认 `down_revision = "0004_user_invite_code"`；
    再生成 `0006_share_settings`，插入 `id=1, user_share_limit=50`；
-   再生成 `0007_share_access_logs`。
+   再生成 `0007_share_access_logs`；再生成 `0008_user_share_limit`（`users.share_limit`）。
 3. **数据层**：`app/crud/share.py`、`app/crud/share_setting.py`，实现 7.2 / 7.6 的函数；
    访问记录随 `consume_view` 同事务写入。
 4. **接口层**：`app/routers/share.py` 注册 `router` 与 `public_router`，
-   增加 `GET /shares/{id}/access-logs`；`app/routers/admin.py` 增加分享限额 GET/PUT
-   与 `GET /share-access-logs`。
+   增加 `GET /shares/{id}/access-logs`；`app/routers/admin.py` 增加分享限额 GET/PUT、
+   `GET /shares`（全局）、`GET /users/{id}/shares` 与 `GET /share-access-logs`。
 5. **安全**：`app/services/rate_limit.py`、`app/core/logging_utils.py`、`PUBLIC_BASE_URL`、`.env.example`。
 6. **后端测试**：`server/tests/test_shares.py`、`test_admin_share_settings.py`、
    `test_admin_share_access_logs.py`，跑 `.\venv\Scripts\python.exe -m pytest`。
@@ -1113,13 +1162,15 @@ PUBLIC_BASE_URL=http://localhost:5273
    - `share/path.ts` / `share/main.ts` / `share/ShareView.vue`
    - `ShareAccessLogsDialog.vue`
    - `main.ts` 路由
-   - 管理端 `admin/api/settings.ts` / `admin/views/SettingsView.vue` /
+   - 管理端 `admin/api/settings.ts` / `admin/views/SiteSettingsView.vue` /
+     `admin/api/shares.ts` / `admin/views/SharesView.vue` /
+     `admin/api/userShares.ts` / `admin/views/UserDetailView.vue` /
      `admin/api/shareAccessLogs.ts` / `admin/views/ShareAccessLogsView.vue` /
      `admin/AdminApp.vue` / `admin/stores/adminStore.ts`
 10. **Web 验证**：`cd web; pnpm test; pnpm typecheck; pnpm build`；隔离模式下跑 `.\scripts\run_web_tests.ps1`。
 11. **文档与部署**：
-    - `docs/api.md` 增加 6 个分享接口 + 3 个管理端接口（限额 2 + 访问记录 1）
-    - `docs/admin.md` 同步分享设置页与接口
+    - `docs/api.md` 增加 6 个分享接口 + 5 个管理端接口（限额 2 + 访问记录 1 + 分享列表 2）
+    - `docs/admin.md` 同步网站设置页与接口
     - `docs/roadmap.md` 记录进度与测试数量
     - `deploy/nginx/nginx.conf` / `locations.conf`（server 级 `no-referrer` + `map` 生成 `X-Robots-Tag`）
     - 生产 `.env` 设置 `PUBLIC_BASE_URL`
@@ -1132,7 +1183,9 @@ PUBLIC_BASE_URL=http://localhost:5273
 - 新接口出现在 `/openapi.json`，`web/src/types/api.d.ts` 已重新生成
 - 后端 pytest 全绿；Web `pnpm test` / `typecheck` / `build` 全绿
 - 10.3 人工验收通过
-- 每用户有效分享限额默认 50，管理端可调，超限返回 409，设置更新有审计
+- 分享限额：全局默认 50、管理端可调；用户详情可单独覆盖（非空优先）；
+  单条记录最多 5 个有效分享；超限 409；设置更新有审计
+- 管理端「分享管理」全局列表、用户分享记录与概览分享统计可用，且不返回 token
 - 页面加载/刷新不计数；只有主动查看或正确密码解锁才计数
 - 成功访问写入访问记录；所有者可分页查看；记录不包含 token/正文/密码
 - 失败尝试写入访问记录；只有管理员能查看失败记录
@@ -1143,3 +1196,4 @@ PUBLIC_BASE_URL=http://localhost:5273
   `X-Robots-Tag: noindex, nofollow`
 - 未新增依赖，未改动 WebSocket 协议
 - `docs/api.md`、`docs/roadmap.md`、Nginx 配置与 `server/.env.example` 已同步
+

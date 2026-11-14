@@ -34,12 +34,19 @@ cd server
 | GET | `/api/v1/clipboard/items` | 列表：分页 / 类型筛选 / 按标题或内容搜索 / 排序。`sort_by` 默认 `created_at`；**Web 端（及保留的鸿蒙端）都显式传 `updated_at`**（按修改时间排，编辑后会上移） |
 | GET | `/api/v1/clipboard/items/{id}` | 详情 |
 | PATCH | `/api/v1/clipboard/items/{id}` | 更新（只改显式传入的字段）。内容与**另一条**重复时返回 `409` |
-| DELETE | `/api/v1/clipboard/items/{id}` | 删除单条 |
-| DELETE | `/api/v1/clipboard/items` | 清空 |
-| GET | `/api/v1/admin/stats` | 后台概览：用户 / 剪贴板 / 总占用 / 近 7 天新增 / 邀请码总数、可用数、累计使用次数 |
+| DELETE | `/api/v1/clipboard/items/{id}` | 删除单条（级联删除该记录的分享） |
+| DELETE | `/api/v1/clipboard/items` | 清空（级联删除全部分享） |
+| POST | `/api/v1/clipboard/items/{id}/shares` | 创建分享：快照/跟随、有效期、可选密码与查看次数；超限额 `409` |
+| GET | `/api/v1/clipboard/shares` | 我的分享分页；支持 `status` / `item_id` / `search`（标题或内容）筛选 |
+| DELETE | `/api/v1/clipboard/shares/{id}` | 撤销分享；重复撤销幂等，跨用户 `404` |
+| GET | `/api/v1/clipboard/shares/{id}/access-logs` | 我的成功访问记录分页（失败记录仅管理员可见） |
+| GET | `/api/v1/public/shares/{token}` | 公开元信息：不返回正文、不计数；有密码时 `title=null` |
+| POST | `/api/v1/public/shares/{token}/access` | 公开查看正文：**唯一计数入口**；密码错误 `403`，失效 `410` |
+| GET | `/api/v1/admin/stats` | 后台概览：用户 / 剪贴板 / 分享总数与有效分享 / 总占用 / 近 7 天新增 / 邀请码统计 |
 | GET | `/api/v1/admin/users` | 用户分页：搜索用户名/邮箱、状态筛选、角色筛选、排序 |
 | GET | `/api/v1/admin/users/{id}` | 用户详情与剪贴板统计 |
-| PATCH | `/api/v1/admin/users/{id}` | 修改昵称 / 邮箱 / 启用状态 / 管理员标记 |
+| GET | `/api/v1/admin/users/{id}/shares` | 指定用户的分享记录分页；`status` 可筛选，不返回 token / 链接 |
+| PATCH | `/api/v1/admin/users/{id}` | 修改昵称 / 邮箱 / 启用状态 / 管理员标记 / 单独分享上限；`share_limit=null` 表示跟随全局 |
 | POST | `/api/v1/admin/users/{id}/reset-password` | 重置密码，旧令牌立即失效 |
 | DELETE | `/api/v1/admin/users/{id}` | 物理删除用户并级联删除剪贴板 |
 | DELETE | `/api/v1/admin/users/{id}/clipboards` | 清空指定用户剪贴板 |
@@ -51,6 +58,10 @@ cd server
 | POST | `/api/v1/admin/invite-codes` | 生成邀请码；`max_uses` 必填，明文仅返回一次 |
 | POST | `/api/v1/admin/invite-codes/{id}/revoke` | 撤销邀请码 |
 | GET | `/api/v1/admin/invite-codes/{id}/usages` | 使用详情：通过该码注册的用户，分页 |
+| GET | `/api/v1/admin/settings/shares` | 读取每用户有效分享上限（默认 50，范围 1–10000） |
+| PUT | `/api/v1/admin/settings/shares` | 更新分享上限；更新与审计 `settings.share_quota.update` 同事务 |
+| GET | `/api/v1/admin/shares` | 全局分享分页；`status` / `username` 筛选，不返回 token / 链接 |
+| GET | `/api/v1/admin/share-access-logs` | 全部分享访问记录（成功 + 失败）；普通用户 `403` |
 | POST | `/api/v1/dev/reset` | ⚠️ 删数据并重建种子（仅 `ENABLE_DEV_ROUTES=true` 时注册） |
 | GET | `/api/v1/dev/db` | 探测当前连接的数据库（同上，仅开发路由开启时） |
 | GET | `/health` / `/` | 健康检查 / 服务信息 |
@@ -118,10 +129,53 @@ class ClipboardItemResponse(BaseModel):
   展示；数据库**始终存 UTC**，时区只影响标题文本。未传或非法时回退 `DEFAULT_TIMEZONE`
 - 去重：同一用户提交相同 `content` → 刷新 `updated_at`、不新建记录，且**不覆盖已有标题**
   （除非本次显式传 `title`）
-- 搜索同时匹配 `title` 与 `content`；分页 `page` 从 1 开始、`size` 默认 20、最大 100
+- 搜索同时匹配 `title` 与 `content`；分页 `page` 从 1 开始、`size` 默认 10、最大 100
 - 阶段一仅支持 `content_type = text`；`image` / `file` 属阶段二、阶段三
 - 实时同步：写操作成功后向**同用户**的 WebSocket 连接广播事件（见 [`ws-protocol.md`](ws-protocol.md)）
 - 每个响应都带 `X-Request-ID`（12 位十六进制）；反馈问题时提供它即可定位到服务端日志。
   上游若已传同名请求头且格式合法（`[A-Za-z0-9._-]{1,64}`）则沿用
 
 逐字段定义请读运行中的 `/openapi.json` 或 `server/app/schemas/`。
+
+---
+
+## 分享契约
+
+事实来源：`server/app/schemas/share.py` 与 `schemas/admin.py`；
+完整设计与边界见 [`share.md`](share.md)。
+
+```python
+class ClipboardShareCreate(BaseModel):
+    mode: ShareMode            # snapshot | live（默认 snapshot）
+    expires_in: ShareExpiresIn # 1h | 1d | 7d（默认） | 30d
+    password: Optional[str]    # 4–24 字符，UTF-8 ≤ 72 字节
+    max_views: Optional[int]   # 1–10000；空表示不限
+
+class ClipboardShareResponse(BaseModel):
+    id: str
+    item_id: str
+    mode: ShareMode
+    status: ShareStatus        # active | expired | exhausted | revoked
+    title: str
+    token: str                 # secrets.token_urlsafe(32)
+    url: str                   # ${PUBLIC_BASE_URL}/s/<token>
+    password_protected: bool
+    expires_at: Optional[datetime]
+    max_views: Optional[int]
+    view_count: int
+    remaining_views: Optional[int]
+    created_at: datetime
+    last_viewed_at: Optional[datetime]
+```
+
+- 限额：`users.share_limit` 非空时优先于全局默认值，为空则跟随 `share_settings.user_share_limit`
+- 单条记录最多 5 个有效分享，超出返回 `409`（需先撤销旧链接）
+- 状态判定顺序：`revoked` → `expired` → `exhausted` → `active`
+- **计数规则**：页面加载、刷新、`GET meta`、密码错误均不计数；
+  只有 `POST access` 成功返回正文才计 1 次
+- 快照分享复制创建时的正文；跟随分享按 `item_id` 读取原记录最新内容
+- 访问记录只记 `accessed_at` / `result` / 原始 IP / User-Agent，
+  **不记 token、正文、密码**；所有者接口返回脱敏 IP，管理端返回原始 IP
+- 失败 `result`：`password_failed` / `expired` / `revoked` / `exhausted` / `owner_disabled`
+- 公开接口统一响应头：`X-Robots-Tag: noindex, nofollow`、`Cache-Control: no-store`、
+  `Referrer-Policy: no-referrer`
