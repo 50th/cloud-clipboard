@@ -4,7 +4,9 @@ import { ref } from 'vue'
 
 import ClipboardItemCard from '@/components/ClipboardItemCard.vue'
 import type { ClipboardItem } from '@/api/client'
+import { shareApi } from '@/api/client'
 import { useClipboardStore } from '@/stores/clipboardStore'
+import { logger } from '@/utils/logger'
 
 const store = useClipboardStore()
 const { items, loading, error, total, page, pages, search, order } = storeToRefs(store)
@@ -18,6 +20,8 @@ const emit = defineEmits<{
   (e: 'update:searchInput', value: string): void
   /** 清空全部（确认与提示由 App 统一处理） */
   (e: 'clear-all'): void
+  /** 打开创建分享弹窗 */
+  (e: 'share', item: ClipboardItem): void
 }>()
 
 const deletingId = ref<string | null>(null)
@@ -30,7 +34,22 @@ function onSearchInput(event: Event) {
 async function handleDelete(id: string) {
   const target = items.value.find((item) => item.id === id)
   const label = target?.title ? `「${target.title}」` : '这条记录'
-  if (!window.confirm(`确定删除${label}？此操作不可撤销。`)) {
+
+  // 删除会级联删除分享；先查有效分享数，避免用户不知道链接会失效。
+  let activeShares = 0
+  try {
+    const result = await shareApi.list({ item_id: id, status: 'active', size: 1 })
+    activeShares = result.total
+  } catch (error) {
+    // 查询失败不阻塞删除；按 0 处理，保持原有确认文案。
+    logger.debug('查询有效分享数失败，按 0 处理', error)
+  }
+
+  const message =
+    activeShares > 0
+      ? `该记录有 ${activeShares} 个有效分享，删除后这些链接将立即失效。确定删除？`
+      : `确定删除${label}？此操作不可撤销。`
+  if (!window.confirm(message)) {
     return
   }
 
@@ -40,6 +59,10 @@ async function handleDelete(id: string) {
   } finally {
     deletingId.value = null
   }
+}
+
+function handleShare(item: ClipboardItem) {
+  emit('share', item)
 }
 
 /**
@@ -112,6 +135,7 @@ function handleEdit(item: ClipboardItem) {
           :editing="store.editingId === item.id"
           @delete="handleDelete"
           @edit="handleEdit"
+          @share="handleShare"
         />
       </div>
     </div>

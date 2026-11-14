@@ -13,7 +13,7 @@ import type { ClipboardItem, SortOrder } from '#src/api/client.ts'
 import type { WsEnvelope } from '#src/composables/useWebSocket.ts'
 import { logger } from '#src/utils/logger.ts'
 
-export const PAGE_SIZE = 20
+export const PAGE_SIZE = 10
 
 /**
  * 本次会话中出现过的记录 id（含历史列表里见过的）。

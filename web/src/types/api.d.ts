@@ -139,6 +139,133 @@ export interface paths {
         patch: operations["update_item_api_v1_clipboard_items__id__patch"];
         trace?: never;
     };
+    "/api/v1/clipboard/items/{id}/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 创建分享
+         * @description 为一条文字剪贴板生成受控只读链接。
+         *
+         *     - `mode=snapshot` 复制当前正文；`mode=live` 跟随原记录最新内容
+         *     - 默认有效期 7 天，可选 1 小时 / 1 天 / 30 天
+         *     - 密码可选（4–24 字符），查看次数可选（1–10000）
+         *     - 每用户有效分享数受全局限额约束，超限返回 409
+         */
+        post: operations["create_share_api_v1_clipboard_items__id__shares_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clipboard/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 我的分享
+         * @description 分页查询当前用户的分享。支持 `status` 与 `item_id` 筛选；删除原记录前可用 `item_id` + `status=active` 统计有效分享数。
+         */
+        get: operations["list_shares_api_v1_clipboard_shares_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clipboard/shares/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 撤销分享
+         * @description 撤销后链接立即失效；重复撤销幂等。只能撤销本人的分享。
+         */
+        delete: operations["revoke_share_api_v1_clipboard_shares__id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clipboard/shares/{id}/access-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 我的分享访问记录
+         * @description 分页查询某条分享的成功访问记录，按访问时间倒序。**失败记录只有管理员能查看**。IP 已脱敏。
+         */
+        get: operations["list_access_logs_api_v1_clipboard_shares__id__access_logs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/shares/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 公开分享元信息
+         * @description 不返回正文、不计数。有密码时 `title` 为 null。
+         */
+        get: operations["public_meta_api_v1_public_shares__token__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/shares/{token}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 查看分享正文
+         * @description **唯一计数入口**：只有用户主动查看或提交正确密码时才调用。
+         *
+         *     页面加载、刷新、元信息查询均不计数。失败尝试会写入访问记录，但只有管理员能查看失败记录。
+         */
+        post: operations["public_access_api_v1_public_shares__token__access_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/stats": {
         parameters: {
             query?: never;
@@ -224,6 +351,46 @@ export interface paths {
         post?: never;
         /** 清空指定用户的剪贴板 */
         delete: operations["clear_user_clipboards_api_v1_admin_users__user_id__clipboards_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{user_id}/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 指定用户的分享记录
+         * @description 分页查看某位用户的分享记录（不返回 token / 链接）。分享撤销等管理操作不在本期范围。
+         */
+        get: operations["list_user_shares_api_v1_admin_users__user_id__shares_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 全局分享分页列表
+         * @description 管理员查看全站分享；支持按状态与分享者用户名筛选。不返回 token / 链接；分享撤销等管理操作不在本期范围。
+         */
+        get: operations["list_all_shares_api_v1_admin_shares_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -333,6 +500,54 @@ export interface paths {
          * @description 列出通过该邀请码注册的用户，按注册时间倒序。
          */
         get: operations["list_invite_code_usages_api_v1_admin_invite_codes__code_id__usages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 读取分享限额设置
+         * @description 返回每用户有效分享上限与最近更新人。普通用户返回 403。
+         */
+        get: operations["get_share_settings_api_v1_admin_settings_shares_get"];
+        /**
+         * 更新分享限额设置
+         * @description 更新后立即生效：新创建分享按新限额校验，已有分享不会因调低限额被删除。
+         *
+         *     更新与审计 `settings.share_quota.update` 同事务提交，审计失败整体回滚。
+         */
+        put: operations["update_share_settings_api_v1_admin_settings_shares_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/share-access-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 分享访问记录（成功 + 失败）
+         * @description 管理员专用。失败记录只有本接口可见；用户端「我的分享」只返回成功记录。
+         *
+         *     支持按结果、分享、分享者用户名与时间范围筛选，按访问时间倒序。
+         */
+        get: operations["list_share_access_logs_api_v1_admin_share_access_logs_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -709,6 +924,115 @@ export interface components {
             password: string;
         };
         /**
+         * AdminShareAccessLogList
+         * @description 管理端访问记录分页列表。
+         */
+        AdminShareAccessLogList: {
+            /**
+             * Items
+             * @description 当前页数据
+             */
+            items: components["schemas"]["AdminShareAccessLogResponse"][];
+            /** Page */
+            page: number;
+            /** Size */
+            size: number;
+            /** Total */
+            total: number;
+            /** Pages */
+            pages: number;
+        };
+        /**
+         * AdminShareAccessLogResponse
+         * @description 管理端访问记录（含原始 IP；仅内网 / VPN 可访问）。
+         */
+        AdminShareAccessLogResponse: {
+            /** Id */
+            id: string;
+            /** Share Id */
+            share_id: string;
+            /** Share Title */
+            share_title: string;
+            /** Owner Id */
+            owner_id: string;
+            /** Owner Username */
+            owner_username: string;
+            /**
+             * Accessed At
+             * Format: date-time
+             */
+            accessed_at: string;
+            /**
+             * Result
+             * @description success / password_failed / expired / revoked / exhausted / owner_disabled
+             */
+            result: string;
+            /** Ip */
+            ip?: string | null;
+            /** User Agent */
+            user_agent?: string | null;
+        };
+        /**
+         * AdminShareAccessResultFilter
+         * @description 管理端访问记录的结果筛选。
+         * @enum {string}
+         */
+        AdminShareAccessResultFilter: "all" | "success" | "failure";
+        /**
+         * AdminShareList
+         * @description 全局分享分页列表。
+         */
+        AdminShareList: {
+            /**
+             * Items
+             * @description 当前页数据
+             */
+            items: components["schemas"]["AdminShareResponse"][];
+            /** Page */
+            page: number;
+            /** Size */
+            size: number;
+            /** Total */
+            total: number;
+            /** Pages */
+            pages: number;
+        };
+        /**
+         * AdminShareResponse
+         * @description 管理端全局分享列表项（不返回 token / 链接）。
+         */
+        AdminShareResponse: {
+            /** Id */
+            id: string;
+            /** Item Id */
+            item_id: string;
+            /** Title */
+            title: string;
+            /** Owner Id */
+            owner_id: string;
+            /** Owner Username */
+            owner_username: string;
+            mode: components["schemas"]["ShareMode"];
+            status: components["schemas"]["ShareStatus"];
+            /** Password Protected */
+            password_protected: boolean;
+            /** View Count */
+            view_count: number;
+            /** Max Views */
+            max_views?: number | null;
+            /** Remaining Views */
+            remaining_views?: number | null;
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Revoked At */
+            revoked_at?: string | null;
+        };
+        /**
          * AdminStatsResponse
          * @description 后台概览统计。
          */
@@ -742,6 +1066,16 @@ export interface components {
              * @description 邀请码累计使用次数
              */
             invite_used_count: number;
+            /**
+             * Share Count
+             * @description 分享总数
+             */
+            share_count: number;
+            /**
+             * Active Share Count
+             * @description 当前有效分享数
+             */
+            active_share_count: number;
         };
         /**
          * AdminUserList
@@ -819,6 +1153,11 @@ export interface components {
              * @description 最后一条剪贴板更新时间
              */
             last_item_at?: string | null;
+            /**
+             * Share Limit
+             * @description 单独设置的分享上限；null 表示跟随全局默认值
+             */
+            share_limit?: number | null;
         };
         /**
          * AdminUserRole
@@ -826,6 +1165,56 @@ export interface components {
          * @enum {string}
          */
         AdminUserRole: "all" | "admin" | "user";
+        /**
+         * AdminUserShareList
+         * @description 用户分享记录分页列表。
+         */
+        AdminUserShareList: {
+            /**
+             * Items
+             * @description 当前页数据
+             */
+            items: components["schemas"]["AdminUserShareResponse"][];
+            /** Page */
+            page: number;
+            /** Size */
+            size: number;
+            /** Total */
+            total: number;
+            /** Pages */
+            pages: number;
+        };
+        /**
+         * AdminUserShareResponse
+         * @description 管理端查看某位用户的分享记录（不返回 token / 链接）。
+         */
+        AdminUserShareResponse: {
+            /** Id */
+            id: string;
+            /** Item Id */
+            item_id: string;
+            mode: components["schemas"]["ShareMode"];
+            status: components["schemas"]["ShareStatus"];
+            /** Title */
+            title: string;
+            /** Password Protected */
+            password_protected: boolean;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Max Views */
+            max_views?: number | null;
+            /** View Count */
+            view_count: number;
+            /** Remaining Views */
+            remaining_views?: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Revoked At */
+            revoked_at?: string | null;
+        };
         /**
          * AdminUserSortBy
          * @description 用户列表排序字段。
@@ -857,6 +1246,11 @@ export interface components {
              * @description false = 取消管理员
              */
             is_admin?: boolean | null;
+            /**
+             * Share Limit
+             * @description 单独设置的分享上限，范围 1–10000；显式传 null 表示清除并跟随全局
+             */
+            share_limit?: number | null;
         };
         /**
          * AuthResponse
@@ -1072,6 +1466,134 @@ export interface components {
             } | null;
         };
         /**
+         * ClipboardShareCreate
+         * @description 创建分享请求。
+         */
+        ClipboardShareCreate: {
+            /**
+             * @description snapshot 快照 / live 跟随最新
+             * @default snapshot
+             */
+            mode: components["schemas"]["ShareMode"];
+            /**
+             * @description 有效期：1h / 1d / 7d / 30d，默认 7d
+             * @default 7d
+             */
+            expires_in: components["schemas"]["ShareExpiresIn"];
+            /**
+             * Password
+             * @description 访问密码，可空；4–24 字符，UTF-8 不超过 72 字节
+             */
+            password?: string | null;
+            /**
+             * Max Views
+             * @description 最大查看次数，可空（不限）
+             */
+            max_views?: number | null;
+        };
+        /**
+         * ClipboardShareList
+         * @description 我的分享分页列表。
+         */
+        ClipboardShareList: {
+            /**
+             * Items
+             * @description 当前页数据
+             */
+            items: components["schemas"]["ClipboardShareResponse"][];
+            /**
+             * Page
+             * @description 当前页码，从 1 开始
+             */
+            page: number;
+            /**
+             * Size
+             * @description 每页条数
+             */
+            size: number;
+            /**
+             * Total
+             * @description 符合条件的总条数
+             */
+            total: number;
+            /**
+             * Pages
+             * @description 总页数
+             */
+            pages: number;
+        };
+        /**
+         * ClipboardShareResponse
+         * @description 登录态下的分享表示（含 token 与完整链接）。
+         */
+        ClipboardShareResponse: {
+            /**
+             * Id
+             * @description 分享 UUID
+             */
+            id: string;
+            /**
+             * Item Id
+             * @description 原剪贴板项 UUID
+             */
+            item_id: string;
+            /** @description 内容模式 */
+            mode: components["schemas"]["ShareMode"];
+            /** @description 当前状态 */
+            status: components["schemas"]["ShareStatus"];
+            /**
+             * Title
+             * @description 创建时的标题
+             */
+            title: string;
+            /**
+             * Token
+             * @description 分享 token
+             */
+            token: string;
+            /**
+             * Url
+             * @description 完整公开链接
+             */
+            url: string;
+            /**
+             * Password Protected
+             * @description 是否设置访问密码
+             */
+            password_protected: boolean;
+            /**
+             * Expires At
+             * @description 到期时间（ISO 8601 UTC）
+             */
+            expires_at?: string | null;
+            /**
+             * Max Views
+             * @description 最大查看次数；空表示不限
+             */
+            max_views?: number | null;
+            /**
+             * View Count
+             * @description 已成功查看次数
+             */
+            view_count: number;
+            /**
+             * Remaining Views
+             * @description 剩余查看次数；空表示不限
+             */
+            remaining_views?: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             * @description 创建时间（ISO 8601 UTC）
+             */
+            created_at: string;
+            /**
+             * Last Viewed At
+             * @description 最后一次成功查看时间
+             */
+            last_viewed_at?: string | null;
+        };
+        /**
          * ContentType
          * @description 剪贴板内容类型。阶段一仅实现 `text`。
          * @enum {string}
@@ -1099,6 +1621,185 @@ export interface components {
              */
             message: string;
         };
+        /**
+         * PublicShareAccessRequest
+         * @description 公开查看正文请求；无密码分享可传空对象。
+         */
+        PublicShareAccessRequest: {
+            /**
+             * Password
+             * @description 访问密码
+             */
+            password?: string | null;
+        };
+        /**
+         * PublicShareContent
+         * @description 公开查看正文响应。
+         */
+        PublicShareContent: {
+            /**
+             * Title
+             * @description 标题
+             */
+            title: string;
+            /**
+             * Content
+             * @description 文字正文
+             */
+            content: string;
+            /** @description 内容类型 */
+            content_type: components["schemas"]["ContentType"];
+            /**
+             * Created At
+             * Format: date-time
+             * @description 原记录创建时间（ISO 8601 UTC）
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * @description 分享到期时间
+             */
+            expires_at?: string | null;
+            /**
+             * Remaining Views
+             * @description 本次查看后的剩余次数；空表示不限
+             */
+            remaining_views?: number | null;
+        };
+        /**
+         * PublicShareMeta
+         * @description 公开分享元信息；不返回正文、不计数。
+         */
+        PublicShareMeta: {
+            /**
+             * Title
+             * @description 有密码时为 null，避免未解锁泄露标题
+             */
+            title?: string | null;
+            /** @description 内容模式 */
+            mode: components["schemas"]["ShareMode"];
+            /** @description 内容类型 */
+            content_type: components["schemas"]["ContentType"];
+            /**
+             * Password Required
+             * @description 是否需要访问密码
+             */
+            password_required: boolean;
+            /**
+             * Expires At
+             * @description 到期时间
+             */
+            expires_at?: string | null;
+            /**
+             * Remaining Views
+             * @description 剩余查看次数；空表示不限
+             */
+            remaining_views?: number | null;
+        };
+        /**
+         * ShareAccessLogList
+         * @description 访问记录分页列表。
+         */
+        ShareAccessLogList: {
+            /**
+             * Items
+             * @description 当前页数据
+             */
+            items: components["schemas"]["ShareAccessLogResponse"][];
+            /** Page */
+            page: number;
+            /** Size */
+            size: number;
+            /** Total */
+            total: number;
+            /** Pages */
+            pages: number;
+        };
+        /**
+         * ShareAccessLogResponse
+         * @description 所有者可见的访问记录（只含成功记录，IP 已脱敏）。
+         */
+        ShareAccessLogResponse: {
+            /** Id */
+            id: string;
+            /**
+             * Accessed At
+             * Format: date-time
+             */
+            accessed_at: string;
+            result: components["schemas"]["ShareAccessResult"];
+            /**
+             * Ip Masked
+             * @description 脱敏 IP
+             */
+            ip_masked?: string | null;
+            /**
+             * User Agent
+             * @description User-Agent，最多 200 字符
+             */
+            user_agent?: string | null;
+        };
+        /**
+         * ShareAccessResult
+         * @description 访问记录结果。失败结果仅管理员可见。
+         * @enum {string}
+         */
+        ShareAccessResult: "success" | "password_failed" | "expired" | "revoked" | "exhausted" | "owner_disabled";
+        /**
+         * ShareExpiresIn
+         * @description 分享有效期选项；P0 不支持永久。
+         * @enum {string}
+         */
+        ShareExpiresIn: "1h" | "1d" | "7d" | "30d";
+        /**
+         * ShareMode
+         * @description 分享内容模式。
+         * @enum {string}
+         */
+        ShareMode: "snapshot" | "live";
+        /**
+         * ShareSettingsResponse
+         * @description 管理端分享限额设置。
+         */
+        ShareSettingsResponse: {
+            /**
+             * User Share Limit
+             * @description 每用户有效分享上限
+             */
+            user_share_limit: number;
+            /**
+             * Updated At
+             * @description 最近更新时间
+             */
+            updated_at?: string | null;
+            /**
+             * Updated By
+             * @description 最近更新人 UUID
+             */
+            updated_by?: string | null;
+            /**
+             * Updated By Username
+             * @description 最近更新人用户名
+             */
+            updated_by_username?: string | null;
+        };
+        /**
+         * ShareSettingsUpdate
+         * @description 更新分享限额请求。
+         */
+        ShareSettingsUpdate: {
+            /**
+             * User Share Limit
+             * @description 每用户有效分享上限，范围 1–10000
+             */
+            user_share_limit: number;
+        };
+        /**
+         * ShareStatus
+         * @description 分享展示状态。判定顺序：撤销 → 过期 → 次数用尽 → 有效。
+         * @enum {string}
+         */
+        ShareStatus: "active" | "expired" | "exhausted" | "revoked";
         /**
          * SortBy
          * @description 列表排序字段。
@@ -1431,7 +2132,7 @@ export interface operations {
             query?: {
                 /** @description 页码，从 1 开始 */
                 page?: number;
-                /** @description 每页条数，默认 20，最大 100 */
+                /** @description 每页条数，默认 10，最大 100 */
                 size?: number;
                 /** @description 按内容类型筛选 */
                 content_type?: components["schemas"]["ContentType"] | null;
@@ -1646,6 +2347,298 @@ export interface operations {
             };
         };
     };
+    create_share_api_v1_clipboard_items__id__shares_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClipboardShareCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClipboardShareResponse"];
+                };
+            };
+            /** @description 阶段一仅支持文字分享 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 剪贴板项不存在或不属于当前用户 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 有效分享数达到上限 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_shares_api_v1_clipboard_shares_get: {
+        parameters: {
+            query?: {
+                /** @description 页码，从 1 开始 */
+                page?: number;
+                /** @description 每页条数，默认 10，最大 100 */
+                size?: number;
+                /** @description 按状态筛选 */
+                status?: components["schemas"]["ShareStatus"] | null;
+                /** @description 按原剪贴板项 UUID 筛选 */
+                item_id?: string | null;
+                /** @description 按分享标题或内容关键字搜索 */
+                search?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClipboardShareList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_share_api_v1_clipboard_shares__id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description 分享不存在或不属于当前用户 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_access_logs_api_v1_clipboard_shares__id__access_logs_get: {
+        parameters: {
+            query?: {
+                /** @description 页码，从 1 开始 */
+                page?: number;
+                /** @description 每页条数，默认 10，最大 100 */
+                size?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareAccessLogList"];
+                };
+            };
+            /** @description 分享不存在或不属于当前用户 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    public_meta_api_v1_public_shares__token__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicShareMeta"];
+                };
+            };
+            /** @description 分享不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 分享已失效 */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description 请求过于频繁 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    public_access_api_v1_public_shares__token__access_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicShareAccessRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicShareContent"];
+                };
+            };
+            /** @description 密码错误或未提供 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 分享不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 分享已失效 */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description 尝试过于频繁 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     get_stats_api_v1_admin_stats_get: {
         parameters: {
             query?: never;
@@ -1671,7 +2664,7 @@ export interface operations {
             query?: {
                 /** @description 页码，从 1 开始 */
                 page?: number;
-                /** @description 每页条数，最大 100 */
+                /** @description 每页条数，默认 10，最大 100 */
                 size?: number;
                 /** @description 匹配用户名或邮箱 */
                 search?: string | null;
@@ -1929,12 +2922,95 @@ export interface operations {
             };
         };
     };
-    list_clipboards_api_v1_admin_clipboards_get: {
+    list_user_shares_api_v1_admin_users__user_id__shares_get: {
         parameters: {
             query?: {
                 /** @description 页码，从 1 开始 */
                 page?: number;
                 /** @description 每页条数，最大 100 */
+                size?: number;
+                /** @description 按状态筛选 */
+                status?: components["schemas"]["ShareStatus"] | null;
+            };
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserShareList"];
+                };
+            };
+            /** @description 用户不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_all_shares_api_v1_admin_shares_get: {
+        parameters: {
+            query?: {
+                /** @description 页码，从 1 开始 */
+                page?: number;
+                /** @description 每页条数，最大 100 */
+                size?: number;
+                /** @description 按分享状态筛选 */
+                status?: components["schemas"]["ShareStatus"] | null;
+                /** @description 按分享者用户名模糊筛选 */
+                username?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminShareList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_clipboards_api_v1_admin_clipboards_get: {
+        parameters: {
+            query?: {
+                /** @description 页码，从 1 开始 */
+                page?: number;
+                /** @description 每页条数，默认 10，最大 100 */
                 size?: number;
                 /** @description 按用户 UUID 精确筛选 */
                 user_id?: string | null;
@@ -2056,7 +3132,7 @@ export interface operations {
             query?: {
                 /** @description 页码，从 1 开始 */
                 page?: number;
-                /** @description 每页条数，最大 100 */
+                /** @description 每页条数，默认 10，最大 100 */
                 size?: number;
                 /** @description 按管理员用户名模糊筛选 */
                 admin_username?: string | null;
@@ -2100,7 +3176,7 @@ export interface operations {
             query?: {
                 /** @description 页码，从 1 开始 */
                 page?: number;
-                /** @description 每页条数，最大 100 */
+                /** @description 每页条数，默认 10，最大 100 */
                 size?: number;
                 /** @description 按状态筛选 */
                 status?: components["schemas"]["AdminInviteCodeStatus"];
@@ -2207,7 +3283,7 @@ export interface operations {
             query?: {
                 /** @description 页码，从 1 开始 */
                 page?: number;
-                /** @description 每页条数，最大 100 */
+                /** @description 每页条数，默认 10，最大 100 */
                 size?: number;
             };
             header?: never;
@@ -2233,6 +3309,101 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_share_settings_api_v1_admin_settings_shares_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareSettingsResponse"];
+                };
+            };
+        };
+    };
+    update_share_settings_api_v1_admin_settings_shares_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareSettingsResponse"];
+                };
+            };
+            /** @description 限额超出 1–10000 范围 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_share_access_logs_api_v1_admin_share_access_logs_get: {
+        parameters: {
+            query?: {
+                /** @description 页码，从 1 开始 */
+                page?: number;
+                /** @description 每页条数，默认 10，最大 100 */
+                size?: number;
+                /** @description 结果筛选 */
+                result?: components["schemas"]["AdminShareAccessResultFilter"];
+                /** @description 按分享 UUID 筛选 */
+                share_id?: string | null;
+                /** @description 按分享者用户名模糊筛选 */
+                username?: string | null;
+                /** @description 起始时间（ISO 8601） */
+                start?: string | null;
+                /** @description 结束时间（ISO 8601） */
+                end?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminShareAccessLogList"];
+                };
             };
             /** @description Validation Error */
             422: {

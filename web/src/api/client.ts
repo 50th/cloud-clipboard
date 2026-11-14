@@ -18,6 +18,16 @@ export type AuthResponse = components['schemas']['AuthResponse']
 export type SortBy = components['schemas']['SortBy']
 export type SortOrder = components['schemas']['SortOrder']
 export type ContentType = components['schemas']['ContentType']
+export type ClipboardShare = components['schemas']['ClipboardShareResponse']
+export type ClipboardShareList = components['schemas']['ClipboardShareList']
+export type ClipboardShareCreate = components['schemas']['ClipboardShareCreate']
+export type ShareMode = components['schemas']['ShareMode']
+export type ShareExpiresIn = components['schemas']['ShareExpiresIn']
+export type ShareStatus = components['schemas']['ShareStatus']
+export type ShareAccessLog = components['schemas']['ShareAccessLogResponse']
+export type ShareAccessLogList = components['schemas']['ShareAccessLogList']
+export type PublicShareMeta = components['schemas']['PublicShareMeta']
+export type PublicShareContent = components['schemas']['PublicShareContent']
 
 /**
  * 浏览器所在时区（IANA 名，如 Asia/Shanghai）。
@@ -256,8 +266,87 @@ export const clipboardApi = {
   },
 }
 
-/** 数据库探测结果（`GET /dev/db`）。 */
-export interface DevDatabaseInfo {
+/** 分享接口（登录态）：创建、我的分享、撤销、访问记录。 */
+export const shareApi = {
+  /** 为一条剪贴板创建分享；返回 token 与完整链接。 */
+  create: async (
+    itemId: string,
+    payload: ClipboardShareCreate,
+  ): Promise<ClipboardShare> => {
+    const { data } = await http.post<ClipboardShare>(
+      `/clipboard/items/${itemId}/shares`,
+      payload,
+    )
+    return data
+  },
+
+  /** 我的分享分页；删除原记录前可用 `item_id` + `status=active` 统计有效分享数。 */
+  list: async (
+    params: {
+      page?: number
+      size?: number
+      status?: ShareStatus
+      item_id?: string
+      search?: string
+    } = {},
+  ): Promise<ClipboardShareList> => {
+    const { data } = await http.get<ClipboardShareList>('/clipboard/shares', {
+      params,
+    })
+    return data
+  },
+
+  /** 撤销分享；撤销后链接立即失效。 */
+  revoke: async (id: string): Promise<void> => {
+    await http.delete(`/clipboard/shares/${id}`)
+  },
+
+  /** 某条分享的成功访问记录（失败记录只有管理员能看）。 */
+  accessLogs: async (
+    id: string,
+    params: { page?: number; size?: number } = {},
+  ): Promise<ShareAccessLogList> => {
+    const { data } = await http.get<ShareAccessLogList>(
+      `/clipboard/shares/${id}/access-logs`,
+      { params },
+    )
+    return data
+  },
+}
+
+/**
+ * 公开分享接口：**独立 axios 实例**。
+ *
+ * 不挂 JWT 与全局 401 处理：访问者本来就没有登录态，
+ * 密码错误返回 403，不能误触用户端的“令牌失效 → 登出”逻辑。
+ */
+const publicHttp = axios.create({
+  baseURL: `${API_BASE_URL}${API_PREFIX}`,
+  timeout: 10_000,
+  headers: { 'Content-Type': 'application/json' },
+})
+
+/** 公开分享接口（无需登录）。 */
+export const publicShareApi = {
+  /** 元信息：不返回正文、不计数。 */
+  meta: async (token: string): Promise<PublicShareMeta> => {
+    const { data } = await publicHttp.get<PublicShareMeta>(
+      `/public/shares/${encodeURIComponent(token)}`,
+    )
+    return data
+  },
+
+  /** 查看正文：**唯一计数入口**，只在用户主动查看或提交密码时调用。 */
+  access: async (token: string, password?: string): Promise<PublicShareContent> => {
+    const { data } = await publicHttp.post<PublicShareContent>(
+      `/public/shares/${encodeURIComponent(token)}/access`,
+      { password: password ?? null },
+    )
+    return data
+  },
+}
+
+/** 数据库探测结果（`GET /dev/db`）。 */export interface DevDatabaseInfo {
   database: string
   version: string
 }
