@@ -132,7 +132,7 @@ class ClipboardListParams:
     def __init__(
         self,
         page: Annotated[int, Query(ge=1, description="页码，从 1 开始")] = 1,
-        size: Annotated[int, Query(ge=1, le=100, description="每页条数，默认 20，最大 100")] = 20,
+        size: Annotated[int, Query(ge=1, le=100, description="每页条数，默认 10，最大 100")] = 10,
         content_type: Annotated[
             ContentType | None, Query(description="按内容类型筛选")
         ] = None,

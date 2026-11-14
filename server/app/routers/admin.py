@@ -14,6 +14,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud import admin as admin_crud
+from app.crud import share as share_crud
+from app.crud import share_setting as share_setting_crud
 from app.db.models.admin_audit_log import AdminAuditLog
 from app.db.models.invite_code import InviteCode
 from app.db.session import get_db
@@ -34,14 +36,24 @@ from app.schemas.admin import (
     AdminInviteCodeUsageList,
     AdminInviteCodeUsageListParams,
     AdminPasswordResetRequest,
+    AdminShareAccessLogList,
+    AdminShareAccessLogParams,
+    AdminShareAccessLogResponse,
+    AdminShareList,
+    AdminShareListParams,
+    AdminShareResponse,
     AdminStatsResponse,
     AdminUserList,
     AdminUserListParams,
     AdminUserResponse,
+    AdminUserShareList,
+    AdminUserShareListParams,
+    AdminUserShareResponse,
     AdminUserUpdate,
 )
 from app.schemas.clipboard import ClipboardDeleteResponse
 from app.schemas.common import ContentType, MessageResponse
+from app.schemas.share import ShareSettingsResponse, ShareSettingsUpdate
 from app.services import events
 from app.services.ws_manager import manager
 
@@ -65,6 +77,7 @@ def _to_user_response(row: admin_crud.UserWithStats) -> AdminUserResponse:
         last_login_at=user.last_login_at,
         item_count=row.item_count,
         last_item_at=row.last_item_at,
+        share_limit=user.share_limit,
     )
 
 
@@ -342,6 +355,106 @@ async def clear_user_clipboards(
 
 
 @router.get(
+    "/users/{user_id}/shares",
+    response_model=AdminUserShareList,
+    summary="指定用户的分享记录",
+    description=(
+        "分页查看某位用户的分享记录（不返回 token / 链接）。"
+        "分享撤销等管理操作不在本期范围。"
+    ),
+    responses={404: {"description": "用户不存在"}},
+)
+async def list_user_shares(
+    user_id: uuid.UUID,
+    session: DbSession,
+    _current_admin: AdminUser,
+    params: Annotated[AdminUserShareListParams, Depends()],
+) -> AdminUserShareList:
+    if await admin_crud.get_user_with_stats(session, user_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"用户不存在: {user_id}",
+        )
+    rows, total = await share_crud.list_shares(
+        session,
+        user_id,
+        page=params.page,
+        size=params.size,
+        status=params.status,
+        item_id=None,
+    )
+    return AdminUserShareList.build(
+        [
+            AdminUserShareResponse(
+                id=str(share.id),
+                item_id=str(share.item_id),
+                mode=share.mode,
+                status=share_crud.share_status(share),
+                title=share.title,
+                password_protected=share.password_hash is not None,
+                expires_at=share.expires_at,
+                max_views=share.max_views,
+                view_count=share.view_count,
+                remaining_views=share_crud.remaining_views(share),
+                created_at=share.created_at,
+                revoked_at=share.revoked_at,
+            )
+            for share in rows
+        ],
+        page=params.page,
+        size=params.size,
+        total=total,
+    )
+
+
+@router.get(
+    "/shares",
+    response_model=AdminShareList,
+    summary="全局分享分页列表",
+    description=(
+        "管理员查看全站分享；支持按状态与分享者用户名筛选。"
+        "不返回 token / 链接；分享撤销等管理操作不在本期范围。"
+    ),
+)
+async def list_all_shares(
+    session: DbSession,
+    _current_admin: AdminUser,
+    params: Annotated[AdminShareListParams, Depends()],
+) -> AdminShareList:
+    rows, total = await share_crud.list_all_shares(
+        session,
+        page=params.page,
+        size=params.size,
+        status=params.status,
+        username=params.username,
+    )
+    return AdminShareList.build(
+        [
+            AdminShareResponse(
+                id=str(row.share.id),
+                item_id=str(row.share.item_id),
+                title=row.share.title,
+                owner_id=str(row.share.user_id),
+                owner_username=row.owner_username,
+                mode=row.share.mode,
+                status=share_crud.share_status(row.share),
+                password_protected=row.share.password_hash is not None,
+                view_count=row.share.view_count,
+                max_views=row.share.max_views,
+                remaining_views=share_crud.remaining_views(row.share),
+                expires_at=row.share.expires_at,
+                created_at=row.share.created_at,
+                revoked_at=row.share.revoked_at,
+            )
+            for row in rows
+        ],
+        page=params.page,
+        size=params.size,
+        total=total,
+    )
+
+
+@router.get(
     "/clipboards",
     response_model=AdminClipboardItemList,
     summary="全局剪贴板分页列表",
@@ -560,6 +673,101 @@ async def list_invite_code_usages(
                 registered_at=user.created_at,
             )
             for user in rows
+        ],
+        page=params.page,
+        size=params.size,
+        total=total,
+    )
+
+
+@router.get(
+    "/settings/shares",
+    response_model=ShareSettingsResponse,
+    summary="读取分享限额设置",
+    description="返回每用户有效分享上限与最近更新人。普通用户返回 403。",
+)
+async def get_share_settings(
+    session: DbSession, _current_admin: AdminUser
+) -> ShareSettingsResponse:
+    state = await share_setting_crud.get_share_settings_state(session)
+    return ShareSettingsResponse(
+        user_share_limit=state.user_share_limit,
+        updated_at=state.updated_at,
+        updated_by=str(state.updated_by) if state.updated_by else None,
+        updated_by_username=state.updated_by_username,
+    )
+
+
+@router.put(
+    "/settings/shares",
+    response_model=ShareSettingsResponse,
+    summary="更新分享限额设置",
+    description=(
+        "更新后立即生效：新创建分享按新限额校验，已有分享不会因调低限额被删除。\n\n"
+        "更新与审计 `settings.share_quota.update` 同事务提交，审计失败整体回滚。"
+    ),
+    responses={422: {"description": "限额超出 1–10000 范围"}},
+)
+async def update_share_settings(
+    payload: ShareSettingsUpdate,
+    session: DbSession,
+    current_admin: AdminUser,
+) -> ShareSettingsResponse:
+    await share_setting_crud.update_share_settings(
+        session, payload.user_share_limit, current_admin
+    )
+    state = await share_setting_crud.get_share_settings_state(session)
+    logger.warning(
+        "admin update share quota: admin=%s limit=%d",
+        current_admin.id,
+        payload.user_share_limit,
+    )
+    return ShareSettingsResponse(
+        user_share_limit=state.user_share_limit,
+        updated_at=state.updated_at,
+        updated_by=str(state.updated_by) if state.updated_by else None,
+        updated_by_username=state.updated_by_username,
+    )
+
+
+@router.get(
+    "/share-access-logs",
+    response_model=AdminShareAccessLogList,
+    summary="分享访问记录（成功 + 失败）",
+    description=(
+        "管理员专用。失败记录只有本接口可见；用户端「我的分享」只返回成功记录。\n\n"
+        "支持按结果、分享、分享者用户名与时间范围筛选，按访问时间倒序。"
+    ),
+)
+async def list_share_access_logs(
+    session: DbSession,
+    _current_admin: AdminUser,
+    params: Annotated[AdminShareAccessLogParams, Depends()],
+) -> AdminShareAccessLogList:
+    rows, total = await share_crud.list_all_access_logs(
+        session,
+        page=params.page,
+        size=params.size,
+        result=params.result.value,
+        share_id=params.share_id,
+        username=params.username,
+        start=params.start,
+        end=params.end,
+    )
+    return AdminShareAccessLogList.build(
+        [
+            AdminShareAccessLogResponse(
+                id=str(row.log.id),
+                share_id=str(row.log.share_id),
+                share_title=row.share_title,
+                owner_id=str(row.owner_id),
+                owner_username=row.owner_username,
+                accessed_at=row.log.accessed_at,
+                result=row.log.result,
+                ip=str(row.log.ip) if row.log.ip is not None else None,
+                user_agent=row.log.user_agent,
+            )
+            for row in rows
         ],
         page=params.page,
         size=params.size,

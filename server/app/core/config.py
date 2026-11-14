@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     REGISTRATION_REQUIRE_INVITE: bool = False
     API_V1_PREFIX: str = "/api/v1"
 
+    # --- 分享 ---
+    # 分享链接的站点基址。⚠️ 不要用请求的 Host 头拼链接（Host 头注入）。
+    PUBLIC_BASE_URL: str = "http://localhost:5273"
+
     # --- 日志（详细说明见 core/logging_config.py）---
     # 级别：DEBUG / INFO / WARNING / ERROR / CRITICAL；非法值按 INFO 处理
     LOG_LEVEL: str = "INFO"

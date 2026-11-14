@@ -18,9 +18,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import security
 from app.crud import audit as audit_crud
 from app.crud import invite as invite_crud
+from app.crud import share as share_crud
 from app.db.models.admin_audit_log import AdminAuditLog
 from app.db.models.clipboard import ClipboardItem
 from app.db.models.invite_code import InviteCode
+from app.db.models.share import ClipboardShare
 from app.db.models.user import User
 from app.schemas.admin import (
     AdminClipboardSortBy,
@@ -230,6 +232,19 @@ async def update_user(
             action,
             target_type="user",
             target_id=user.id,
+        )
+
+    # share_limit 用 model_fields_set 区分“未传”与“显式传 null（清除并跟随全局）”
+    if "share_limit" in payload.model_fields_set and payload.share_limit != user.share_limit:
+        old_limit = user.share_limit
+        user.share_limit = payload.share_limit
+        audit_crud.build_audit_entry(
+            session,
+            admin,
+            audit_crud.ACTION_USER_SHARE_LIMIT_UPDATE,
+            target_type="user",
+            target_id=user.id,
+            detail={"old": old_limit, "new": payload.share_limit},
         )
 
     if changed_fields:
@@ -492,6 +507,11 @@ async def get_stats(session: AsyncSession) -> dict[str, Any]:
         or 0
     )
 
+    share_count = int(
+        await session.scalar(select(func.count()).select_from(ClipboardShare)) or 0
+    )
+    active_share_count = await share_crud.count_shares(session, active_only=True)
+
     return {
         "user_count": user_count,
         "active_user_count": active_user_count,
@@ -503,6 +523,8 @@ async def get_stats(session: AsyncSession) -> dict[str, Any]:
         "invite_code_count": invite_code_count,
         "active_invite_count": active_invite_count,
         "invite_used_count": invite_used_count,
+        "share_count": share_count,
+        "active_share_count": active_share_count,
     }
 
 

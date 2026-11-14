@@ -14,6 +14,7 @@ from fastapi import Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.common import ContentType, SortOrder
+from app.schemas.share import ShareMode, ShareStatus
 from app.schemas.user import (
     MIN_PASSWORD_LENGTH,
     validate_password_bytes,
@@ -77,6 +78,10 @@ class AdminUserResponse(BaseModel):
     last_login_at: datetime | None = Field(None, description="最后登录时间")
     item_count: int = Field(0, ge=0, description="剪贴板条数")
     last_item_at: datetime | None = Field(None, description="最后一条剪贴板更新时间")
+    share_limit: int | None = Field(
+        None,
+        description="单独设置的分享上限；null 表示跟随全局默认值",
+    )
 
 
 class AdminUserList(BaseModel):
@@ -103,6 +108,12 @@ class AdminUserUpdate(BaseModel):
     email: str | None = Field(None, min_length=3, max_length=254)
     is_active: bool | None = Field(None, description="false = 禁用账号")
     is_admin: bool | None = Field(None, description="false = 取消管理员")
+    share_limit: int | None = Field(
+        None,
+        ge=1,
+        le=10_000,
+        description="单独设置的分享上限，范围 1–10000；显式传 null 表示清除并跟随全局",
+    )
 
 
 class AdminPasswordResetRequest(BaseModel):
@@ -173,6 +184,8 @@ class AdminStatsResponse(BaseModel):
     invite_code_count: int = Field(..., ge=0, description="邀请码总数")
     active_invite_count: int = Field(..., ge=0, description="当前可用的邀请码数")
     invite_used_count: int = Field(..., ge=0, description="邀请码累计使用次数")
+    share_count: int = Field(..., ge=0, description="分享总数")
+    active_share_count: int = Field(..., ge=0, description="当前有效分享数")
 
 
 class AdminInviteCodeCreate(BaseModel):
@@ -242,7 +255,7 @@ class AdminInviteCodeListParams:
     def __init__(
         self,
         page: Annotated[int, Query(ge=1, description="页码，从 1 开始")] = 1,
-        size: Annotated[int, Query(ge=1, le=100, description="每页条数，最大 100")] = 20,
+        size: Annotated[int, Query(ge=1, le=100, description="每页条数，默认 10，最大 100")] = 10,
         status: Annotated[
             AdminInviteCodeStatus, Query(description="按状态筛选")
         ] = AdminInviteCodeStatus.ALL,
@@ -289,7 +302,7 @@ class AdminInviteCodeUsageListParams:
     def __init__(
         self,
         page: Annotated[int, Query(ge=1, description="页码，从 1 开始")] = 1,
-        size: Annotated[int, Query(ge=1, le=100, description="每页条数，最大 100")] = 20,
+        size: Annotated[int, Query(ge=1, le=100, description="每页条数，默认 10，最大 100")] = 10,
     ) -> None:
         self.page = page
         self.size = size
@@ -336,7 +349,7 @@ class AdminUserListParams:
     def __init__(
         self,
         page: Annotated[int, Query(ge=1, description="页码，从 1 开始")] = 1,
-        size: Annotated[int, Query(ge=1, le=100, description="每页条数，最大 100")] = 20,
+        size: Annotated[int, Query(ge=1, le=100, description="每页条数，默认 10，最大 100")] = 10,
         search: Annotated[
             str | None, Query(max_length=100, description="匹配用户名或邮箱")
         ] = None,
@@ -366,7 +379,7 @@ class AdminClipboardListParams:
     def __init__(
         self,
         page: Annotated[int, Query(ge=1, description="页码，从 1 开始")] = 1,
-        size: Annotated[int, Query(ge=1, le=100, description="每页条数，最大 100")] = 20,
+        size: Annotated[int, Query(ge=1, le=100, description="每页条数，默认 10，最大 100")] = 10,
         user_id: Annotated[
             uuid.UUID | None, Query(description="按用户 UUID 精确筛选")
         ] = None,
@@ -394,13 +407,210 @@ class AdminClipboardListParams:
         self.order = order
 
 
+class AdminShareAccessResultFilter(str, Enum):
+    """管理端访问记录的结果筛选。"""
+
+    ALL = "all"
+    SUCCESS = "success"
+    FAILURE = "failure"
+
+
+class AdminShareAccessLogResponse(BaseModel):
+    """管理端访问记录（含原始 IP；仅内网 / VPN 可访问）。"""
+
+    id: str
+    share_id: str
+    share_title: str
+    owner_id: str
+    owner_username: str
+    accessed_at: datetime
+    result: str = Field(
+        ...,
+        description=(
+            "success / password_failed / expired / revoked / exhausted / owner_disabled"
+        ),
+    )
+    ip: str | None = None
+    user_agent: str | None = None
+
+
+class AdminShareAccessLogList(BaseModel):
+    """管理端访问记录分页列表。"""
+
+    items: list[AdminShareAccessLogResponse] = Field(..., description="当前页数据")
+    page: int = Field(..., ge=1)
+    size: int = Field(..., ge=1)
+    total: int = Field(..., ge=0)
+    pages: int = Field(..., ge=0)
+
+    @classmethod
+    def build(
+        cls,
+        items: list[AdminShareAccessLogResponse],
+        *,
+        page: int,
+        size: int,
+        total: int,
+    ) -> "AdminShareAccessLogList":
+        pages = (total + size - 1) // size if total > 0 else 0
+        return cls(items=items, page=page, size=size, total=total, pages=pages)
+
+
+class AdminShareAccessLogParams:
+    """`GET /admin/share-access-logs` 查询参数。"""
+
+    def __init__(
+        self,
+        page: Annotated[int, Query(ge=1, description="页码，从 1 开始")] = 1,
+        size: Annotated[int, Query(ge=1, le=100, description="每页条数，默认 10，最大 100")] = 10,
+        result: Annotated[
+            AdminShareAccessResultFilter, Query(description="结果筛选")
+        ] = AdminShareAccessResultFilter.ALL,
+        share_id: Annotated[
+            uuid.UUID | None, Query(description="按分享 UUID 筛选")
+        ] = None,
+        username: Annotated[
+            str | None, Query(max_length=32, description="按分享者用户名模糊筛选")
+        ] = None,
+        start: Annotated[
+            datetime | None, Query(description="起始时间（ISO 8601）")
+        ] = None,
+        end: Annotated[
+            datetime | None, Query(description="结束时间（ISO 8601）")
+        ] = None,
+    ) -> None:
+        self.page = page
+        self.size = size
+        self.result = result
+        self.share_id = share_id
+        self.username = username
+        self.start = start
+        self.end = end
+
+
+class AdminShareResponse(BaseModel):
+    """管理端全局分享列表项（不返回 token / 链接）。"""
+
+    id: str
+    item_id: str
+    title: str
+    owner_id: str
+    owner_username: str
+    mode: ShareMode
+    status: ShareStatus
+    password_protected: bool
+    view_count: int
+    max_views: int | None = None
+    remaining_views: int | None = None
+    expires_at: datetime | None = None
+    created_at: datetime
+    revoked_at: datetime | None = None
+
+
+class AdminShareList(BaseModel):
+    """全局分享分页列表。"""
+
+    items: list[AdminShareResponse] = Field(..., description="当前页数据")
+    page: int = Field(..., ge=1)
+    size: int = Field(..., ge=1)
+    total: int = Field(..., ge=0)
+    pages: int = Field(..., ge=0)
+
+    @classmethod
+    def build(
+        cls,
+        items: list[AdminShareResponse],
+        *,
+        page: int,
+        size: int,
+        total: int,
+    ) -> "AdminShareList":
+        pages = (total + size - 1) // size if total > 0 else 0
+        return cls(items=items, page=page, size=size, total=total, pages=pages)
+
+
+class AdminShareListParams:
+    """`GET /admin/shares` 查询参数。"""
+
+    def __init__(
+        self,
+        page: Annotated[int, Query(ge=1, description="页码，从 1 开始")] = 1,
+        size: Annotated[int, Query(ge=1, le=100, description="每页条数，最大 100")] = 10,
+        status: Annotated[
+            ShareStatus | None, Query(description="按分享状态筛选")
+        ] = None,
+        username: Annotated[
+            str | None, Query(max_length=32, description="按分享者用户名模糊筛选")
+        ] = None,
+    ) -> None:
+        self.page = page
+        self.size = size
+        self.status = status
+        self.username = username
+
+
+class AdminUserShareResponse(BaseModel):
+    """管理端查看某位用户的分享记录（不返回 token / 链接）。"""
+
+    id: str
+    item_id: str
+    mode: ShareMode
+    status: ShareStatus
+    title: str
+    password_protected: bool
+    expires_at: datetime | None = None
+    max_views: int | None = None
+    view_count: int
+    remaining_views: int | None = None
+    created_at: datetime
+    revoked_at: datetime | None = None
+
+
+class AdminUserShareList(BaseModel):
+    """用户分享记录分页列表。"""
+
+    items: list[AdminUserShareResponse] = Field(..., description="当前页数据")
+    page: int = Field(..., ge=1)
+    size: int = Field(..., ge=1)
+    total: int = Field(..., ge=0)
+    pages: int = Field(..., ge=0)
+
+    @classmethod
+    def build(
+        cls,
+        items: list[AdminUserShareResponse],
+        *,
+        page: int,
+        size: int,
+        total: int,
+    ) -> "AdminUserShareList":
+        pages = (total + size - 1) // size if total > 0 else 0
+        return cls(items=items, page=page, size=size, total=total, pages=pages)
+
+
+class AdminUserShareListParams:
+    """`GET /admin/users/{id}/shares` 查询参数。"""
+
+    def __init__(
+        self,
+        page: Annotated[int, Query(ge=1, description="页码，从 1 开始")] = 1,
+        size: Annotated[int, Query(ge=1, le=100, description="每页条数，最大 100")] = 10,
+        status: Annotated[
+            ShareStatus | None, Query(description="按状态筛选")
+        ] = None,
+    ) -> None:
+        self.page = page
+        self.size = size
+        self.status = status
+
+
 class AdminAuditLogListParams:
     """`GET /admin/audit-logs` 查询参数。"""
 
     def __init__(
         self,
         page: Annotated[int, Query(ge=1, description="页码，从 1 开始")] = 1,
-        size: Annotated[int, Query(ge=1, le=100, description="每页条数，最大 100")] = 20,
+        size: Annotated[int, Query(ge=1, le=100, description="每页条数，默认 10，最大 100")] = 10,
         admin_username: Annotated[
             str | None, Query(max_length=32, description="按管理员用户名模糊筛选")
         ] = None,

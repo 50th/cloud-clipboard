@@ -27,7 +27,7 @@ from app.core.logging_utils import install_log_redaction
 from app.core.request_context import RequestIdMiddleware
 from app.core.single_worker import assert_single_worker, release_single_worker
 from app.db.session import dispose_engine, ping
-from app.routers import admin, auth, clipboard, dev, ws
+from app.routers import admin, auth, clipboard, dev, share, ws
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,19 @@ TAGS_METADATA: list[dict[str, Any]] = [
         "description": (
             "文字剪贴板的上传、列表、详情、删除。"
             "数据持久化在 PostgreSQL；同一用户提交相同内容会命中去重，不新建记录。"
+        ),
+    },
+    {
+        "name": "剪贴板分享",
+        "description": (
+            "把单条文字剪贴板生成受控只读链接：密码、有效期、查看次数、撤销。"
+            "每用户有效分享数受全局限额约束。"
+        ),
+    },
+    {
+        "name": "公开分享",
+        "description": (
+            "无需登录的公开只读访问。页面加载只取元信息；只有主动查看正文才计数。"
         ),
     },
     {
@@ -143,6 +156,9 @@ def create_app() -> FastAPI:
     # 业务路由统一挂在 /api/v1 下
     application.include_router(auth.router, prefix=settings.API_V1_PREFIX)
     application.include_router(clipboard.router, prefix=settings.API_V1_PREFIX)
+    # 分享：登录态管理 + 公开只读访问（两个 router）
+    application.include_router(share.router, prefix=settings.API_V1_PREFIX)
+    application.include_router(share.public_router, prefix=settings.API_V1_PREFIX)
     # WebSocket 实时同步（与 clipboard 路由同为 /clipboard 前缀，挂在 /clipboard/ws）
     application.include_router(ws.router, prefix=settings.API_V1_PREFIX)
     # 后台管理：始终注册，权限由 AdminUser 依赖强制校验。

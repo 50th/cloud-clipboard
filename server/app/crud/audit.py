@@ -33,6 +33,8 @@ ACTION_USER_CLIPBOARDS_CLEAR = "user.clipboards.clear"
 ACTION_CLIPBOARD_DELETE = "clipboard.delete"
 ACTION_INVITE_CREATE = "invite.create"
 ACTION_INVITE_REVOKE = "invite.revoke"
+ACTION_SHARE_QUOTA_UPDATE = "settings.share_quota.update"
+ACTION_USER_SHARE_LIMIT_UPDATE = "user.share_limit.update"
 
 
 def build_audit_entry(

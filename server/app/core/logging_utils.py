@@ -34,6 +34,11 @@ _SENSITIVE_PARAM_PATTERN = re.compile(
     r"((?:token|search)=)[^&\s\"']+", re.IGNORECASE
 )
 
+# 分享 token 出现在路径里：公开 API 与公开页 HTML 都要脱敏。
+# 注意：只覆盖应用 / uvicorn 日志；Nginx access log 的处置见 docs/share.md。
+_SHARE_API_PATH = re.compile(r"(/api/v1/public/shares/)[A-Za-z0-9_-]+")
+_SHARE_PAGE_PATH = re.compile(r"(/s/)[A-Za-z0-9_-]+")
+
 REDACTED = "***"
 
 # 单条日志字段的最大展示长度：不可信输入（用户名等）不能无限撑大日志行。
@@ -41,8 +46,10 @@ LOG_VALUE_MAX_LEN = 64
 
 
 def redact_sensitive_params(text: str) -> str:
-    """把文本里所有 `token=...` / `search=...` 的值替换成 `***`。"""
-    return _SENSITIVE_PARAM_PATTERN.sub(rf"\1{REDACTED}", text)
+    """把文本里所有 `token=...` / `search=...` 与分享路径 token 替换成 `***`。"""
+    text = _SENSITIVE_PARAM_PATTERN.sub(rf"\1{REDACTED}", text)
+    text = _SHARE_API_PATH.sub(rf"\1{REDACTED}", text)
+    return _SHARE_PAGE_PATH.sub(rf"\1{REDACTED}", text)
 
 
 def safe_log_value(value: object, *, limit: int = LOG_VALUE_MAX_LEN) -> str:
