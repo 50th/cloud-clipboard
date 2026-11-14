@@ -6,7 +6,7 @@ import type { AdminUser, AdminUserList } from '@/admin/api/client.ts'
 import Pagination from '@/admin/components/Pagination.vue'
 import { useAdminStore } from '@/admin/stores/adminStore'
 import { getErrorMessage } from '#src/api/client.ts'
-import { formatDateTime } from '@/utils/format.ts'
+import { formatDateTime, truncate } from '@/utils/format.ts'
 
 const store = useAdminStore()
 
@@ -158,7 +158,9 @@ onMounted(load)
         <tbody>
           <tr v-for="user in data.items" :key="user.id">
             <td>{{ user.username }}</td>
-            <td>{{ user.email }}</td>
+            <td class="user-email" :title="user.email">
+              {{ truncate(user.email, 22) }}
+            </td>
             <td>
               <span :class="['badge', user.is_active ? 'badge--ok' : 'badge--off']">
                 {{ user.is_active ? '启用' : '禁用' }}
@@ -215,3 +217,12 @@ onMounted(load)
     />
   </section>
 </template>
+
+<style scoped>
+/* 邮箱列限制宽度，避免把操作列挤到需要横向滚动；完整值见 title */
+.user-email {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+</style>
