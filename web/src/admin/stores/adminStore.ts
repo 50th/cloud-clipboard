@@ -18,8 +18,11 @@ export type AdminView =
   | 'users'
   | 'userDetail'
   | 'clipboards'
+  | 'shares'
   | 'inviteCodes'
   | 'audit'
+  | 'settings'
+  | 'shareAccessLogs'
 
 export const useAdminStore = defineStore('admin', () => {
   const user = ref<User | null>(null)

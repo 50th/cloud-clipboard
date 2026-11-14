@@ -6,8 +6,11 @@ import DashboardView from '@/admin/views/DashboardView.vue'
 import UsersView from '@/admin/views/UsersView.vue'
 import UserDetailView from '@/admin/views/UserDetailView.vue'
 import ClipboardsView from '@/admin/views/ClipboardsView.vue'
+import SharesView from '@/admin/views/SharesView.vue'
 import InviteCodesView from '@/admin/views/InviteCodesView.vue'
 import AuditLogsView from '@/admin/views/AuditLogsView.vue'
+import SiteSettingsView from '@/admin/views/SiteSettingsView.vue'
+import ShareAccessLogsView from '@/admin/views/ShareAccessLogsView.vue'
 import ChangePasswordDialog from '@/admin/components/ChangePasswordDialog.vue'
 import { useAdminStore } from '@/admin/stores/adminStore'
 import type { AdminView } from '@/admin/stores/adminStore'
@@ -32,7 +35,10 @@ const navItems: { key: AdminView; label: string }[] = [
   { key: 'dashboard', label: '概览' },
   { key: 'users', label: '用户管理' },
   { key: 'clipboards', label: '剪贴板管理' },
+  { key: 'shares', label: '分享管理' },
   { key: 'inviteCodes', label: '邀请码' },
+  { key: 'shareAccessLogs', label: '分享访问记录' },
+  { key: 'settings', label: '网站设置' },
   { key: 'audit', label: '操作日志' },
 ]
 
@@ -96,7 +102,10 @@ function isActive(key: AdminView): boolean {
         <UsersView v-else-if="store.activeView === 'users'" />
         <UserDetailView v-else-if="store.activeView === 'userDetail'" />
         <ClipboardsView v-else-if="store.activeView === 'clipboards'" />
+        <SharesView v-else-if="store.activeView === 'shares'" />
         <InviteCodesView v-else-if="store.activeView === 'inviteCodes'" />
+        <ShareAccessLogsView v-else-if="store.activeView === 'shareAccessLogs'" />
+        <SiteSettingsView v-else-if="store.activeView === 'settings'" />
         <AuditLogsView v-else />
       </main>
     </template>

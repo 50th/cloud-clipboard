@@ -28,11 +28,11 @@ async function load(): Promise<void> {
 
 onMounted(load)
 
-/** 每张卡片都能跳到对应管理页面。 */
+/** 每张卡片都能跳到对应管理页面（无 view 的仅展示数值）。 */
 const cards: {
   key: keyof Omit<AdminStats, 'total_bytes'>
   label: string
-  view: AdminView
+  view?: AdminView
 }[] = [
   { key: 'user_count', label: '用户总数', view: 'users' },
   { key: 'active_user_count', label: '启用用户', view: 'users' },
@@ -40,6 +40,8 @@ const cards: {
   { key: 'item_count', label: '剪贴板条数', view: 'clipboards' },
   { key: 'new_users_7d', label: '近 7 天新增用户', view: 'users' },
   { key: 'new_items_7d', label: '近 7 天新增记录', view: 'clipboards' },
+  { key: 'share_count', label: '分享总数', view: 'shares' },
+  { key: 'active_share_count', label: '有效分享', view: 'shares' },
   { key: 'invite_code_count', label: '邀请码总数', view: 'inviteCodes' },
   { key: 'active_invite_count', label: '可用邀请码', view: 'inviteCodes' },
   { key: 'invite_used_count', label: '邀请码使用次数', view: 'inviteCodes' },
@@ -59,7 +61,7 @@ function go(view: AdminView): void {
     <div class="panel__head">
       <h2>概览</h2>
       <div class="admin-dashboard__actions">
-        <span class="hint">点击卡片进入对应页面</span>
+        <span class="hint">可点击的卡片进入对应页面</span>
         <button type="button" class="btn btn--small" :disabled="loading" @click="load">
           {{ loading ? '刷新中…' : '刷新' }}
         </button>
@@ -74,8 +76,10 @@ function go(view: AdminView): void {
           v-for="card in cards"
           :key="card.key"
           type="button"
-          class="stat-card stat-card--link"
-          @click="go(card.view)"
+          class="stat-card"
+          :class="{ 'stat-card--link': Boolean(card.view) }"
+          :disabled="!card.view"
+          @click="card.view ? go(card.view) : undefined"
         >
           <span class="stat-card__label">{{ card.label }}</span>
           <strong class="stat-card__value">{{ valueOf(card.key) }}</strong>
