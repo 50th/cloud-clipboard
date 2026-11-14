@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import LoginPanel from '@/components/LoginPanel.vue'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import ClipboardHistory from '@/components/ClipboardHistory.vue'
 import InputPanel from '@/components/InputPanel.vue'
-import { getErrorMessage } from '@/api/client'
+import MySharesDialog from '@/components/MySharesDialog.vue'
+import ShareDialog from '@/components/ShareDialog.vue'
+import { getErrorMessage, shareApi } from '@/api/client'
+import type { ClipboardItem } from '@/api/client'
 import { useNotice } from '@/composables/useNotice'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useClipboardStore } from '@/stores/clipboardStore'
@@ -19,6 +22,59 @@ const { notice, showNotice, clearNotice } = useNotice()
 const searchInput = ref('')
 /** 「修改密码」弹窗开关（仅登录后可用） */
 const passwordDialogOpen = ref(false)
+/** 创建分享弹窗：记录当前要分享的条目 */
+const shareDialogOpen = ref(false)
+const shareItem = ref<ClipboardItem | null>(null)
+/** 「我的分享」弹窗 */
+const mySharesOpen = ref(false)
+/** 右上角用户名菜单 */
+const userMenuOpen = ref(false)
+const userMenuEl = ref<HTMLElement | null>(null)
+
+function toggleUserMenu() {
+  userMenuOpen.value = !userMenuOpen.value
+}
+
+function closeUserMenu() {
+  userMenuOpen.value = false
+}
+
+/** 点右上角用户名 → 修改密码 */
+function openPasswordDialog() {
+  closeUserMenu()
+  passwordDialogOpen.value = true
+}
+
+function onDocumentClick(event: MouseEvent) {
+  if (!userMenuOpen.value) {
+    return
+  }
+  const target = event.target
+  if (!(target instanceof Node) || !userMenuEl.value?.contains(target)) {
+    closeUserMenu()
+  }
+}
+
+function onDocumentKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    closeUserMenu()
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocumentClick)
+  document.addEventListener('keydown', onDocumentKeydown)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocumentClick)
+  document.removeEventListener('keydown', onDocumentKeydown)
+})
+
+function handleShare(item: ClipboardItem) {
+  shareItem.value = item
+  shareDialogOpen.value = true
+}
 
 /**
  * 当前可见的视图。
@@ -86,6 +142,7 @@ watch(isAuthenticated, async (loggedIn) => {
     store.reset()
     searchInput.value = ''
     activePane.value = 'history'
+    userMenuOpen.value = false
   }
 })
 
@@ -112,6 +169,7 @@ watch(searchInput, (value) => {
 })
 
 function handleLogout() {
+  closeUserMenu()
   userStore.logout()
   showNotice({ kind: 'ok', text: '已退出登录' })
 }
@@ -124,7 +182,20 @@ async function handleClearAll() {
   if (total.value === 0) {
     return
   }
-  if (!window.confirm(`确定清空全部 ${total.value} 条记录？此操作不可撤销。`)) {
+
+  // 清空会级联删除分享；先查当前用户的有效分享总数。
+  let activeShares = 0
+  try {
+    activeShares = (await shareApi.list({ status: 'active', size: 1 })).total
+  } catch (error) {
+    logger.debug('查询有效分享总数失败，按 0 处理', error)
+  }
+
+  const message =
+    activeShares > 0
+      ? `你有 ${activeShares} 个有效分享，清空后这些链接将立即失效。确定清空？`
+      : `确定清空全部 ${total.value} 条记录？此操作不可撤销。`
+  if (!window.confirm(message)) {
     return
   }
   try {
@@ -146,18 +217,43 @@ async function handleClearAll() {
           <button
             type="button"
             class="btn btn--small"
-            @click="passwordDialogOpen = true"
+            @click="mySharesOpen = true"
           >
-            修改密码
+            我的分享
           </button>
-          <button type="button" class="btn btn--small" @click="handleLogout">
-            退出登录
-          </button>
+          <div ref="userMenuEl" class="user-menu">
+            <button
+              type="button"
+              class="user-menu__trigger"
+              aria-haspopup="menu"
+              :aria-expanded="userMenuOpen"
+              @click="toggleUserMenu"
+            >
+              {{ user?.username ?? '账号' }}
+              <span class="user-menu__caret" aria-hidden="true">▾</span>
+            </button>
+            <div v-if="userMenuOpen" class="user-menu__panel" role="menu">
+              <button
+                type="button"
+                class="user-menu__item"
+                role="menuitem"
+                @click="openPasswordDialog"
+              >
+                修改密码
+              </button>
+              <button
+                type="button"
+                class="user-menu__item user-menu__item--danger"
+                role="menuitem"
+                @click="handleLogout"
+              >
+                退出登录
+              </button>
+            </div>
+          </div>
         </div>
       </div>
       <p v-if="isAuthenticated" class="app__subtitle">
-        <template v-if="user">当前用户 {{ user.username }}</template>
-        ·
         <span :class="['realtime', realtimeConnected ? 'realtime--on' : 'realtime--off']">
           {{ realtimeConnected ? '实时同步中' : '实时连接断开，正在重连…' }}
         </span>
@@ -224,6 +320,7 @@ async function handleClearAll() {
           <ClipboardHistory
             v-model:search-input="searchInput"
             @clear-all="handleClearAll"
+            @share="handleShare"
           />
         </div>
         <div
@@ -247,6 +344,21 @@ async function handleClearAll() {
       @close="passwordDialogOpen = false"
       @notice="handleNotice"
     />
+
+    <ShareDialog
+      v-if="isAuthenticated"
+      :open="shareDialogOpen"
+      :item="shareItem"
+      @close="shareDialogOpen = false"
+      @notice="handleNotice"
+    />
+
+    <MySharesDialog
+      v-if="isAuthenticated"
+      :open="mySharesOpen"
+      @close="mySharesOpen = false"
+      @notice="handleNotice"
+    />
   </div>
 </template>
 
@@ -260,7 +372,79 @@ async function handleClearAll() {
 
 .app__actions {
   display: flex;
+  align-items: center;
   gap: 8px;
+}
+
+/* ---------- 右上角用户名下拉菜单 ---------- */
+.user-menu {
+  position: relative;
+}
+
+.user-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 180px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.user-menu__trigger:hover {
+  background: #f3f4f6;
+}
+
+.user-menu__caret {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.user-menu__panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  min-width: 148px;
+  padding: 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
+}
+
+.user-menu__item {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.user-menu__item:hover {
+  background: #f3f4f6;
+}
+
+.user-menu__item--danger {
+  color: var(--danger);
+}
+
+@media (max-width: 900px) {
+  .user-menu__trigger {
+    min-height: 36px;
+    font-size: 13px;
+  }
 }
 
 .realtime--on {

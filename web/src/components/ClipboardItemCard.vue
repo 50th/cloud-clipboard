@@ -16,6 +16,8 @@ const emit = defineEmits<{
   (e: 'delete', id: string): void
   /** 点整卡载入输入区编辑 */
   (e: 'edit', item: ClipboardItem): void
+  /** 打开创建分享弹窗 */
+  (e: 'share', item: ClipboardItem): void
 }>()
 
 const { copied, error: copyError, copy } = useCopy()
@@ -73,6 +75,13 @@ function onKeydown(event: KeyboardEvent) {
         @click.stop="copy(item.content)"
       >
         {{ copied ? '✓ 已复制' : '复制' }}
+      </button>
+      <button
+        type="button"
+        class="btn btn--small"
+        @click.stop="emit('share', item)"
+      >
+        分享
       </button>
       <button
         v-if="collapsible"
