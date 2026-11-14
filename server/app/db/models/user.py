@@ -46,6 +46,8 @@ class User(Base):
     token_version: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )
+    # 单独设置的分享上限；NULL 表示跟随 share_settings 的全局默认值
+    share_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
