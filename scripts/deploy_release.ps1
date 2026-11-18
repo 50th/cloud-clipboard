@@ -2,7 +2,7 @@
 云剪贴板 · 上传发布包并在服务器部署（方案 B）
 
 用法（仓库根目录）：
-    .\scripts\deploy_release.ps1 -Tag "1.0.0"
+    .\scripts\deploy_release.ps1 -Tag "1.0.0" -Server "ubuntu@<服务器IP>" -HealthUrl "https://<域名>:8443/health"
 
 前置：
     - 已运行 build_release.ps1
@@ -16,12 +16,21 @@
 [CmdletBinding()]
 param(
     [string]$Tag = '1.0.0',
-    [string]$Server = 'ubuntu@<服务器IP>',
+    # 部署目标，例如 ubuntu@<服务器IP>；真实地址不入库
+    [string]$Server = '',
     [string]$ReleaseDir = 'dist',
-    [string]$HealthUrl = 'https://<服务器IP>:8443/health'
+    # 健康检查地址，例如 https://<域名或IP>:8443/health
+    [string]$HealthUrl = ''
 )
 
 $ErrorActionPreference = 'Stop'
+
+if (-not $Server) {
+    throw '请用 -Server 指定部署目标，例如 -Server "ubuntu@<服务器IP>"'
+}
+if (-not $HealthUrl) {
+    throw '请用 -HealthUrl 指定健康检查地址，例如 "https://<域名>:8443/health"'
+}
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $release = Join-Path $repoRoot (Join-Path $ReleaseDir "release-$Tag.tar.gz")
