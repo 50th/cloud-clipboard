@@ -36,10 +36,10 @@
 
 ```powershell
 # 出包（要求工作区干净）
-.\scripts\build_release.ps1 -ApiBaseUrl "https://<服务器IP>:8443" -Tag "1.0.0"
+.\scripts\build_release.ps1 -Tag "1.0.0"
 
 # 上传、加载、备份、迁移、切换、健康检查
-.\scripts\deploy_release.ps1 -Tag "1.0.0"
+.\scripts\deploy_release.ps1 -Tag "1.0.0" -Server "ubuntu@<服务器IP>" -HealthUrl "https://<域名>:8443/health"
 ```
 
 产物在 `dist/`（已被 git 忽略）：

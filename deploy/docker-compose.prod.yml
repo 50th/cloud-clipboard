@@ -92,7 +92,8 @@ services:
       context: ../web
       dockerfile: Dockerfile
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:?set VITE_API_BASE_URL in deploy/.env}
+        # 留空 = 前端运行时使用当前访问的域名与端口
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
     restart: unless-stopped
     ports:
       # 宿主机端口可配置：默认 8080 / 8443，避免与 80 / 443 上的现有业务冲突

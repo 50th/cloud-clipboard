@@ -1,6 +1,6 @@
 # 生产部署方案
 
-> **状态：已部署到 <服务器IP>（HTTPS 8443，自签证书）。**
+> **状态：已部署到生产服务器（HTTPS 8443，自签证书）。主机地址与凭据只维护在运维记录中，不入库。**
 > 容器全部健康，API 冒烟测试通过（注册 / 创建 / 列表 / 删除），`/health` 正常。
 > 已启用数据库邀请码（有效期 / 使用次数 / 撤销，见第 10 节）与注册/登录限流。
 > 云安全组已放行 TCP 8443，公网 HTTPS 与邀请码注册已验证通过。
@@ -55,16 +55,15 @@ WebSocket 广播是进程内实现，单机单容器即可满足，无需 Redis�
 
 > 生产 Compose 与开发用的 `infra/docker-compose.yml` **保持独立**，不要复用同一份文件。
 
-### 3.1 前端地址在构建期固定
+### 3.1 前端地址在运行时确定
 
-`VITE_API_BASE_URL` 会被 Vite 编译进 bundle，运行时无法改：
+`VITE_API_BASE_URL` 留空时，前端使用**当前页面的 origin**（协议 + 域名 + 端口）请求后端，
+因此换域名、改端口、加 www 都无需重新构建镜像：
 
-- 无域名阶段：`VITE_API_BASE_URL=https://<服务器IP>:8443`（自签证书）
-- 正式域名后：`VITE_API_BASE_URL=https://<域名>`，WS 地址自动推导为 `wss://`
-- **不能留空**：源码中空值会回退到 `http://127.0.0.1:8000`（见 `web/src/api/client.ts`）
-- 不同主机部署才需要单独配 `VITE_WS_URL`；同源反代无需配置
-
-因此：**服务器 IP / 域名 / 协议变更都需要重新构建 web 镜像**。
+- 生产推荐：留空（同源反代，Nginx 已把 `/api` 反代到后端）
+- 本地开发：`.env` 中显式写 `http://127.0.0.1:8000`（页面在 5273，与后端不同源）
+- 仅当 API 与页面不同源（独立后端域名）时才需要显式配置
+- 不同主机部署才需要单独配 `VITE_WS_URL`；未配置时 WS 地址从 API 基址推导（`http→ws`、`https→wss`）
 
 ## 4. 服务器准备
 
@@ -104,7 +103,7 @@ WebSocket 广播是进程内实现，单机单容器即可满足，无需 Redis�
 | `WEB_HTTP_PORT` | `8080` | 宿主机 HTTP 端口，仅做 HTTPS 跳转 |
 | `WEB_HTTPS_PORT` | `8443` | 宿主机 HTTPS 端口 |
 | `IMAGE_TAG` | `1.0.0` | 本地构建的镜像版本 tag；回滚时改回旧版本 |
-| `VITE_API_BASE_URL` | 必填 | 构建期写入前端 bundle |
+| `VITE_API_BASE_URL` | 留空 | 前端 API 基址；留空即跟随当前访问域名与端口 |
 
 ## 6. 首次部署步骤
 
@@ -125,11 +124,11 @@ WebSocket 广播是进程内实现，单机单容器即可满足，无需 Redis�
    ```
 4. **本地出包**：
    ```powershell
-   .\scripts\build_release.ps1 -ApiBaseUrl "https://<服务器IP>:8443" -Tag "<new-tag>"
+   .\scripts\build_release.ps1 -Tag "<new-tag>"
    ```
 5. **上传并部署**：
    ```powershell
-   .\scripts\deploy_release.ps1 -Tag "<new-tag>"
+   .\scripts\deploy_release.ps1 -Tag "<new-tag>" -Server "ubuntu@<服务器IP>" -HealthUrl "https://<域名>:8443/health"
    ```
    脚本会依次：解压源码 → 更新 `IMAGE_TAG` → `docker load` → 备份数据库 →
    `alembic upgrade head` → `up -d` → 健康检查。
@@ -257,11 +256,11 @@ sudo docker compose -f deploy/docker-compose.prod.yml run --rm api \
 1. 本地跑完后端 + Web 测试。
 2. 出包：
    ```powershell
-   .\scripts\build_release.ps1 -ApiBaseUrl "https://<服务器IP>:8443" -Tag "<new-tag>"
+   .\scripts\build_release.ps1 -Tag "<new-tag>"
    ```
 3. 部署：
    ```powershell
-   .\scripts\deploy_release.ps1 -Tag "<new-tag>"
+   .\scripts\deploy_release.ps1 -Tag "<new-tag>" -Server "ubuntu@<服务器IP>" -HealthUrl "https://<域名>:8443/health"
    ```
 4. 脚本自动完成备份、迁移、切换与健康检查。
 
@@ -296,7 +295,7 @@ sudo docker compose -f deploy/docker-compose.prod.yml run --rm api \
    要横向扩容必须先引入 Redis Pub/Sub。
 2. **无域名阶段使用自签证书**，浏览器会警告，且未信任时剪贴板写入 API 不可用
    （「复制」会走 `execCommand` 降级）。
-3. **前端后端地址是构建期常量**，IP / 域名 / 协议变更必须重新构建镜像。
+3. **前端后端地址默认跟随访问源**，换 IP / 域名 / 端口无需重建镜像；显式配置 `VITE_API_BASE_URL` 时才会固定。
 4. **PostgreSQL 固定 16**：与本地一致，避免跨大版本 `pg_dump/pg_restore` 不兼容。
 
 ### 待决策

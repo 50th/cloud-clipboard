@@ -12,8 +12,8 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
-# ⚠️ 构建期写入 bundle，运行时无法修改；IP / 域名 / 协议变更必须重新构建
-ARG VITE_API_BASE_URL
+# 可选：留空时前端运行时使用当前访问的域名与端口（推荐）
+ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
 RUN pnpm build

@@ -43,6 +43,7 @@ export const LOCAL_TIMEZONE: string | undefined = (() => {
   }
 })()
 
+/** Node（测试）环境的兜底地址；浏览器里默认用当前页面 origin。 */
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8000'
 
 /**
@@ -62,8 +63,19 @@ function readEnv(
   return fromImportMeta || undefined
 }
 
-/** 后端基址：优先取环境变量，默认与本机后端一致。 */
-export const API_BASE_URL: string = readEnv('VITE_API_BASE_URL') ?? DEFAULT_BASE_URL
+/** 后端基址：显式配置优先，否则跟随当前页面 origin。 */
+export const API_BASE_URL: string = (() => {
+  const configured = readEnv('VITE_API_BASE_URL')
+  if (configured) {
+    return configured
+  }
+  // 浏览器里用当前页面的协议 + 域名 + 端口：
+  // 同一站点可能通过域名 / IP / 不同端口访问，构建期无法预知。
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin
+  }
+  return DEFAULT_BASE_URL
+})()
 
 export const API_PREFIX = '/api/v1'
 

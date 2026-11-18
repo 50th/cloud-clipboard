@@ -251,8 +251,8 @@
 2. 本地验证通过后出包并部署（脚本已包含备份与 `alembic upgrade head`）：
 
 ```powershell
-.\scripts\build_release.ps1 -ApiBaseUrl "https://<服务器IP>:8443" -Tag "<new-tag>"
-.\scripts\deploy_release.ps1 -Tag "<new-tag>"
+.\scripts\build_release.ps1 -Tag "<new-tag>"
+.\scripts\deploy_release.ps1 -Tag "<new-tag>" -Server "ubuntu@<服务器IP>" -HealthUrl "https://<域名>:8443/health"
 ```
 
 3. 首次部署后初始化管理员（**一条命令完成建号 + 授权**）：

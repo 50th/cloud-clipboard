@@ -2,7 +2,8 @@
 云剪贴板 · 本地构建生产镜像并生成发布包（方案 B）
 
 用法（仓库根目录）：
-    .\scripts\build_release.ps1 -ApiBaseUrl "https://<服务器IP>:8443" -Tag "1.0.0"
+    .\scripts\build_release.ps1 -Tag "1.0.0"
+    （可选：-ApiBaseUrl "https://api.example.com" 固定 API 基址；默认留空 = 跟随访问域名与端口）
 
 输出到 dist/（已被 .gitignore 忽略）：
     release-<tag>.tar.gz   后端 + 前端镜像（gzip）
@@ -12,8 +13,7 @@
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$ApiBaseUrl,
+    [string]$ApiBaseUrl = '',
     [string]$Tag = '1.0.0',
     [string]$OutputDir = 'dist'
 )
