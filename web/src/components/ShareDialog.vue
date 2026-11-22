@@ -10,6 +10,7 @@ import { computed, ref, watch } from 'vue'
 import { getErrorMessage, shareApi } from '@/api/client'
 import type { ClipboardItem, ClipboardShare, ShareExpiresIn, ShareMode } from '@/api/client'
 import { useCopy } from '@/composables/useCopy'
+import { buildShareUrl } from '@/share/url'
 import { logger } from '@/utils/logger'
 
 /** 与后端 `SHARE_PER_ITEM_LIMIT` 保持一致：同一条记录最多 5 个有效分享。 */
@@ -41,6 +42,10 @@ const activeShareCount = ref(0)
 const encoder = new TextEncoder()
 
 const atItemLimit = computed(() => activeShareCount.value >= ITEM_SHARE_LIMIT)
+/** 分享链接由前端按当前页面 origin 拼接，不依赖后端配置 */
+const shareUrl = computed(() =>
+  created.value ? buildShareUrl(created.value.token) : '',
+)
 const canSubmit = computed(
   () => !submitting.value && props.item !== null && !atItemLimit.value,
 )
@@ -143,7 +148,7 @@ async function handleSubmit(): Promise<void> {
 
 async function copyLink(): Promise<void> {
   if (created.value) {
-    await copy(created.value.url)
+    await copy(shareUrl.value)
   }
 }
 </script>
@@ -162,7 +167,7 @@ async function copyLink(): Promise<void> {
               链接可随时在「我的分享」中再次复制；撤销后立即失效。
             </p>
             <div class="share-link">
-              <input :value="created.url" readonly aria-label="分享链接" />
+              <input :value="shareUrl" readonly aria-label="分享链接" />
               <button
                 type="button"
                 class="btn btn--small btn--primary share-link__copy"

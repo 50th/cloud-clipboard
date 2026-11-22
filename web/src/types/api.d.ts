@@ -1552,11 +1552,6 @@ export interface components {
              */
             token: string;
             /**
-             * Url
-             * @description 完整公开链接
-             */
-            url: string;
-            /**
              * Password Protected
              * @description 是否设置访问密码
              */

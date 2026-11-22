@@ -158,7 +158,6 @@ class ClipboardShareResponse(BaseModel):
     status: ShareStatus        # active | expired | exhausted | revoked
     title: str
     token: str                 # secrets.token_urlsafe(32)
-    url: str                   # ${PUBLIC_BASE_URL}/s/<token>
     password_protected: bool
     expires_at: Optional[datetime]
     max_views: Optional[int]

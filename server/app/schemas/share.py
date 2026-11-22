@@ -105,7 +105,6 @@ class ClipboardShareResponse(BaseModel):
     status: ShareStatus = Field(..., description="当前状态")
     title: str = Field(..., description="创建时的标题")
     token: str = Field(..., description="分享 token")
-    url: str = Field(..., description="完整公开链接")
     password_protected: bool = Field(..., description="是否设置访问密码")
     expires_at: datetime | None = Field(None, description="到期时间（ISO 8601 UTC）")
     max_views: int | None = Field(None, description="最大查看次数；空表示不限")

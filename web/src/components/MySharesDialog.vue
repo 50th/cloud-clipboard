@@ -5,6 +5,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { getErrorMessage, shareApi } from '@/api/client'
 import type { ClipboardShare, ClipboardShareList, ShareStatus } from '@/api/client'
 import ShareAccessLogsDialog from '@/components/ShareAccessLogsDialog.vue'
+import { buildShareUrl } from '@/share/url'
 import { writeText } from '@/utils/clipboard'
 import { formatDateTime } from '@/utils/format'
 
@@ -135,7 +136,7 @@ onBeforeUnmount(() => {
 
 async function copyLink(share: ClipboardShare): Promise<void> {
   try {
-    await writeText(share.url)
+    await writeText(buildShareUrl(share.token))
     copiedId.value = share.id
     if (copiedTimer !== undefined) {
       clearTimeout(copiedTimer)

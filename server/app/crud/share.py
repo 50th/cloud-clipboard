@@ -17,7 +17,6 @@ from typing import Any
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core.security import hash_password
 from app.crud import share_setting as share_setting_crud
 from app.db.models.clipboard import ClipboardItem
@@ -80,11 +79,6 @@ class AdminShareAccessLogRow:
     share_title: str
     owner_id: uuid.UUID
     owner_username: str
-
-
-def build_share_url(token: str) -> str:
-    """拼接公开链接；**不使用请求的 Host 头**，避免 Host 头注入。"""
-    return f"{settings.PUBLIC_BASE_URL.rstrip('/')}/s/{token}"
 
 
 def _ensure_utc(value: datetime) -> datetime:

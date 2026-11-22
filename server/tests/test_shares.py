@@ -90,7 +90,8 @@ class TestCreateShare:
         assert body["item_id"] == item["id"]
         assert body["password_protected"] is False
         assert len(body["token"]) >= 40
-        assert body["url"].endswith(f"/s/{body['token']}")
+        # 分享链接由前端按当前页面 origin 拼接，后端不再返回 url
+        assert "url" not in body
         assert body["remaining_views"] is None
         assert body["view_count"] == 0
 

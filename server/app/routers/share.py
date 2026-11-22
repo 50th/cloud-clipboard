@@ -84,7 +84,6 @@ def _to_share_response(share: ClipboardShare) -> ClipboardShareResponse:
         status=share_crud.share_status(share),
         title=share.title,
         token=share.token,
-        url=share_crud.build_share_url(share.token),
         password_protected=share.password_hash is not None,
         expires_at=share.expires_at,
         max_views=share.max_views,

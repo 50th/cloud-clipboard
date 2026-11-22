@@ -7,8 +7,8 @@
 > **新会话怎么用**：先读第 3、4、6 节确认契约，再按第 11 节顺序实现，最后用第 10、12 节验收。
 > 管理端限额 / 访问记录见 6.6、6.7、8.7、8.8 与 [`admin.md`](admin.md)。
 
-**最后更新**：2026-11-14
-**状态**：已实现（后端 312 项 / Web 85 项测试通过，迁移 `0005`–`0008`），待人工验收与生产部署
+**最后更新**：2026-11-22
+**状态**：已实现并通过人工验收（后端 312 项 / Web 86 项测试通过，迁移 `0005`–`0008`），待生产部署
 **入口**：用户端历史卡片「分享」；公开页 `/s/<token>`
 
 ---
@@ -68,6 +68,7 @@
 | 查看次数 | 可空；空为不限，范围 1–10000 |
 | token 存储 | **方案 A：明文存储 + 唯一索引** |
 | token 生成 | `secrets.token_urlsafe(32)`，约 43 字符 |
+| 分享链接生成 | 前端用 `window.location.origin` 拼接 `/s/<token>`；后端只返回 token，不再返回 `url`，也不再需要 `PUBLIC_BASE_URL` |
 | 删除原记录 | 级联删除分享，链接失效 |
 | 分享者信息 | 不在公开页展示 |
 | 密码规则 | 4–24 字符，UTF-8 不超过 72 字节（bcrypt 上限） |
@@ -386,7 +387,6 @@ return row.view_count, row.max_views
   "status": "active",
   "title": "剪贴板 · 11-12 10:00",
   "token": "AbC...",
-  "url": "http://localhost:5273/s/AbC...",
   "password_protected": true,
   "expires_at": "2026-11-19T02:00:00Z",
   "max_views": 10,
@@ -522,9 +522,10 @@ Referrer-Policy: no-referrer
 
 ### 6.5 分享 URL
 
-- 配置 `PUBLIC_BASE_URL`（见 9.4），拼接 `${PUBLIC_BASE_URL.rstrip('/')}/s/${token}`。
-- **不要用请求的 `Host` 头拼 URL**，避免 Host 头注入。
-- `url` 只在登录态接口返回；公开接口不返回 token。
+- 后端只返回 `token`；前端用 `${window.location.origin}/s/${token}` 拼接完整链接。
+- 分享页与主站同源，因此换 IP / 域名 / 端口无需修改后端配置。
+- 不使用请求的 `Host` / `Origin` 头拼 URL，避免 Host 头注入；后端不保存站点基址。
+- 公开接口不返回 token。
 
 ### 6.6 管理端分享限额
 
@@ -610,13 +611,11 @@ Referrer-Policy: no-referrer
 | `server/app/routers/share.py` | 登录态路由与公开路由 |
 | `server/app/routers/admin.py` | 管理端分享限额、全局/用户分享列表、访问记录接口 |
 | `server/app/services/rate_limit.py` | 进程内滑动窗口限流 |
-| `server/app/core/config.py` | `PUBLIC_BASE_URL` |
 | `server/app/core/logging_utils.py` | 分享 token 路径脱敏 |
 | `server/app/main.py` | 注册路由与 OpenAPI 标签 |
 | `server/tests/test_shares.py` | 接口、计数与限额测试 |
 | `server/tests/test_admin_share_settings.py` | 管理端限额设置测试 |
 | `server/tests/test_admin_share_access_logs.py` | 管理端访问记录与失败记录可见性测试 |
-| `server/.env.example` | `PUBLIC_BASE_URL` 示例 |
 
 ### 7.1 Schema
 
@@ -624,7 +623,7 @@ Referrer-Policy: no-referrer
 
 - `ShareMode` / `ShareExpiresIn` / `ShareStatus`
 - `ClipboardShareCreate`
-- `ClipboardShareResponse`（含 `token`、`url`）
+- `ClipboardShareResponse`（含 `token`）
 - `ClipboardShareList`（含 `build` 分页方法）
 - `ClipboardShareListParams`
 - `PublicShareMeta`
@@ -642,7 +641,7 @@ Referrer-Policy: no-referrer
 | 模型 | 字段 |
 |------|------|
 | `ClipboardShareCreate` | `mode`、`expires_in`、`password?`、`max_views?` |
-| `ClipboardShareResponse` | `id`、`item_id`、`mode`、`status`、`title`、`token`、`url`、`password_protected`、`expires_at?`、`max_views?`、`view_count`、`remaining_views?`、`created_at`、`last_viewed_at?` |
+| `ClipboardShareResponse` | `id`、`item_id`、`mode`、`status`、`title`、`token`、`password_protected`、`expires_at?`、`max_views?`、`view_count`、`remaining_views?`、`created_at`、`last_viewed_at?` |
 | `ClipboardShareList` | `items`、`page`、`size`、`total`、`pages`；`pages = (total + size - 1) // size if total else 0` |
 | `ClipboardShareListParams` | `page=1`、`size=10`、`status?`、`item_id?`、`search?` |
 | `PublicShareMeta` | `title?`、`mode`、`content_type`、`password_required`、`expires_at?`、`remaining_views?` |
@@ -678,7 +677,6 @@ async def resolve_content(session, share) -> tuple[str, str, str] | None
 async def record_access_log(session, share, *, result, ip, user_agent) -> None
 async def list_access_logs(session, share_id, *, page, size, include_failures=False) -> tuple[list[ShareAccessLog], int]
 async def list_all_access_logs(session, *, page, size, result, share_id, username, start, end) -> tuple[list[ShareAccessLog], int]
-def build_share_url(token) -> str
 ```
 
 `server/app/crud/share_setting.py`：
@@ -1028,14 +1026,8 @@ location ^~ /api/v1/public/shares/ {
 
 ### 9.4 配置
 
-`server/app/core/config.py` 与 `server/.env.example` 增加：
-
-```env
-# 分享链接的站点基址；生产改为实际 HTTPS 地址
-PUBLIC_BASE_URL=http://localhost:5273
-```
-
-生产环境改为实际 HTTPS 地址（见 `deploy/.env`，不写入仓库）。
+分享链接基址不再由后端配置：前端按 `window.location.origin` 拼接 `/s/<token>`。
+后端无需新增 `.env` 项，也不提供 `PUBLIC_BASE_URL`。
 
 ---
 
@@ -1043,7 +1035,7 @@ PUBLIC_BASE_URL=http://localhost:5273
 
 ### 10.1 后端 `test_shares.py` / `test_admin_share_settings.py` / `test_admin_share_access_logs.py`
 
-- 创建快照分享：201、token/url 正确、密码存哈希、`content` 已复制
+- 创建快照分享：201、token 正确且不返回 `url`、密码存哈希、`content` 已复制
 - 默认标题为 `剪贴板 · <月-日 时:分>`，不含用户名（新记录）
 - 创建跟随分享：`content` 为 NULL
 - 快照不随原记录编辑变化；跟随随编辑变化
@@ -1149,7 +1141,7 @@ PUBLIC_BASE_URL=http://localhost:5273
 4. **接口层**：`app/routers/share.py` 注册 `router` 与 `public_router`，
    增加 `GET /shares/{id}/access-logs`；`app/routers/admin.py` 增加分享限额 GET/PUT、
    `GET /shares`（全局）、`GET /users/{id}/shares` 与 `GET /share-access-logs`。
-5. **安全**：`app/services/rate_limit.py`、`app/core/logging_utils.py`、`PUBLIC_BASE_URL`、`.env.example`。
+5. **安全**：`app/services/rate_limit.py`、`app/core/logging_utils.py`；分享链接由前端拼接，无需后端基址配置。
 6. **后端测试**：`server/tests/test_shares.py`、`test_admin_share_settings.py`、
    `test_admin_share_access_logs.py`，跑 `.\venv\Scripts\python.exe -m pytest`。
 7. **生成前端类型**：启动后端后执行 `cd web; pnpm run gen:api`。
@@ -1159,7 +1151,7 @@ PUBLIC_BASE_URL=http://localhost:5273
    - `MySharesDialog.vue`
    - `ClipboardItemCard.vue` / `ClipboardHistory.vue`（含删除确认）
    - `App.vue`
-   - `share/path.ts` / `share/main.ts` / `share/ShareView.vue`
+   - `share/path.ts` / `share/url.ts` / `share/main.ts` / `share/ShareView.vue`
    - `ShareAccessLogsDialog.vue`
    - `main.ts` 路由
    - 管理端 `admin/api/settings.ts` / `admin/views/SiteSettingsView.vue` /
@@ -1173,7 +1165,6 @@ PUBLIC_BASE_URL=http://localhost:5273
     - `docs/admin.md` 同步网站设置页与接口
     - `docs/roadmap.md` 记录进度与测试数量
     - `deploy/nginx/nginx.conf` / `locations.conf`（server 级 `no-referrer` + `map` 生成 `X-Robots-Tag`）
-    - 生产 `.env` 设置 `PUBLIC_BASE_URL`
 12. **人工验收**：按 10.3 执行。
 
 ---
@@ -1181,6 +1172,7 @@ PUBLIC_BASE_URL=http://localhost:5273
 ## 12. 完成标准
 
 - 新接口出现在 `/openapi.json`，`web/src/types/api.d.ts` 已重新生成
+- 分享链接由前端按 `window.location.origin` 拼接，后端不返回 `url`，也不再需要 `PUBLIC_BASE_URL`
 - 后端 pytest 全绿；Web `pnpm test` / `typecheck` / `build` 全绿
 - 10.3 人工验收通过
 - 分享限额：全局默认 50、管理端可调；用户详情可单独覆盖（非空优先）；
@@ -1195,5 +1187,5 @@ PUBLIC_BASE_URL=http://localhost:5273
 - Referer 扩散检查通过；分享页 HTML 从首字节带 `Referrer-Policy: no-referrer` 与
   `X-Robots-Tag: noindex, nofollow`
 - 未新增依赖，未改动 WebSocket 协议
-- `docs/api.md`、`docs/roadmap.md`、Nginx 配置与 `server/.env.example` 已同步
+- `docs/api.md`、`docs/roadmap.md` 与 Nginx 配置已同步
 
