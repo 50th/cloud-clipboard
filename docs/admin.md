@@ -44,7 +44,7 @@
 | 首次管理员 | 通过 CLI `scripts/set_admin.py` 指定，不开放页面自助注册 |
 | 分享限额 | 全局统一上限，默认 50，管理端可调，范围 1–10000 |
 | 分享访问记录 | 管理员可查看全部；**失败尝试只有管理员可见**，用户端只返回成功记录 |
-| 网络暴露 | **仅内网 / VPN / Nginx IP 白名单**，不对公网直接开放 |
+| 网络暴露 | **仅内网 / VPN / 云安全组**，不对公网直接开放；仓库配置不写真实 IP |
 
 ---
 
@@ -278,12 +278,14 @@ sudo docker compose -f deploy/docker-compose.prod.yml run --rm -it api \
 
 ### 8.3 网络边界（必须）
 
-后台管理端**只允许内网 / VPN / Nginx IP 白名单访问**，不对公网直接开放：
+后台管理端**只允许内网 / VPN 访问**，不对公网直接开放：
 
 - 对 `/admin` 页面与 `/api/v1/admin/` 接口**同时**限制；只限制页面没有意义。
-- IP 白名单：在 `deploy/nginx/locations.conf` 为两者加 `allow <固定IP>; deny all;`，
-  且必须放在通用 `location /api/` 与 `location /` 之前。
-- VPN：只让管理端监听 VPN 网段，或在云安全组限制来源。
+- **推荐方案**：在云安全组 / 防火墙限制来源 IP，或只开放 VPN 网段；
+  仓库中的 `deploy/nginx/locations.conf` 不写真实 IP。
+- 如需在 Nginx 层做白名单，使用服务器本地 `include`（例如
+  `/etc/nginx/admin-allow.d/*.conf`）并在其后加 `deny all;` 兜底，
+  真实 IP 只存在服务器上，不提交仓库。
 - 启用前确认自己的出口 IP 已加入白名单，并保留 SSH 通道，避免把自己锁在门外。
 - 上线验收必须从非白名单网络访问一次，确认返回 403/404。
 
