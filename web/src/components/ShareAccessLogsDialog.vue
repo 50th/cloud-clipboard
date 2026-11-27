@@ -124,61 +124,15 @@ watch(
 </template>
 
 <style scoped>
-.modal {
-  position: fixed;
-  inset: 0;
-  z-index: 95;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(15, 23, 42, 0.45);
-}
-
+/* 弹窗基础样式在全局 styles.css，这里只覆盖宽度与日志表格 */
 .modal__panel {
   width: min(720px, 100%);
-  max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--card);
-  border-radius: 12px;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
-}
-
-.modal__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.modal__title {
-  margin: 0;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 15px;
-}
-
-.modal__body {
-  flex: 1 1 auto;
-  overflow: auto;
-  padding: 16px;
-}
-
-.modal__foot {
-  display: flex;
-  justify-content: flex-end;
-  padding: 12px 16px;
-  border-top: 1px solid var(--border);
 }
 
 .log-scroll {
   overflow: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
 }
 
 .log-table {
@@ -189,15 +143,27 @@ watch(
 
 .log-table th,
 .log-table td {
-  padding: 8px;
-  border-bottom: 1px solid var(--border);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-soft);
   text-align: left;
   vertical-align: top;
 }
 
+.log-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.log-table tbody tr:hover {
+  background: var(--surface-soft);
+}
+
 .log-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
   color: var(--text-muted);
-  font-weight: 500;
+  font-size: 11.5px;
+  font-weight: 600;
 }
 
 .log-ua {

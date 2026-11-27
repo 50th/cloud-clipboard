@@ -215,46 +215,90 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .share-page {
-  max-width: 720px;
+  max-width: 760px;
   margin: 0 auto;
-  padding: 32px 16px 48px;
+  padding: 28px 16px 48px;
+}
+
+/*
+ * 分享页的 Hero：深青 → 薄荷绿渐变 + 右上角柔光，
+ * 与品牌在营销页上的氛围 Hero 呼应；正文卡片保持扁平、密集。
+ */
+.share-head {
+  position: relative;
+  overflow: hidden;
+  padding: 36px 32px;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, #1a3d4a 0%, #2d5a4f 100%);
+  color: #fff;
+  box-shadow: 0 24px 48px -24px rgba(26, 61, 74, 0.55);
+}
+
+.share-head::after {
+  content: '';
+  position: absolute;
+  top: -96px;
+  right: -72px;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 212, 164, 0.55), transparent 72%);
+  pointer-events: none;
 }
 
 .share-head h1 {
-  margin: 0 0 4px;
-  font-size: 20px;
+  position: relative;
+  margin: 0 0 6px;
+  color: #fff;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.6px;
+  line-height: 1.15;
+}
+
+.share-head .hint {
+  position: relative;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
 }
 
 .share-card {
   margin-top: 16px;
+  padding: 28px;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
 }
 
 .share-title {
-  margin: 0 0 12px;
-  font-size: 15px;
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
   word-break: break-word;
 }
 
 .share-content {
   margin: 0;
-  padding: 12px;
+  padding: 16px;
   max-height: 60vh;
   overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #f9fafb;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--surface-soft);
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.7;
+  color: var(--charcoal);
 }
 
 .share-actions {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 12px;
+  margin-top: 16px;
 }
 
 .share-unlock {
@@ -270,8 +314,14 @@ onBeforeUnmount(() => {
   margin-bottom: 0;
 }
 
+.share-unlock__field input {
+  min-height: 42px;
+}
+
 .share-unlock__submit {
   flex: 0 0 auto;
+  min-height: 42px;
+  padding: 10px 20px;
   white-space: nowrap;
 }
 
@@ -279,28 +329,41 @@ onBeforeUnmount(() => {
 .share-unlock--single .share-unlock__submit {
   flex: 1 1 auto;
   width: 100%;
-  min-height: 42px;
+  min-height: 44px;
 }
 
 .share-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 24px;
-  margin: 16px 0 0;
-  padding-top: 12px;
-  border-top: 1px dashed var(--border);
+  gap: 8px;
+  margin: 20px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
   color: var(--text-muted);
   font-size: 12px;
 }
 
 .share-meta div {
-  display: flex;
+  display: inline-flex;
   gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-full);
+  background: var(--surface-soft);
 }
 
 .share-meta dt,
 .share-meta dd {
   margin: 0;
+}
+
+.share-meta dt {
+  color: var(--stone);
+}
+
+.share-meta dd {
+  color: var(--text);
+  font-weight: 500;
 }
 
 .share-foot {
@@ -311,6 +374,13 @@ onBeforeUnmount(() => {
 
 .share-foot a {
   color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.share-foot a:hover {
+  color: var(--text);
+  text-decoration: underline;
 }
 
 /* 分享页 Toast 固定在上方（全局 .notice 桌面端默认在底部） */
@@ -322,5 +392,35 @@ onBeforeUnmount(() => {
 .share-toast.notice-fade-enter-from,
 .share-toast.notice-fade-leave-to {
   transform: translateX(-50%) translateY(-10px);
+}
+
+@media (max-width: 900px) {
+  .share-page {
+    padding: 16px 12px 32px;
+    padding-top: calc(16px + env(safe-area-inset-top));
+  }
+
+  .share-head {
+    padding: 24px 20px;
+    border-radius: var(--radius-lg);
+  }
+
+  .share-head h1 {
+    font-size: 22px;
+  }
+
+  .share-card {
+    padding: 18px 16px;
+    border-radius: var(--radius-lg);
+  }
+
+  .share-title {
+    font-size: 18px;
+  }
+
+  .share-content {
+    font-size: 14px;
+    padding: 14px;
+  }
 }
 </style>

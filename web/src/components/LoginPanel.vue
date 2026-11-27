@@ -232,36 +232,55 @@ async function handleSubmit() {
 <style scoped>
 .login {
   max-width: 420px;
-  margin: 0 auto;
+  margin: 40px auto 0;
+  padding: 32px;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  /* 卡片顶部一层极淡的氛围光：薄荷 + 天空色，呼应品牌 Hero */
+  background-color: var(--card);
+  background-image:
+    radial-gradient(420px 180px at 100% -40px, rgba(0, 212, 164, 0.14), transparent 70%),
+    radial-gradient(400px 200px at 0% -90px, rgba(135, 168, 200, 0.16), transparent 70%);
+  background-repeat: no-repeat;
+  box-shadow: 0 24px 48px -24px rgba(10, 10, 10, 0.18);
 }
 
 .login__tabs {
   display: flex;
   gap: 4px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .login__tab {
   border: none;
   background: none;
-  padding: 8px 14px;
+  padding: 10px 14px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
   font: inherit;
   font-size: 14px;
-  color: var(--text-muted);
+  font-weight: 500;
   cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.login__tab:focus-visible {
+  outline: 2px solid var(--accent-deep);
+  outline-offset: -2px;
 }
 
 .login__tab--active {
-  color: var(--primary);
-  border-bottom-color: var(--primary);
-  font-weight: 500;
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+  font-weight: 600;
 }
 
 .login__remember {
-  margin-top: 10px;
+  margin-top: 14px;
   font-size: 13px;
   color: var(--text-muted);
 }
@@ -270,6 +289,19 @@ async function handleSubmit() {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 20px;
+}
+
+.login__actions .btn {
+  width: 100%;
+  min-height: 42px;
+  font-size: 14px;
+}
+
+@media (max-width: 900px) {
+  .login {
+    margin-top: 20px;
+    padding: 24px 20px;
+  }
 }
 </style>

@@ -161,46 +161,17 @@ async function handleSubmit(): Promise<void> {
 </template>
 
 <style scoped>
-.modal {
-  position: fixed;
-  inset: 0;
-  /* 低于全局提示条的 100：密码错误等提示要能在弹窗遮罩之上看清 */
-  z-index: 90;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(15, 23, 42, 0.45);
-}
-
+/* 弹窗基础样式在全局 styles.css，这里只覆盖宽度与内嵌 footer */
 .modal__panel {
-  width: min(420px, 100%);
-  max-height: 85vh;
-  overflow: auto;
-  background: var(--card);
-  border-radius: 12px;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
+  width: min(440px, 100%);
 }
 
-.modal__head {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.modal__title {
-  margin: 0;
-  font-size: 15px;
-}
-
-.modal__body {
-  padding: 16px;
-}
-
+/* 这个弹窗的 footer 在 form 内部（提交按钮要触发表单提交），
+   因此不收 body 的内边距，只保留一条分隔线 */
 .modal__foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
   margin-top: 16px;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--border-soft);
 }
 
 .form-error {

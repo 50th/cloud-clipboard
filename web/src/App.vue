@@ -212,7 +212,33 @@ async function handleClearAll() {
   <div class="app">
     <header class="app__header">
       <div class="app__titlebar">
-        <h1>云剪贴板</h1>
+        <div class="brand">
+          <span class="brand__mark" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="5" y="4" width="14" height="17" rx="3" />
+              <path d="M9 4.5V3.8A1.8 1.8 0 0 1 10.8 2h2.4A1.8 1.8 0 0 1 15 3.8v.7" />
+              <path d="M9 11h6M9 15h4" />
+            </svg>
+          </span>
+          <div class="brand__text">
+            <h1>云剪贴板</h1>
+            <p v-if="isAuthenticated" class="app__subtitle">
+              <span :class="['realtime', realtimeConnected ? 'realtime--on' : 'realtime--off']">
+                {{ realtimeConnected ? '实时同步中' : '实时连接断开，正在重连…' }}
+              </span>
+            </p>
+            <p v-else class="app__subtitle">跨设备同步你的文字剪贴板</p>
+          </div>
+        </div>
         <div v-if="isAuthenticated" class="app__actions">
           <button
             type="button"
@@ -224,7 +250,7 @@ async function handleClearAll() {
           <div ref="userMenuEl" class="user-menu">
             <button
               type="button"
-              class="user-menu__trigger"
+              class="btn btn--small user-menu__trigger"
               aria-haspopup="menu"
               :aria-expanded="userMenuOpen"
               @click="toggleUserMenu"
@@ -253,11 +279,6 @@ async function handleClearAll() {
           </div>
         </div>
       </div>
-      <p v-if="isAuthenticated" class="app__subtitle">
-        <span :class="['realtime', realtimeConnected ? 'realtime--on' : 'realtime--off']">
-          {{ realtimeConnected ? '实时同步中' : '实时连接断开，正在重连…' }}
-        </span>
-      </p>
     </header>
 
     <!--
@@ -367,7 +388,7 @@ async function handleClearAll() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
 }
 
 .app__actions {
@@ -376,28 +397,47 @@ async function handleClearAll() {
   gap: 8px;
 }
 
+/* 实时同步状态：胶囊 + 状态圆点 */
+.realtime {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px 2px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-full);
+  background: var(--surface-soft);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.realtime::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.realtime--on {
+  color: var(--success);
+  border-color: #cdeee1;
+  background: var(--success-soft);
+}
+
+.realtime--off {
+  color: var(--warn);
+  border-color: var(--warn-line);
+  background: var(--warn-soft);
+}
+
 /* ---------- 右上角用户名下拉菜单 ---------- */
 .user-menu {
   position: relative;
 }
 
 .user-menu__trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   max-width: 180px;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.user-menu__trigger:hover {
-  background: #f3f4f6;
 }
 
 .user-menu__caret {
@@ -407,51 +447,58 @@ async function handleClearAll() {
 
 .user-menu__panel {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 8px);
   right: 0;
   z-index: 60;
-  min-width: 148px;
+  min-width: 156px;
   padding: 6px;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-mockup);
 }
 
 .user-menu__item {
   display: block;
   width: 100%;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text);
   font: inherit;
   font-size: 13px;
   text-align: left;
   cursor: pointer;
+  transition: background 0.15s ease;
 }
 
 .user-menu__item:hover {
-  background: #f3f4f6;
+  background: var(--surface);
 }
 
 .user-menu__item--danger {
   color: var(--danger);
 }
 
+.user-menu__item--danger:hover {
+  background: var(--danger-soft);
+}
+
 @media (max-width: 900px) {
+  .app__titlebar {
+    flex-wrap: wrap;
+  }
+
+  .app__actions {
+    /* 窄屏时按钮换到下一行，避免用户名被挤压 */
+    width: 100%;
+    justify-content: flex-end;
+  }
+
   .user-menu__trigger {
-    min-height: 36px;
+    max-width: 160px;
     font-size: 13px;
   }
-}
-
-.realtime--on {
-  color: var(--success);
-}
-
-.realtime--off {
-  color: #b45309;
 }
 </style>

@@ -43,21 +43,26 @@
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-muted);
-  padding: 7px 12px;
-  border-radius: 8px;
+  padding: 8px 16px;
+  border-radius: var(--radius-full);
   white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .admin__nav-item:hover {
   color: var(--text);
-  background: #eef1f5;
+  background: var(--surface);
 }
 
 .admin__nav-item--active {
-  color: var(--primary);
-  border-color: var(--border);
-  background: var(--card);
+  color: var(--on-primary);
+  border-color: var(--primary);
+  background: var(--primary);
   font-weight: 600;
 }
 
@@ -81,22 +86,25 @@
   color: inherit;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 16px;
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-subtle);
 }
 
 .stat-card--link {
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .stat-card--link:hover {
-  border-color: var(--primary);
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
+  border-color: #d9d9d9;
+  box-shadow: var(--shadow-card);
 }
 
 .stat-card--link:focus-visible {
-  outline: 2px solid var(--primary);
+  outline: 2px solid var(--accent-deep);
   outline-offset: 2px;
 }
 
@@ -109,13 +117,15 @@
 .stat-card__label {
   color: var(--text-muted);
   font-size: 12px;
+  font-weight: 500;
 }
 
 .stat-card__value {
   display: block;
   margin-top: 6px;
-  font-size: 24px;
-  font-weight: 700;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
 }
 
 /* 筛选条：所有控件保持同一行，输入框可收缩，避免出现横向滚动条 */
@@ -124,9 +134,10 @@
   flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
+  margin: 0 -4px 8px;
   overflow-x: auto;
-  padding-bottom: 2px;
+  /* 聚焦描边（3px 外阴影）会被滚动容器裁掉，这里预留出完整一圈的空间 */
+  padding: 4px;
 }
 
 .admin-toolbar > * {
@@ -135,15 +146,21 @@
 
 .admin-toolbar input,
 .admin-toolbar select {
-  height: 34px;
-  padding: 0 10px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card);
+  border-radius: var(--radius-md);
+  background-color: var(--card);
   color: var(--text);
   font: inherit;
   min-width: 0;
   flex: 0 1 auto;
+}
+
+/* 下拉框右侧留出全局 chevron 的位置 */
+.admin-toolbar select {
+  padding-right: 32px;
 }
 
 /* 搜索框吸收剩余空间，但设置上限，避免过宽把整行撑出滚动条 */
@@ -163,7 +180,8 @@
 }
 
 .admin-toolbar .btn {
-  height: 34px;
+  height: 40px;
+  min-height: 40px;
   flex: 0 0 auto;
 }
 
@@ -181,7 +199,7 @@
   width: 168px;
 }
 
-/* 模态对话框 */
+/* 模态对话框：与用户端共用一套视觉（全局 .modal 定义布局） */
 .modal {
   position: fixed;
   inset: 0;
@@ -190,7 +208,8 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(15, 23, 42, 0.45);
+  background: rgba(10, 10, 10, 0.48);
+  backdrop-filter: blur(3px);
 }
 
 .modal__panel {
@@ -199,8 +218,9 @@
   width: min(760px, 100%);
   max-height: 85vh;
   background: var(--card);
-  border-radius: 12px;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-mockup);
 }
 
 .modal__head {
@@ -208,20 +228,22 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .modal__title {
   margin: 0;
-  font-size: 15px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .modal__body {
-  padding: 16px;
+  padding: 20px 24px;
   overflow: auto;
 }
 
@@ -229,15 +251,16 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--border);
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-soft);
 }
 
 .admin-table__wrap {
   overflow-x: auto;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-subtle);
 }
 
 .admin-table {
@@ -257,13 +280,13 @@
 
 .admin-table th {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
-  background: #fafbfc;
+  background: var(--surface-soft);
 }
 
 .admin-table tbody tr:hover {
-  background: #f9fafb;
+  background: var(--surface-soft);
 }
 
 .admin-table__actions {
@@ -280,30 +303,31 @@
 
 .badge {
   display: inline-block;
-  padding: 1px 7px;
-  border-radius: 999px;
-  font-size: 12px;
-  line-height: 1.7;
+  padding: 2px 9px;
+  border-radius: var(--radius-full);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.6;
 }
 
 .badge--ok {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--success-soft);
+  color: var(--success);
 }
 
 .badge--off {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .badge--admin {
-  background: #dbeafe;
-  color: #1e40af;
+  background: rgba(55, 114, 207, 0.12);
+  color: #3772cf;
 }
 
 .badge--warn {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--warn-soft);
+  color: var(--warn);
 }
 
 .admin-form {
@@ -320,10 +344,11 @@
 }
 
 .admin-form input {
-  height: 34px;
-  padding: 0 10px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font: inherit;
 }
 
@@ -334,11 +359,11 @@
 }
 
 .invite-code {
-  padding: 12px;
+  padding: 14px;
   border: 1px dashed var(--border);
-  border-radius: 8px;
-  background: #f8fafc;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  font-family: var(--font-mono);
   font-size: 18px;
   letter-spacing: 1px;
   text-align: center;
@@ -363,11 +388,12 @@
 }
 
 .admin-pagination select {
-  height: 30px;
-  padding: 0 8px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 30px 0 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card);
+  border-radius: var(--radius-md);
+  background-color: var(--card);
   color: var(--text);
   font: inherit;
 }
@@ -378,11 +404,13 @@
   word-break: break-all;
   max-height: 240px;
   overflow: auto;
-  background: #f8fafc;
+  background: var(--surface-soft);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px;
-  line-height: 1.5;
+  border-radius: var(--radius-md);
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
 }
 
 .clipboard-detail {
@@ -411,8 +439,9 @@
 .admin-detail {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 16px;
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-subtle);
 }
 
 .admin-detail dl {
@@ -441,7 +470,7 @@
 .admin-form-inline input {
   padding: 7px 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .admin-empty {

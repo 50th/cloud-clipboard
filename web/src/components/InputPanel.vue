@@ -386,15 +386,15 @@ const statusText = computed(() => {
   gap: 10px;
 }
 
-/* 其他设备更新提示：用警示色与「正在编辑」的蓝色横幅区分开 */
+/* 其他设备更新提示：用警示色与「正在编辑」的薄荷色横幅区分开 */
 .editing-banner--warn {
-  background: #fffbeb;
-  border-color: #fde68a;
+  background: var(--warn-soft);
+  border-color: var(--warn-line);
   color: #92400e;
 }
 
 .editing-banner--warn .editing-banner__sub {
-  color: #b45309;
+  color: var(--warn);
 }
 
 .editing-banner__actions {

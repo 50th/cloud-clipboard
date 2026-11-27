@@ -324,53 +324,9 @@ watch(
 </template>
 
 <style scoped>
-.modal {
-  position: fixed;
-  inset: 0;
-  z-index: 90;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(15, 23, 42, 0.45);
-}
-
+/* 弹窗基础样式在全局 styles.css，这里只覆盖宽度与列表细节 */
 .modal__panel {
-  width: min(620px, 100%);
-  max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--card);
-  border-radius: 12px;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
-}
-
-.modal__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.modal__title {
-  margin: 0;
-  font-size: 15px;
-}
-
-.modal__body {
-  flex: 1 1 auto;
-  overflow: auto;
-  padding: 16px;
-}
-
-.modal__foot {
-  display: flex;
-  justify-content: flex-end;
-  padding: 12px 16px;
-  border-top: 1px solid var(--border);
+  width: min(640px, 100%);
 }
 
 /* 状态筛选 + 搜索：筛选固定宽度，搜索框占剩余空间 */
@@ -384,8 +340,8 @@ watch(
 /* 下拉框与输入框使用同一高度/字号，视觉上对齐 */
 .share-toolbar select,
 .share-toolbar input {
-  height: 38px;
-  padding: 8px 10px;
+  height: 40px;
+  padding: 8px 12px;
   font-size: 13px;
 }
 
@@ -436,9 +392,18 @@ watch(
 }
 
 .share-row {
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: #fff;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.share-row:hover {
+  border-color: #d9d9d9;
+  box-shadow: var(--shadow-subtle);
 }
 
 .share-row__head {
@@ -453,11 +418,12 @@ watch(
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .share-row__meta {
-  margin: 4px 0 8px;
+  margin: 4px 0 10px;
   color: var(--text-muted);
   font-size: 12px;
 }
@@ -470,23 +436,24 @@ watch(
 
 .badge {
   flex-shrink: 0;
-  padding: 2px 8px;
-  border-radius: 999px;
+  padding: 2px 9px;
+  border-radius: var(--radius-full);
   font-size: 11px;
+  font-weight: 600;
 }
 
 .badge--ok {
-  background: #ecfdf5;
+  background: var(--success-soft);
   color: var(--success);
 }
 
 .badge--warn {
-  background: #fffbeb;
-  color: #b45309;
+  background: var(--warn-soft);
+  color: var(--warn);
 }
 
 .badge--off {
-  background: #f3f4f6;
+  background: var(--surface);
   color: var(--text-muted);
 }
 </style>
