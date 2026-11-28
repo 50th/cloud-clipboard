@@ -9,3 +9,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+/** 构建时注入的应用版本号（发布 Tag 或 package.json version） */
+declare const __APP_VERSION__: string

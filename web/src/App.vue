@@ -19,6 +19,9 @@ import { logger } from '@/utils/logger'
 // 否则"已退出登录"会一直挂着（错误提示同理）。
 const { notice, showNotice, clearNotice } = useNotice()
 
+/** 构建期注入的版本号（发布 Tag 或 package.json version，见 vite.config.ts） */
+const appVersion = __APP_VERSION__
+
 const searchInput = ref('')
 /** 「修改密码」弹窗开关（仅登录后可用） */
 const passwordDialogOpen = ref(false)
@@ -354,7 +357,7 @@ async function handleClearAll() {
 
       <footer class="footer">
         <template v-if="search">筛选：{{ search }} · </template>
-        文字剪贴板 v1.0.0
+        文字剪贴板 v{{ appVersion }}
       </footer>
     </template>
 

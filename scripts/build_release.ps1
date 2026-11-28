@@ -44,6 +44,7 @@ if ($LASTEXITCODE -ne 0) { throw 'api 镜像构建失败' }
 Write-Host "[build] web → cloud-clipboard-web:$Tag" -ForegroundColor Cyan
 & docker build --platform linux/amd64 `
     --build-arg "VITE_API_BASE_URL=$ApiBaseUrl" `
+    --build-arg "APP_VERSION=$Tag" `
     -t "cloud-clipboard-web:$Tag" $webDir
 if ($LASTEXITCODE -ne 0) { throw 'web 镜像构建失败' }
 

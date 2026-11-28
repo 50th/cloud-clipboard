@@ -16,6 +16,10 @@ COPY . .
 ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
+# 发布版本号：build_release.ps1 注入发布 Tag；留空则回退 package.json 的 version
+ARG APP_VERSION=
+ENV APP_VERSION=${APP_VERSION}
+
 RUN pnpm build
 
 FROM nginx:alpine
