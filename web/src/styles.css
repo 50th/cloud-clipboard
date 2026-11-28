@@ -274,7 +274,13 @@ h3 {
   /* 移动端浏览器用动态视口高度，避免地址栏/键盘改变 vh 后列表被截断 */
   max-height: 52dvh;
   overflow: auto;
-  padding-right: 4px;
+  /*
+   * 给卡片的 hover 阴影（1px）与键盘聚焦描边（2px + 2px offset）留出完整空间：
+   * 滚动容器会裁掉溢出内容，不留内边距时卡片上/左边缘的效果会缺一块。
+   * 用等量负外边距抵消，卡片位置保持不变。
+   */
+  margin: -6px;
+  padding: 6px;
 }
 
 .actions {
@@ -649,16 +655,14 @@ textarea {
   outline-offset: 2px;
 }
 
-/* 当前正在编辑的那一条：左侧色条 + 薄荷淡底，和 hover 区分开 */
+/* 当前正在编辑的那一条：薄荷淡底 + 四边等宽的强调边框，避免左侧色条破坏对称 */
 .item--editing {
-  border-color: var(--accent-line);
+  border-color: var(--accent);
   background: var(--accent-soft);
-  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .item--editing:hover {
-  border-color: var(--accent-line);
-  box-shadow: inset 3px 0 0 var(--accent);
+  border-color: var(--accent);
 }
 
 /* 输入区的「正在编辑已有记录」提示条 */
@@ -970,7 +974,9 @@ textarea {
     min-height: 0;
     max-height: none;
     overflow: visible;
-    padding-right: 0;
+    /* 移动端不再内层滚动，去掉为描边预留的偏移 */
+    margin: 0;
+    padding: 0;
   }
 
   .card {

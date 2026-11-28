@@ -66,6 +66,15 @@
   font-weight: 600;
 }
 
+/*
+ * 导航条与表格外层是横向滚动容器，聚焦描边向外扩散会被裁切；
+ * 这里改为向内绘制，保证键盘聚焦时四边完整。
+ */
+.admin__nav-item:focus-visible,
+.admin-table__wrap .btn:focus-visible {
+  outline-offset: -2px;
+}
+
 .admin__body {
   display: flex;
   flex-direction: column;
